@@ -11,6 +11,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <stdarg.h>
+#include <common.h>
 #include "z80tab.h"
 
 #define INC_PC (ctx->PC++)
@@ -22,11 +23,6 @@
 #define SWAP16(x) ((x & 0xff) << 8) | ((x & 0xff00) >> 8)
 #define SWAP32(x) x = (x & 0x0000FFFF) << 16 | (x & 0xFFFF0000) >> 16;\
 x = (x & 0x00FF00FF) << 8 | (x & 0xFF00FF00) >> 8;
-
-#ifdef __WIN32
-int32_t vasprintf( char **sptr, char *fmt, va_list argv );
-int32_t asprintf( char **sptr, char *fmt, ... );
-#endif
 
 enum
 {

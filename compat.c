@@ -11,7 +11,7 @@ return -1;
 return vsprintf( *sptr, fmt, argv );
 }
 
-int asprintf( char **sptr, char *fmt, ... )
+int asprintf( char **sptr, const char *fmt, ... )
 {
 int retval;
 va_list argv;

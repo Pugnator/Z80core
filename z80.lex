@@ -41,7 +41,7 @@ num               {dec}|{hex}|{oct}|{bcd}|{bin}|{char}
 {dec}                 {
                         asmlval.var = strtoimax(asmtext, 0, 10);
                         if(ERANGE == errno)
-                            return NAN;
+                            asmerror("ERANGE == errno");
                         else if(asmlval.var <= 0x7)
                             return BIT8;
                         else if(asmlval.var <= 0xFF)
@@ -60,7 +60,7 @@ num               {dec}|{hex}|{oct}|{bcd}|{bin}|{char}
                         }
                         asmlval.var = strtoimax(asmtext, 0, 16);
                         if(ERANGE == errno)
-                            return NAN;
+                            asmerror("ERANGE == errno");
                         else if(asmlval.var <= 0x7)
                             return BIT8;
                         else if(asmlval.var <= 0xFF)
@@ -83,7 +83,7 @@ num               {dec}|{hex}|{oct}|{bcd}|{bin}|{char}
                         }
 
                         if(ERANGE == errno)
-                            return NAN;
+                            asmerror("ERANGE == errno");
                         else if(asmlval.var <= 0x7)
                             return BIT8;
                         else if(asmlval.var <= 0xFF)
@@ -98,7 +98,7 @@ num               {dec}|{hex}|{oct}|{bcd}|{bin}|{char}
 {oct}                 {
                         asmlval.var = strtoimax(asmtext, 0, 8);
                         if(ERANGE == errno)
-                            return NAN;
+                            asmerror("ERANGE == errno");
                         else if(asmlval.var <= 0x7)
                             return BIT8;
                         else if(asmlval.var <= 0xFF)

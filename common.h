@@ -19,8 +19,8 @@
 #include <text.h>
 #include "uthash.h"
 
-int asprintf( char **, char *, ... );
-int vasprintf( char **, char *, va_list );
+int asprintf( char **, const char *, ... );
+int vasprintf( char **, const char *, va_list );
 
 #define MAX_SOURCE_SIZE 1000000L
 #define PROG_SIZE 65535

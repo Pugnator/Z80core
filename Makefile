@@ -7,7 +7,15 @@ BISPRF:=asm
 BISSRC:=z80.y
 BISOUT=grammar
 
-SRC:=$(BISOUT).c $(LEXOUT).c main.c z80tab.c assembler.c dassembler.c compat.c
+SRC:=\
+	$(BISOUT).c \
+	$(LEXOUT).c \
+	main.c \
+	z80tab.c \
+	assembler.c \
+	dassembler.c \
+	compat.c
+
 CC:=mingw32-gcc
 OBJ=$(SRC:%.c=%.o)
 
@@ -16,15 +24,15 @@ CLITOOL:=asm
 CFLAGS+=-D__DEBUG -D_ZVERSION="0.1" -O0 -std=gnu99 -gdwarf-2 -g3 -I.
 
 .PHONY: all
-all: BIS $(CLITOOL)
+all: lexers $(CLITOOL)
 
 $(CLITOOL): $(OBJ)
 	$(CC) -o $@ $^ $(CFLAGS)
 
-BIS:
+.PHONY: lexers
+lexers:
 	@$(BISON) -t -v -d $(BISSRC) -o $(BISOUT).c
 	@$(LEX) -f -i -o $(LEXOUT).c $(LEXSRC)	
-	
 
 %.o: %.c	
 	$(CC) -c -o $@ $< $(CFLAGS)
