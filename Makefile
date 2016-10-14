@@ -1,42 +1,68 @@
-LEXSRC+=z80.lex
+GRAMMARDIR:=grammar
+SRCDIR:=src
+OBJDIR:=obj
+OUTDIR:=bin
+
+LEXSRC:=$(GRAMMARDIR)/z80.lex
 LEXOUT:=z80lex
 LEX:=flex
 
 BISON:=bison
 BISPRF:=asm
-BISSRC:=z80.y
+BISSRC:=$(GRAMMARDIR)/z80.y
 BISOUT=grammar
 
+MKDIR_P = mkdir -p
+
 SRC:=\
-	$(BISOUT).c \
-	$(LEXOUT).c \
-	main.c \
-	z80tab.c \
-	assembler.c \
-	dassembler.c \
-	compat.c
+	$(SRCDIR)/$(BISOUT).c \
+	$(SRCDIR)/$(LEXOUT).c \
+	$(SRCDIR)/main.c \
+	$(SRCDIR)/z80tab.c \
+	$(SRCDIR)/assembler.c \
+	$(SRCDIR)/dassembler.c \
+	$(SRCDIR)/compat.c
 
 CC:=mingw32-gcc
-OBJ=$(SRC:%.c=%.o)
+OBJ=$(SRC:%.c=$(OBJDIR)/%.o)
 
-CLITOOL:=asm
+CLITOOL:=$(OUTDIR)/asm
 
-CFLAGS+=-D__DEBUG -D_ZVERSION="0.1" -O0 -std=gnu99 -gdwarf-2 -g3 -I.
+CFLAGS+=-D__DEBUG -D_ZVERSION="0.1" -O0 -std=gnu99 -gdwarf-2 -g3 -Iinclude -Isrc
 
 .PHONY: all
-all: lexers $(CLITOOL)
+all: dirs lexers $(CLITOOL)
+
+.PHONY: dirs
+dirs: $(OBJDIR) $(OUTDIR)
+
+$(OBJDIR):
+	$(MKDIR_P) $(OBJDIR)
+
+$(OUTDIR):
+	$(MKDIR_P) $(OUTDIR)
 
 $(CLITOOL): $(OBJ)
 	$(CC) -o $@ $^ $(CFLAGS)
 
 .PHONY: lexers
 lexers:
-	@$(BISON) -t -v -d $(BISSRC) -o $(BISOUT).c
-	@$(LEX) -f -i -o $(LEXOUT).c $(LEXSRC)	
+	@$(BISON) -t -v -d $(BISSRC) -o $(SRCDIR)/$(BISOUT).c
+	@$(LEX) -f -i -o $(SRCDIR)/$(LEXOUT).c $(LEXSRC)	
 
-%.o: %.c	
+$(OBJDIR)/%.o: %.c
+	$(MKDIR_P) `dirname $@`
 	$(CC) -c -o $@ $< $(CFLAGS)
 
 .PHONY: clean
 clean:
-	rm -f $(OBJ) $(EXEC).bin $(LIBZCORE) $(CLITOOL) $(BISOUT).c $(LEXOUT).c
+	rm -rf $(OBJ) \
+	$(OBJDIR) \
+	$(OUTDIR) \
+	$(EXEC).bin \
+	$(CLITOOL) \
+	$(SRCDIR)/$(BISOUT).c \
+	$(SRCDIR)/$(LEXOUT).c \
+	*.backup \
+	$(SRCDIR)/*.output \
+	$(SRCDIR)/$(BISOUT).h

@@ -212,6 +212,28 @@ int disasm_parse_input_stream ( dsmctx* ctx )
 	return 1;
 }
 
+void disassembly_listing (char *source)
+{
+	puts("Starting disasm");
+	intmax_t opcodes_to_fetch = -1;
+	intmax_t bytes_to_parse = -1;
+	dsmctx* new = disasm_ctx_init();
+	FILE* in = fopen(source, "r");
+	assert(in);
+	fseek(in, 0, SEEK_END);
+	new->data_size = ftell(in);
+	rewind(in);
+	new->prog = malloc(new->data_size);
+	fread(new->prog, 1, new->data_size, in);
+	new->opcodes_to_fetch = opcodes_to_fetch;
+	new->bytes_to_parse = bytes_to_parse;
+
+	disasm_parse_input_stream(new);
+	printf(";Parsed %zu bytes\n", new->data_size);
+	disasm_ctx_free(new);
+	fclose(in);
+}
+
 #if 0
 int main(int argc, char** argv)
 {

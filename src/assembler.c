@@ -397,7 +397,7 @@ cleanup (void)
 }
 
 void
-read_source (char *filename, char *output_filename)
+assembly_listing (char *filename, char *output_filename)
 {
 	FILE *source = fopen (filename, "r");
 	assert(source);

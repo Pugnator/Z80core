@@ -65,6 +65,7 @@ typedef struct dsmopc
 	char* mnemonic;
 } dsmopc;
 
+void disassembly_listing (char *source);
 dsmctx* disasm_ctx_init ( void );
 void disasm_ctx_free ( dsmctx* ctx );
 bool disasm_is_a_prefix ( uint8_t byte );
