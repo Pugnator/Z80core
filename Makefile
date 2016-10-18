@@ -1,5 +1,6 @@
-GRAMMARDIR:=grammar
-SRCDIR:=src
+GRAMMARDIR:=cpu/z80
+ASMDASMDIR:=src/asmdasm
+EMUDIR:=src/emucore
 OBJDIR:=obj
 OUTDIR:=bin
 
@@ -14,24 +15,32 @@ BISOUT=grammar
 
 MKDIR_P = mkdir -p
 
-SRC:=\
-	$(SRCDIR)/$(BISOUT).c \
-	$(SRCDIR)/$(LEXOUT).c \
-	$(SRCDIR)/main.c \
-	$(SRCDIR)/z80tab.c \
-	$(SRCDIR)/assembler.c \
-	$(SRCDIR)/dassembler.c \
-	$(SRCDIR)/compat.c
+ASMSRC:=\
+	$(ASMDASMDIR)/$(BISOUT).c \
+	$(ASMDASMDIR)/$(LEXOUT).c \
+	$(ASMDASMDIR)/z80tab.c \
+	$(ASMDASMDIR)/assembler.c \
+	$(ASMDASMDIR)/dassembler.c \
+	$(ASMDASMDIR)/compat.c
+
+EMUSRC:=\
+	src/main.cc \
+	$(EMUDIR)/cpu.cc
 
 CC:=mingw32-gcc
-OBJ=$(SRC:%.c=$(OBJDIR)/%.o)
+CPP:=mingw32-g++
 
-CLITOOL:=$(OUTDIR)/asm
+OBJ:=$(SRC:%.c=$(OBJDIR)/%.o)
+OBJ+=$(EMUSRC:%.cc=$(OBJDIR)/%.o)
 
-CFLAGS+=-D__DEBUG -D_ZVERSION="0.1" -O0 -std=gnu99 -gdwarf-2 -g3 -Iinclude -Isrc
+EXEC:=$(OUTDIR)/asm.exe
+
+CFLAGS:=-O0 -g3 -std=gnu99 -Iinclude/emucore -Iinclude/asmdasm -Isrc/asmdasm -ffunction-sections -fdata-sections
+CXXFLAGS:=-O0 -g3 -std=c++11 -Iinclude/emucore -Iinclude/asmdasm -Isrc/asmdasm -ffunction-sections -fdata-sections
+LDFLAGS:=-Wl,--gc-sections 
 
 .PHONY: all
-all: dirs lexers $(CLITOOL)
+all: dirs lexers $(EXEC)
 
 .PHONY: dirs
 dirs: $(OBJDIR) $(OUTDIR)
@@ -42,27 +51,22 @@ $(OBJDIR):
 $(OUTDIR):
 	$(MKDIR_P) $(OUTDIR)
 
-$(CLITOOL): $(OBJ)
-	$(CC) -o $@ $^ $(CFLAGS)
+$(EXEC): $(OBJ)
+	$(CPP) -o $@ $^ $(CXXFLAGS) $(LDFLAGS)
 
 .PHONY: lexers
 lexers:
-	@$(BISON) -t -v -d $(BISSRC) -o $(SRCDIR)/$(BISOUT).c
-	@$(LEX) -f -i -o $(SRCDIR)/$(LEXOUT).c $(LEXSRC)	
+	$(BISON) -t -v -d $(BISSRC) -o $(ASMDASMDIR)/$(BISOUT).c
+	$(LEX) -f -i -o $(ASMDASMDIR)/$(LEXOUT).c $(LEXSRC)	
 
 $(OBJDIR)/%.o: %.c
 	$(MKDIR_P) `dirname $@`
-	$(CC) -c -o $@ $< $(CFLAGS)
+	$(CC) -c -o $@ $< $(CFLAGS) 
+
+$(OBJDIR)/%.o: %.cc
+	$(MKDIR_P) `dirname $@`
+	$(CPP) -c -o $@ $< $(CXXFLAGS)
 
 .PHONY: clean
 clean:
-	rm -rf $(OBJ) \
-	$(OBJDIR) \
-	$(OUTDIR) \
-	$(EXEC).bin \
-	$(CLITOOL) \
-	$(SRCDIR)/$(BISOUT).c \
-	$(SRCDIR)/$(LEXOUT).c \
-	*.backup \
-	$(SRCDIR)/*.output \
-	$(SRCDIR)/$(BISOUT).h
+	rm -rf $(OBJ) $(OBJDIR) $(OUTDIR) $(ASMDASMDIR)/$(BISOUT).c $(ASMDASMDIR)/$(LEXOUT).c *.backup $(ASMDASMDIR)/*.output $(ASMDASMDIR)/$(BISOUT).h

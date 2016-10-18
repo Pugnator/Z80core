@@ -2,7 +2,7 @@
 ; Test Z80 assembly file
 .org 0
 start:
-djnz end
+jp end
 ld d, end
 end:
 .end

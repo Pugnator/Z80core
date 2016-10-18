@@ -4,6 +4,7 @@
 #include <assembler.h>
 #include <dassembler.h>
 #include <inttypes.h>
+#include <cpu.h>
 
 void
 usage (void)
@@ -16,6 +17,8 @@ USAGE:\
 int
 main (int argc, char** argv)
 {
+	emu_start();
+	return 0;
 	int opt = 0;
 	int option_index = 0;
 	char *source = NULL;
