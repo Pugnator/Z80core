@@ -1,5 +1,48 @@
 lex.backup
 grammar.c
 z80lex.c
-*.o
 /*.output
+
+
+# Object files
+*.o
+*.ko
+*.obj
+*.elf
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Libraries
+*.lib
+*.a
+*.la
+*.lo
+
+# Shared objects (inc. Windows DLLs)
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Executables
+*.elf
+*.bin
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
+
+# Debug files
+*.dSYM/
+*.launch
+
+# Directories
+external/
+.settings
+libs/
+obj/
+bin/

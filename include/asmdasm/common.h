@@ -13,7 +13,6 @@
 #include <assert.h>
 #include <getopt.h>
 #include <fcntl.h>
-#include <grammar.h>
 #include <math.h>
 #include <z80tab.h>
 #include <text.h>

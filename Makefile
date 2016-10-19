@@ -1,3 +1,6 @@
+CC:=mingw32-gcc
+CPP:=mingw32-g++
+
 GRAMMARDIR:=cpu/z80
 ASMDASMDIR:=src/asmdasm
 EMUDIR:=src/emucore
@@ -6,41 +9,54 @@ OUTDIR:=bin
 
 LEXSRC:=$(GRAMMARDIR)/z80.lex
 LEXOUT:=z80lex
-LEX:=flex
+LEX:=flex.exe
 
-BISON:=bison
+BISON:=bison.exe
 BISPRF:=asm
 BISSRC:=$(GRAMMARDIR)/z80.y
 BISOUT=grammar
 
 MKDIR_P = mkdir -p
 
+SRC:=\
+	$(ASMDASMDIR)/compat.c \
+	$(ASMDASMDIR)/z80tab.c \
+
 ASMSRC:=\
+	src/main.cc \
 	$(ASMDASMDIR)/$(BISOUT).c \
 	$(ASMDASMDIR)/$(LEXOUT).c \
-	$(ASMDASMDIR)/z80tab.c \
-	$(ASMDASMDIR)/assembler.c \
-	$(ASMDASMDIR)/dassembler.c \
-	$(ASMDASMDIR)/compat.c
+	$(ASMDASMDIR)/assembler.c	
+
+DASMSRC:=\
+	$(ASMDASMDIR)/dassembler.c
 
 EMUSRC:=\
-	src/main.cc \
-	$(EMUDIR)/cpu.cc
-
-CC:=mingw32-gcc
-CPP:=mingw32-g++
+	$(EMUDIR)/cpu.cc \
+	$(EMUDIR)/exec.cc
 
 OBJ:=$(SRC:%.c=$(OBJDIR)/%.o)
-OBJ+=$(EMUSRC:%.cc=$(OBJDIR)/%.o)
+ASMOBJ:=$(ASMSRC:%.c=$(OBJDIR)/%.o)
+DASMOBJ:=$(DASMSRC:%.c=$(OBJDIR)/%.o)
+EMUOBJ:=$(EMUSRC:%.cc=$(OBJDIR)/%.o)
+EMUOBJ+=$(DASMOBJ)
 
-EXEC:=$(OUTDIR)/asm.exe
+ASMEXEC:=$(OUTDIR)/asm.exe
+
+EMUEXEC:=$(OUTDIR)/emu.exe
 
 CFLAGS:=-O0 -g3 -std=gnu99 -Iinclude/emucore -Iinclude/asmdasm -Isrc/asmdasm -ffunction-sections -fdata-sections
 CXXFLAGS:=-O0 -g3 -std=c++11 -Iinclude/emucore -Iinclude/asmdasm -Isrc/asmdasm -ffunction-sections -fdata-sections
 LDFLAGS:=-Wl,--gc-sections 
 
 .PHONY: all
-all: dirs lexers $(EXEC)
+all: dirs lexers $(ASMEXEC) $(EMUEXEC)
+
+.PHONY: emu
+emu: dirs $(EMUEXEC)
+
+.PHONY: asm
+asm: dirs $(ASMEXEC)
 
 .PHONY: dirs
 dirs: $(OBJDIR) $(OUTDIR)
@@ -51,7 +67,10 @@ $(OBJDIR):
 $(OUTDIR):
 	$(MKDIR_P) $(OUTDIR)
 
-$(EXEC): $(OBJ)
+$(ASMEXEC): $(DASMOBJ) $(ASMOBJ) $(OBJ)
+	$(CPP) -o $@ $^ $(CXXFLAGS) $(LDFLAGS)
+
+$(EMUEXEC): $(EMUOBJ) $(DASMOBJ) $(OBJ)
 	$(CPP) -o $@ $^ $(CXXFLAGS) $(LDFLAGS)
 
 .PHONY: lexers
