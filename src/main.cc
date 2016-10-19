@@ -4,7 +4,8 @@
 #include <assembler.h>
 #include <dassembler.h>
 #include <inttypes.h>
-#include <cpu.h>
+
+#include "../include/emucore/cpu.hpp"
 
 void
 usage (void)

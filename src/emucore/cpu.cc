@@ -1,48 +1,24 @@
-#include "cpu.h"
-#include <stdlib.h>
+#include <cpu.hpp>
 #include <stdio.h>
 
-class z80cpu
+void vcpu::reset()
 {
-public:
-private:
-};
-
-static cpuctx *z80_cpu_context_alloc (void)
-{
-	cpuctx *cpu = (cpuctx*)calloc (1, sizeof *cpu);
-	cpu->regs = (vcpu_regs*)calloc (1, sizeof *cpu->regs);
-	cpu->pins = (vcpu_pins*)calloc (1, sizeof *cpu->pins);
-	return cpu;
+	std::fill(cached_ram->begin(), cached_ram->end(), 0);
+	state = FETCH;
+	flag = NONE;
+	pins = {};
+	regs = {};
+	regs.PC = 0xFFFF;
+	regs.SP = 0xFFFF;
+	clocks_passed = 0;
 }
 
-static void z80_cpu_context_free (cpuctx *ctx)
+void vcpu::clock()
 {
-	free(ctx->regs);
-	free(ctx->pins);
-	free(ctx);
+
 }
 
-static void z80_cpu_reset (cpuctx *ctx)
+void vcpu::fetch()
 {
-	ctx->regs->SP = 0xffff;
-	ctx->regs->AF = 0xffff;
-}
 
-static void z80_cpu_tick (uint8_t *memory, cpuctx *ctx)
-{
-	ctx->pins->_A._A = ctx->regs->PC;
-	ctx->pins->_D._D = memory[ctx->regs->PC];
-	ctx->opcode = memory[ctx->regs->PC];
-	char *result = 0;
-	//z80_opcode_decoder(ctx, &result);
-	free(result);
-}
-
-void emu_start(void)
-{
-	puts("Starting Emu");
-	cpuctx *z = z80_cpu_context_alloc();
-	z80_cpu_reset(z);
-	z80_cpu_context_free(z);
 }
