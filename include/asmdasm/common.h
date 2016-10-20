@@ -1,8 +1,6 @@
 #pragma once
-#ifndef COMMON_H
-#define COMMON_H
 #define _GNU_SOURCE
-#include <stdio.h>  
+#include <stdio.h>
 #include <stdint.h>
 #include <stdarg.h>
 #include <strings.h>
@@ -17,12 +15,13 @@
 #include <z80tab.h>
 #include <text.h>
 #include "uthash.h"
+#include <grammar.h>
 
 int asprintf( char **, const char *, ... );
 int vasprintf( char **, const char *, va_list );
 
 #define MAX_SOURCE_SIZE 1000000L
-#define PROG_SIZE 65535
+#define PROG_SIZE 0xFFFF
 #define fn_apply(type, fn, ...) { \
 void *stopper_for_apply = (int[]){0}; \
 type **list_for_apply = (type*[]){__VA_ARGS__, stopper_for_apply}; \
@@ -45,15 +44,15 @@ typedef struct user_label
 {
     int id;
     char *label;
-    intmax_t address;    
+    intmax_t address;
     UT_hash_handle hh;
 }user_label;
 
 typedef struct dereffered_label
 {
-    int id;    
+    int id;
     char *label;
-    intmax_t address;    
+    intmax_t address;
     uint8_t size;
     UT_hash_handle hh;
 }dereffered_label;
@@ -130,6 +129,3 @@ intmax_t get_label_address (char *label);
 int load_file (char *filename, char **buffer);
 void hex_print(const void *pv, size_t len);
 void code_generator ();
-#endif
-
-

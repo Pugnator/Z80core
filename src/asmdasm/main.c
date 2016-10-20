@@ -1,25 +1,39 @@
 #include <stdarg.h>
 #include <unistd.h>
-#include <common.h>
 #include <assembler.h>
 #include <dassembler.h>
 #include <inttypes.h>
 
-#include "../include/emucore/cpu.hpp"
-
-void
-usage (void)
+void usage (void)
 {
 	const char *help = "\
 USAGE:\
 ";
 }
 
-int
-main (int argc, char** argv)
+void assembly_listing (char *filename, char *output_filename)
 {
-	emu_start();
-	return 0;
+	puts("Z80 assembler by Lavrenty Ivanov, 2014");
+	FILE *source = fopen (filename, "r");
+	assert(source);
+	char source_listing[65535];
+	char buf[1024];
+	size_t read=0;
+	size_t total_size = 0;
+	while((read = fread(buf, 1, sizeof buf, source))>0)
+	{
+		memcpy(source_listing + total_size, buf, read);
+		total_size+=read;
+	}
+	fclose(source);
+
+	FILE *target = fopen (output_filename, "w");
+	assert(target);
+	fclose(target);
+}
+
+int main (int argc, char** argv)
+{
 	int opt = 0;
 	int option_index = 0;
 	char *source = NULL;

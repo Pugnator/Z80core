@@ -1,7 +1,8 @@
 lex.backup
 grammar.c
+grammar.h
 z80lex.c
-/*.output
+*.output
 
 
 # Object files

@@ -33,7 +33,7 @@ int current_line = 1;
 %token <str> RETI RLD RRD END_OF_FILE
 %token <str> DEFINE DEFW STRING
 
-%token <var> BIT8 WORD DWORD QWORD DQWORD NAN ASMPC ASMORG TEXT EQU ORG DIRECTIVE
+%token <var> BIT8 WORD DWORD QWORD DQWORD ASMPC ASMORG TEXT EQU ORG DIRECTIVE
 %%
 
 input:    lines
@@ -83,7 +83,6 @@ expr:     WORD                                 { $$ = $1;}
         | DQWORD                               { $$ = $1;}
         | ASMPC                                { $$ = PC;}
         | ASMORG                               { $$ = CURRENT_ORG;}
-        | NAN                                  { YYABORT;}
         | STRING                               { tgt_label = true; $$ = get_label_address($1); free($1);}
         | expr '-' expr                        { $$ = $1-$3;}
         | expr '+' expr                        { $$ = $1+$3;}

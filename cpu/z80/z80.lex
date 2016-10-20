@@ -40,9 +40,7 @@ num               {dec}|{hex}|{oct}|{bcd}|{bin}|{char}
 <SKIP>"*/"                {BEGIN(INITIAL);}
 {dec}                 {
                         asmlval.var = strtoimax(asmtext, 0, 10);
-                        if(ERANGE == errno)
-                            asmerror("ERANGE == errno");
-                        else if(asmlval.var <= 0x7)
+                        if(asmlval.var <= 0x7)
                             return BIT8;
                         else if(asmlval.var <= 0xFF)
                             return WORD;
@@ -59,9 +57,7 @@ num               {dec}|{hex}|{oct}|{bcd}|{bin}|{char}
                             asmtext[0] = '0';
                         }
                         asmlval.var = strtoimax(asmtext, 0, 16);
-                        if(ERANGE == errno)
-                            asmerror("ERANGE == errno");
-                        else if(asmlval.var <= 0x7)
+                        if(asmlval.var <= 0x7)
                             return BIT8;
                         else if(asmlval.var <= 0xFF)
                             return WORD;
@@ -82,9 +78,7 @@ num               {dec}|{hex}|{oct}|{bcd}|{bin}|{char}
                             asmlval.var = strtoimax(asmtext + 2, 0, 2);
                         }
 
-                        if(ERANGE == errno)
-                            asmerror("ERANGE == errno");
-                        else if(asmlval.var <= 0x7)
+                        if(asmlval.var <= 0x7)
                             return BIT8;
                         else if(asmlval.var <= 0xFF)
                             return WORD;
@@ -97,9 +91,7 @@ num               {dec}|{hex}|{oct}|{bcd}|{bin}|{char}
 
 {oct}                 {
                         asmlval.var = strtoimax(asmtext, 0, 8);
-                        if(ERANGE == errno)
-                            asmerror("ERANGE == errno");
-                        else if(asmlval.var <= 0x7)
+                        if(asmlval.var <= 0x7)
                             return BIT8;
                         else if(asmlval.var <= 0xFF)
                             return WORD;
@@ -110,7 +102,7 @@ num               {dec}|{hex}|{oct}|{bcd}|{bin}|{char}
                         return DQWORD;
                       }
 
-['][\x00-\x7F][']                {
+['][\x00-\x7F][']     {
                         asmlval.var = asmtext[1];
                         return WORD;
                       }
