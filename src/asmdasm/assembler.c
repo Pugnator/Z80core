@@ -383,7 +383,7 @@ void cleanup ( void )
  * @param  source [description]
  * @return        [description]
  */
-int process_source ( char* source )
+int process_source ( char* source, FILE *out)
 {
     asm_load_buffer ( source );
     int retval = asmparse();
@@ -391,6 +391,7 @@ int process_source ( char* source )
     PC=0;
     asm_load_buffer ( source );
     retval = asmparse();
-    hex_print(prog, PC);
+    fwrite(prog, 1, PC, out);
+    //hex_print(prog, PC);
     return retval;
 }

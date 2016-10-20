@@ -20,6 +20,13 @@
 int asprintf( char **, const char *, ... );
 int vasprintf( char **, const char *, va_list );
 
+//Safer asprintf macro
+#define sasprintf(write_to,  ...) {           \
+    char *tmp_string_for_extend = (write_to); \
+    asprintf(&(write_to), __VA_ARGS__);       \
+    free(tmp_string_for_extend);              \
+}
+
 #define MAX_SOURCE_SIZE 1000000L
 #define PROG_SIZE 0xFFFF
 #define fn_apply(type, fn, ...) { \

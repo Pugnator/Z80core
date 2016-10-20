@@ -9,26 +9,40 @@ void usage (void)
 	const char *help = "\
 USAGE:\
 ";
+	puts(help);
 }
 
 void assembly_listing (char *filename, char *output_filename)
 {
-	puts("Z80 assembler by Lavrenty Ivanov, 2014");
-	FILE *source = fopen (filename, "r");
-	assert(source);
-	char source_listing[65535];
-	char buf[1024];
+	puts("Z80 assembler by Lavrenty Ivanov, 2016");
+	FILE *source = fopen (filename, "rt");
+	if(!source)
+	{
+		puts("Failed to open source file");
+		return;
+	}
+	FILE *target = fopen (output_filename, "wb");
+	if(!target)
+	{
+		puts("Failed to open output file");
+		return;
+	}
+
+	fseek(source, 0L, SEEK_END);
+	size_t sz = ftell(source);
+	rewind(source);
+	char *source_listing = malloc(sz);
+	char buf[1024] = {};
 	size_t read=0;
-	size_t total_size = 0;
+	size_t total = 0;
 	while((read = fread(buf, 1, sizeof buf, source))>0)
 	{
-		memcpy(source_listing + total_size, buf, read);
-		total_size+=read;
+		memcpy(source_listing + total, buf, read);
+		total+=read;
 	}
 	fclose(source);
-
-	FILE *target = fopen (output_filename, "w");
-	assert(target);
+	process_source(source_listing, target);
+	free(source_listing);
 	fclose(target);
 }
 

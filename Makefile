@@ -48,7 +48,7 @@ ASMEXEC:=$(OUTDIR)/asm.exe
 
 EMUEXEC:=$(OUTDIR)/emu.exe
 
-FLAGS:=-O2 -g3  -falign-functions=16 -falign-loops=16 -ffunction-sections -fdata-sections -Iinclude/emucore -Iinclude/asmdasm -Isrc/asmdasm
+FLAGS:=-O0 -g3  -falign-functions=16 -falign-loops=16 -ffunction-sections -fdata-sections -Iinclude/emucore -Iinclude/asmdasm -Isrc/asmdasm
 CFLAGS+=-std=gnu99 $(FLAGS)
 CXXFLAGS+=-std=c++11 $(FLAGS)
 LDFLAGS:=-Wl,--gc-sections
