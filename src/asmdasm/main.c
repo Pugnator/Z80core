@@ -94,8 +94,9 @@ int main (int argc, char** argv)
 	}
 
 	if (!source || !target)
-		{
-			return 1;
-		}
+	{
+		return 1;
+	}
+	
 	assembly_listing (source, target);
 }

@@ -5,6 +5,22 @@ start:
 jp end
 ld d, end
 end:
+jp end
+jp end
+jp end
+jp end
+jp end
+jp end
+jp end
+jp end
+jp end
+jp end
+jp end
+jp end
+jp end
+jp end
+jp end
 .end
 
 After .end directive one can place anything
+

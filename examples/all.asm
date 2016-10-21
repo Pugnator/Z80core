@@ -2,7 +2,7 @@
 ;"(null)" instruction group
 ;Expected file size: 3470 bytes
 
-          
+
 ;Prefix byte             		;0xcb
 ;Prefix byte             		;0xdd
 ;Prefix byte             		;0xddcb
@@ -1281,3 +1281,4 @@ XOR XL                   		;0xddad        		#size:2
 XOR YH                   		;0xfdac        		#size:2
 XOR YL                   		;0xfdad        		#size:2
 end:
+.end

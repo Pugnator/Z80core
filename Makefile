@@ -2,8 +2,8 @@ CC:=mingw32-gcc
 CPP:=mingw32-g++
 WINRES:=windres
 RM:= rm -rf
-BISON:=bison.exe
-LEX:=flex.exe
+BISON:=external/win_bison.exe
+LEX:=external/win_flex.exe
 MKDIR_P = mkdir -p
 
 SRCDIR:=src
@@ -43,14 +43,15 @@ DASMOBJ:=$(DASMSRC:%.c=$(OBJDIR)/%.o)
 EMUOBJ:=$(EMUSRC:%.cc=$(OBJDIR)/%.o)
 EMUOBJ+=$(DASMOBJ)
 
-ASMEXEC:=$(OUTDIR)/asm.exe
+ASMEXEC:=$(OUTDIR)/zasm.exe
 
-EMUEXEC:=$(OUTDIR)/emu.exe
+EMUEXEC:=$(OUTDIR)/zemu.exe
 
-FLAGS:=-O0 -g3  -falign-functions=16 -falign-loops=16 -ffunction-sections -fdata-sections -Iinclude/emucore -Iinclude/asmdasm -Isrc/asmdasm
+FLAGS:=-Og -g3 -ffunction-sections -fdata-sections -Iinclude/emucore -Iinclude/asmdasm -Isrc/asmdasm
 CFLAGS+=-std=gnu99 $(FLAGS)
 CXXFLAGS+=-std=c++11 $(FLAGS)
 LDFLAGS:=-Wl,--gc-sections
+
 
 .PHONY: all
 all: clean asm emu
@@ -63,18 +64,6 @@ asm: dirs lexers $(ASMEXEC)
 
 .PHONY: dirs
 dirs: $(OBJDIR) $(OUTDIR)
-
-$(OBJDIR):
-	$(MKDIR_P) $(OBJDIR)
-
-$(OUTDIR):
-	$(MKDIR_P) $(OUTDIR)
-
-$(ASMEXEC): $(OBJ) $(ASMOBJ) $(DASMOBJ) $(OBJDIR)/app.res
-	$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
-
-$(EMUEXEC): $(EMUOBJ) $(OBJ) $(OBJDIR)/app.res
-	$(CPP) -o $@ $^ $(CXXFLAGS) $(LDFLAGS)
 
 .PHONY: lexers
 lexers:
@@ -93,6 +82,18 @@ $(OBJDIR)/%.o: %.cc
 	$(MKDIR_P) `dirname $@`
 	$(CPP) -c -o $@ $< $(CXXFLAGS)
 
+$(OBJDIR):
+	$(MKDIR_P) $(OBJDIR)
+
+$(OUTDIR):
+	$(MKDIR_P) $(OUTDIR)
+
+$(ASMEXEC): $(OBJ) $(ASMOBJ) $(DASMOBJ) $(OBJDIR)/app.res
+	$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
+
+$(EMUEXEC): $(EMUOBJ) $(OBJ) $(OBJDIR)/app.res
+	$(CPP) -o $@ $^ $(CXXFLAGS) $(LDFLAGS)
+
 .PHONY: clean
 clean:
 	$(RM) $(OBJ)
@@ -100,4 +101,5 @@ clean:
 	$(RM) $(OUTDIR)
 	$(RM) $(ASMDASMDIR)/$(BISOUT).c
 	$(RM) $(ASMDASMDIR)/$(LEXOUT).c
+	$(RM) Debug
 	$(RM) *.backup

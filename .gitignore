@@ -11,6 +11,9 @@ z80lex.c
 *.obj
 *.elf
 
+*.sdf
+*.opendf
+
 # Precompiled Headers
 *.gch
 *.pch
@@ -42,8 +45,9 @@ z80lex.c
 *.launch
 
 # Directories
-external/
-.settings
+.settings/
 libs/
 obj/
 bin/
+Debug/
+.vs/
