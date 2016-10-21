@@ -6,9 +6,8 @@ BISON:=bison.exe
 LEX:=flex.exe
 MKDIR_P = mkdir -p
 
-
-GRAMMARDIR:=cpu/z80
 SRCDIR:=src
+GRAMMARDIR:=$(SRCDIR)/grammar
 ASMDASMDIR:=$(SRCDIR)/asmdasm
 EMUDIR:=$(SRCDIR)/emucore
 OBJDIR:=obj
@@ -96,9 +95,9 @@ $(OBJDIR)/%.o: %.cc
 
 .PHONY: clean
 clean:
-	$(RM) $(OBJ) 
-	$(RM) $(OBJDIR) 
-	$(RM) $(OUTDIR) 
-	$(RM) $(ASMDASMDIR)/$(BISOUT).c 
-	$(RM) $(ASMDASMDIR)/$(LEXOUT).c 
-	$(RM) *.backup 
+	$(RM) $(OBJ)
+	$(RM) $(OBJDIR)
+	$(RM) $(OUTDIR)
+	$(RM) $(ASMDASMDIR)/$(BISOUT).c
+	$(RM) $(ASMDASMDIR)/$(LEXOUT).c
+	$(RM) *.backup
