@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <assembler.h>
 #include <dassembler.h>
+#include <getopt.h>
 #include <inttypes.h>
 
 void usage (void)
@@ -32,7 +33,7 @@ void assembly_listing (char *filename, char *output_filename)
 	size_t sz = ftell(source);
 	rewind(source);
 	char *source_listing = malloc(sz);
-	char buf[1024] = {};
+	char buf[1024] = {0};
 	size_t read=0;
 	size_t total = 0;
 	while((read = fread(buf, 1, sizeof buf, source))>0)
@@ -49,22 +50,26 @@ void assembly_listing (char *filename, char *output_filename)
 int main (int argc, char** argv)
 {
 	int opt = 0;
-	int option_index = 0;
 	char *source = NULL;
 	char *target = NULL;
 	int verbose = 0;
 	int dasm = 0;
 
+#ifdef __GNUC__
+	int option_index = 0;
 	struct option long_options[] =
 		{
 			{ "verbose", no_argument, &verbose, 0 },
 			{ "disassemble", no_argument, &dasm, 0 },
 			{ "source", required_argument, 0, 's' },
 			{ "target", required_argument, 0, 't' },
-			{ NULL, 0, 0, 0 } };
-
-	while ((opt = getopt_long (argc, argv, "hs:t:dv", long_options, &option_index))
-	    != -1)
+			{ NULL, 0, 0, 0 } 
+		};
+	while ((opt = getopt_long (argc, argv, "hs:t:dv", long_options, &option_index)
+#else
+	while ((opt = _getopt(argc, argv, "hs:t:dv"))
+#endif
+	!= -1)
 	{
 		switch (opt)
 			{
