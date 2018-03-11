@@ -5,9 +5,9 @@
 
 typedef struct
 {
-	uint32_t opcode : 24;
-	uint8_t data_size : 2;
-	uint8_t reljmp : 1;
+	unsigned opcode : 24;
+	unsigned data_size : 2;
+	unsigned reljmp : 1;
 	char *mnemo;
 	char *hash;
 } opcode_table;
