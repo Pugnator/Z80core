@@ -5,7 +5,7 @@
 
 POC_PROJECT_VERSION = 7.00#
 POC_PROJECT_TYPE = 3#
-POC_PROJECT_OUTPUTDIR = output#
+POC_PROJECT_OUTPUTDIR = obj#
 POC_PROJECT_RESULTDIR = .#
 POC_PROJECT_ARGUMENTS = #
 POC_PROJECT_WORKPATH = .#
@@ -29,69 +29,69 @@ WizCreator = Pelle Orinius#
 # Build zasm.exe.
 # 
 zasm.exe: \
-	output\app.res \
-	output\assembler.obj \
-	output\compat.obj \
-	output\dassembler.obj \
-	output\grammar.obj \
-	output\main.obj \
-	output\z80lex.obj \
-	output\z80tab.obj
+	obj\app.res \
+	obj\assembler.obj \
+	obj\compat.obj \
+	obj\dassembler.obj \
+	obj\grammar.obj \
+	obj\main.obj \
+	obj\z80lex.obj \
+	obj\z80tab.obj
 	$(LINK) $(LINKFLAGS) -out:"$@" $**
 
 # 
 # Build compat.obj.
 # 
-output\compat.obj: \
+obj\compat.obj: \
 	src\asmdasm\compat.c
 	$(CC) $(CCFLAGS) "$!" -Fo"$@"
 
 # 
 # Build z80lex.obj.
 # 
-output\z80lex.obj: \
+obj\z80lex.obj: \
 	src\asmdasm\z80lex.c
 	$(CC) $(CCFLAGS) "$!" -Fo"$@"
 
 # 
 # Build assembler.obj.
 # 
-output\assembler.obj: \
+obj\assembler.obj: \
 	src\asmdasm\assembler.c
 	$(CC) $(CCFLAGS) "$!" -Fo"$@"
 
 # 
 # Build dassembler.obj.
 # 
-output\dassembler.obj: \
+obj\dassembler.obj: \
 	src\asmdasm\dassembler.c
 	$(CC) $(CCFLAGS) "$!" -Fo"$@"
 
 # 
 # Build grammar.obj.
 # 
-output\grammar.obj: \
+obj\grammar.obj: \
 	src\asmdasm\grammar.c
 	$(CC) $(CCFLAGS) "$!" -Fo"$@"
 
 # 
 # Build main.obj.
 # 
-output\main.obj: \
+obj\main.obj: \
 	src\asmdasm\main.c
 	$(CC) $(CCFLAGS) "$!" -Fo"$@"
 
 # 
 # Build z80tab.obj.
 # 
-output\z80tab.obj: \
+obj\z80tab.obj: \
 	src\asmdasm\z80tab.c
 	$(CC) $(CCFLAGS) "$!" -Fo"$@"
 
 # 
 # Build app.res.
 # 
-output\app.res: \
+obj\app.res: \
 	app.rc \
 	include\resources.h \
 	logo.ico
