@@ -15,12 +15,6 @@
 const char *digits_large = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const char *digits_small = "0123456789abcdefghijklmnopqrstuvwxyz";
 
-#define do_div(n,base)  ({ \
-    int __rem = n % base;  \
-    n /= base;             \
-    __rem;                 \
-})
-
 static char *num_to_base(char *str, int num, int base, int size,
                          int precision, int type)
 {
@@ -57,9 +51,12 @@ static char *num_to_base(char *str, int num, int base, int size,
     i = 0;
     if (num == 0)
         tmp[i++] = '0';
-    else
-        while (num != 0)
-            tmp[i++] = digits[do_div(num, base)];
+    else while (num != 0)
+		{
+			int __rem = num % base;
+    	num /= base;  
+   		tmp[i++] = digits[__rem];
+		}
 
     precision = (i > precision) ? i : precision;
     size -= precision;

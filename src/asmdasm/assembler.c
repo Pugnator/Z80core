@@ -233,7 +233,7 @@ void defw ( uint16_t data )
 void deft ( char* text )
 {
     //skip brackets
-    for ( int i=1; i<strlen ( text )-1; i++ )
+    for ( size_t i=1; i<strlen ( text )-1; i++ )
     {
         prog[PC++] = text[i];
     }
@@ -340,6 +340,7 @@ int load_file ( char* filename, char** buffer )
       return 0;
   }
   size_t rd = fread ( *buffer, fsize, 1, in );
+	(void)rd;
   fclose ( in );
   strcat(*buffer, "\n");
   return 1;

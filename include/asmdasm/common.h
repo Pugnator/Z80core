@@ -17,6 +17,11 @@
 #include "uthash.h"
 #include <grammar.h>
 
+#ifndef __GNUC__
+/* temporary solution */
+#pragma warn(disable: 2251 2145 2030 2154 2130 2135 )
+#endif
+
 int asprintf( char **, const char *, ... );
 int vasprintf( char **, const char *, va_list );
 
