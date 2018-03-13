@@ -8,8 +8,8 @@
 
 - [ ] Macro assembler/disassembler  
 - [ ] Cycle-accurate emulator  
-- [ ]OpenVSM support  
-- [ ]Lua to Forth translator  
+- [ ] OpenVSM support  
+- [ ] Lua to Forth translator  
 
 
 
