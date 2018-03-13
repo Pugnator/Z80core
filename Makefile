@@ -1,11 +1,14 @@
-CC:=mingw32-gcc
-CPP:=mingw32-g++
 WINRES:=windres
 RM:= rm -rf
 ifeq ($(shell uname), Linux)
+  CC:=gcc
+  CPP:=g++
   BISON:=bison
   LEX:=flex
 else
+  CC:=mingw32-gcc
+  CPP:=mingw32-g++
+  WINRES:=windres
   BISON:=external/win_bison.exe
   LEX:=external/win_flex.exe
 endif
@@ -48,9 +51,9 @@ DASMOBJ:=$(DASMSRC:%.c=$(OBJDIR)/%.o)
 EMUOBJ:=$(EMUSRC:%.cc=$(OBJDIR)/%.o)
 EMUOBJ+=$(DASMOBJ)
 
-ASMEXEC:=$(OUTDIR)/zasm.exe
+ASMEXEC:=$(OUTDIR)/zasm
 
-EMUEXEC:=$(OUTDIR)/zemu.exe
+EMUEXEC:=$(OUTDIR)/zemu
 
 FLAGS:=-Og -g3 -ffunction-sections -fdata-sections -Iinclude/emucore -Iinclude/asmdasm -Isrc/asmdasm
 CFLAGS+=-std=gnu99 $(FLAGS)
@@ -77,7 +80,9 @@ lexers:
 
 $(OBJDIR)/app.res: app.rc
 	$(MKDIR_P) `dirname $@`
+ifeq ($(OS), Windows_NT)
 	$(WINRES) $< -O coff -o $@
+endif
 
 $(OBJDIR)/%.o: %.c
 	$(MKDIR_P) `dirname $@`
