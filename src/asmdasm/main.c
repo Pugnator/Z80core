@@ -15,33 +15,39 @@ USAGE:\
 
 void assembly_listing (char *filename, char *output_filename)
 {
+ 	FILE *source, *target;
+  	char *source_listing;
+  	size_t read, sz;
 	puts("Z80 assembler by Lavrenty Ivanov, 2016");
-	FILE *source = fopen (filename, "rt");
+  
+  	source = fopen (filename, "rb");
 	if(!source)
 	{
 		puts("Failed to open source file");
 		return;
 	}
-	FILE *target = fopen (output_filename, "wb");
+  	/* get file size */
+	fseek(source, 0L, SEEK_END);
+  	sz = ftell(source);
+	rewind(source);
+  	/* file size + null terminator */
+  	source_listing = malloc(sz+1);
+  	assert( source_listing );
+  	read = fread( source_listing, 1, sz, source);
+  	fclose( source );
+  	if( read != sz )
+  	{
+		puts("Failed to read input file");
+		return;
+  	}
+  	/* make null terminated string */
+	source_listing[sz] = '\0';
+  	target = fopen (output_filename, "wb");
 	if(!target)
 	{
 		puts("Failed to open output file");
 		return;
 	}
-
-	fseek(source, 0L, SEEK_END);
-	size_t sz = ftell(source);
-	rewind(source);
-	char *source_listing = malloc(sz);
-	char buf[1024] = {0};
-	size_t read=0;
-	size_t total = 0;
-	while((read = fread(buf, 1, sizeof buf, source))>0)
-	{
-		memcpy(source_listing + total, buf, read);
-		total+=read;
-	}
-	fclose(source);
 	process_source(source_listing, target);
 	free(source_listing);
 	fclose(target);
