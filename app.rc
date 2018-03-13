@@ -25,8 +25,8 @@ BEGIN
             VALUE "FileDescription", "Z80 emulator"
             VALUE "FileVersion", STRFILEVER
             VALUE "InternalName", "Z80 (Dis)Assembler"
-            VALUE "LegalCopyright", "©2016 Lavrentiy Ivanov"
-            VALUE "OriginalFilename", "asm.exe"
+            VALUE "LegalCopyright", "©2018 Lavrentiy Ivanov"
+            VALUE "OriginalFilename", "zasm.exe"
             VALUE "ProductName", "Z80 (Dis)Assembler"
             VALUE "ProductVersion", STRPRODUCTVER
         END
