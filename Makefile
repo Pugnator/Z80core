@@ -2,8 +2,13 @@ CC:=mingw32-gcc
 CPP:=mingw32-g++
 WINRES:=windres
 RM:= rm -rf
-BISON:=external/win_bison.exe
-LEX:=external/win_flex.exe
+ifeq ($(shell uname), Linux)
+  BISON:=bison
+  LEX:=flex
+else
+  BISON:=external/win_bison.exe
+  LEX:=external/win_flex.exe
+endif
 MKDIR_P = mkdir -p
 
 SRCDIR:=src
