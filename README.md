@@ -1,5 +1,16 @@
-It is targeted as Lua module to support Z80:  
-1) Macro assembler/disassembler  
-2) Cycle-accurate emulator  
-3) OpenVSM support  
-4) Lua to Forth translator  
+![Zilog logo](external/Zilog_logo.png)
+
+[![Build Status](https://travis-ci.org/Pugnator/Z80core.svg?branch=master)](https://travis-ci.org/Pugnator/Z80core)
+
+#### Set of tools for Z80 DIY projects
+
+###### TODO:
+
+- [ ] Macro assembler/disassembler  
+- [ ] Cycle-accurate emulator  
+- [ ]OpenVSM support  
+- [ ]Lua to Forth translator  
+
+
+
+
