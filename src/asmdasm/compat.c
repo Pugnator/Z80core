@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <stdint.h>
 
 #define PAD_ZEROES     (1 << 0)
 #define SIGNED         (1 << 1)
@@ -11,11 +12,12 @@
 #define LEFT_JUSTIFIED (1 << 4)
 #define SPECIAL        (1 << 5)
 #define LOWER_CASE     (1 << 6)
+#define INTMAX_TYPE    (1 << 7)
 
 const char *digits_large = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const char *digits_small = "0123456789abcdefghijklmnopqrstuvwxyz";
 
-static char *num_to_base(char *str, int num, int base, int size,
+static char *num_to_base(char *str, intmax_t num, int base, int size,
                          int precision, int type)
 {
     char c;
@@ -145,6 +147,7 @@ int __vsprintf(char *buf, const char *fmt, va_list args)
             case ' ': flags |= SPACE; goto get_flags;
             case '#': flags |= SPECIAL; goto get_flags;
             case '0': flags |= PAD_ZEROES; goto get_flags;
+	    case 'j': flags |= INTMAX_TYPE; goto get_flags;
         }
 
         field_width = -1;
@@ -228,8 +231,15 @@ int __vsprintf(char *buf, const char *fmt, va_list args)
             case 'i':
                 flags |= SIGNED;
             case 'u':
-                str = num_to_base(str, va_arg(args, unsigned long),
-                                  10, field_width, precision, flags);
+                {
+                  intmax_t val;
+                  if( flags & INTMAX_TYPE )
+                    val = va_arg(args, intmax_t );
+                  else
+                    val = va_arg(args, unsigned long);
+                  str = num_to_base(str, val,
+                                    10, field_width, precision, flags);
+                }
                 break;
 
             case 'n':
