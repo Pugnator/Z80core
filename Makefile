@@ -98,11 +98,19 @@ $(OBJDIR):
 $(OUTDIR):
 	$(MKDIR_P) $(OUTDIR)
 
-$(ASMEXEC): $(OBJ) $(ASMOBJ) $(DASMOBJ) $(OBJDIR)/app.res
-	$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
-
-$(EMUEXEC): $(EMUOBJ) $(OBJ) $(OBJDIR)/app.res
-	$(CPP) -o $@ $^ $(CXXFLAGS) $(LDFLAGS)
+ifeq ($(OS), Windows_NT)
+  $(ASMEXEC): $(OBJ) $(ASMOBJ) $(DASMOBJ) $(OBJDIR)/app.res
+		$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
+  
+  $(EMUEXEC): $(EMUOBJ) $(OBJ) $(OBJDIR)/app.res
+		$(CPP) -o $@ $^ $(CXXFLAGS) $(LDFLAGS)
+else
+  $(ASMEXEC): $(OBJ) $(ASMOBJ) $(DASMOBJ)
+		$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS)
+  
+  $(EMUEXEC): $(EMUOBJ) $(OBJ)
+		$(CPP) -o $@ $^ $(CXXFLAGS) $(LDFLAGS)
+endif
 
 .PHONY: clean
 clean:
