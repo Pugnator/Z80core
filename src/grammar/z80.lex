@@ -8,7 +8,7 @@ int asmcolumn = 0;
 extern int asmlex(void);
 extern YY_BUFFER_STATE asm_scan_buffer(char *, size_t);
 #define YY_USER_ACTION current_line=asmlineno;asmcolumn+=asmleng;
-#define SAVE_CTX asmlval.str = strdup(asmtext)
+#define SAVE_CTX strncpy(asmlval.str, asmtext, MAX_TOKEN_SIZE )
 %}
 
 %option backup

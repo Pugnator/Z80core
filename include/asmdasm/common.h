@@ -86,7 +86,7 @@ extern RUNPASS run_pass;
 
 #define NO_ARGS(x,y) if(!handle_instruction(x,0,0)){YYABORT;}free(y)
 #define HANDLE(x,y,z) if(!handle_instruction(x,y,z)){YYABORT;}
-#define TEMPLATE asprintf
+#define TEMPLATE( _xbufr, ... ) snprintf( _xbufr, MAX_TOKEN_SIZE, __VA_ARGS__ )
 #define UNSIGN8(x) \
 if(x)\
 {\
