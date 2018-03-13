@@ -8,7 +8,11 @@
 void usage (void)
 {
 	const char *help = "\
-USAGE:\
+USAGE:\r\n\
+[-s | --source] source filename\r\n\
+[-t | --target] output filename\r\n\
+[-d | --disassemble] filename of the binary to disassemble\r\n\
+[-v | --verbose] verbose output\
 ";
 	puts(help);
 }
@@ -71,11 +75,10 @@ int main (int argc, char** argv)
 			{ "target", required_argument, 0, 't' },
 			{ NULL, 0, 0, 0 } 
 		};
-	while ((opt = getopt_long (argc, argv, "hs:t:dv", long_options, &option_index)
+	while ((opt = getopt_long (argc, argv, "hs:t:dv", long_options, &option_index))!= -1)
 #else
-	while ((opt = _getopt(argc, argv, "hs:t:dv"))
-#endif
-	!= -1)
+	while ((opt = _getopt(argc, argv, "hs:t:dv"))!= -1)
+#endif  
 	{
 		switch (opt)
 			{
