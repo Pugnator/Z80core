@@ -7,13 +7,13 @@
 
 void usage (void)
 {
-	const char *help = "\
-USAGE:\r\n\
-[-s | --source] source filename\r\n\
-[-t | --target] output filename\r\n\
-[-d | --disassemble] filename of the binary to disassemble\r\n\
-[-v | --verbose] verbose output\
-";
+	const char *help = 
+"USAGE:\r\n"
+"[-s | --source] source filename\r\n"
+"[-t | --target] output filename\r\n"
+"[-d | --disassemble] filename of the binary to disassemble\r\n"
+"[-v | --verbose] verbose output"
+;
 	puts(help);
 }
 
@@ -49,6 +49,7 @@ void assembly_listing (char *filename, char *output_filename)
   	target = fopen (output_filename, "wb");
 	if(!target)
 	{
+		free(source_listing);
 		puts("Failed to open output file");
 		return;
 	}
