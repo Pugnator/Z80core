@@ -124,7 +124,6 @@ int handle_instruction ( char* instruction, intmax_t data, size_t size )
             return ASM_OK;
         }
     }
-    free ( instruction );
     /* Handle cases where relative jump is pointed to label */
     if ( new_opc->reljmp && PASS2 == run_pass && !check_relative_jump ( data ) )
     {
