@@ -1,10 +1,11 @@
 WINRES:=windres
 RM:= rm -rf
+STRIP:=strip
 ifeq ($(shell uname), Linux)
   CC:=gcc
   CPP:=g++
   BISON:=bison
-  LEX:=flex
+  LEX:=flex  
 else
   CC:=mingw32-gcc
   CPP:=mingw32-g++
@@ -51,11 +52,11 @@ DASMOBJ:=$(DASMSRC:%.c=$(OBJDIR)/%.o)
 EMUOBJ:=$(EMUSRC:%.cc=$(OBJDIR)/%.o)
 EMUOBJ+=$(DASMOBJ)
 
-ASMEXEC:=$(OUTDIR)/zasm
+ASMEXEC:=$(OUTDIR)/zasm.exe
 
-EMUEXEC:=$(OUTDIR)/zemu
+EMUEXEC:=$(OUTDIR)/zemu.exe
 
-FLAGS:=-Og -g3 -ffunction-sections -fdata-sections -Iinclude/emucore -Iinclude/asmdasm -Isrc/asmdasm
+FLAGS:=-O2 -g3 -ffunction-sections -fdata-sections -Iinclude/emucore -Iinclude/asmdasm -Isrc/asmdasm
 CFLAGS+=-std=gnu99 $(FLAGS)
 CXXFLAGS+=-std=c++11 $(FLAGS)
 LDFLAGS:=-Wl,--gc-sections
@@ -111,6 +112,9 @@ else
   $(EMUEXEC): $(EMUOBJ) $(OBJ)
 		$(CPP) -o $@ $^ $(CXXFLAGS) $(LDFLAGS)
 endif
+
+	$(STRIP) -s $(ASMEXEC)
+	$(STRIP) -s $(EMUEXEC)
 
 .PHONY: clean
 clean:

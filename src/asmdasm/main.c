@@ -20,9 +20,9 @@ USAGE:\r\n\
 void assembly_listing (char *filename, char *output_filename)
 {
  	FILE *source, *target;
-  	char *source_listing;
-  	size_t read, sz;
-	puts("Z80 assembler by Lavrenty Ivanov, 2016");
+  char *source_listing;
+  size_t read, sz;
+	puts("Z80 assembler");
   
   	source = fopen (filename, "rb");
 	if(!source)
