@@ -8,15 +8,15 @@ TEMP_LISTING = "temp.lst"
 OUTPUT_BIN = "out.bin"
 FAILED_LIST = "failed.txt"
 previous = ""
+release = true
 
 function trim(str)
   return (str:gsub("^%s*(.-)%s*$", "%1"))
 end
 
-function assembly_test(expected_hex, expected_size)
+function assembly_test(expected_hex, expected_size, duplicated)
   local exec = io.popen('..\\bin\\zasm.exe -s temp.lst -t ' .. OUTPUT_BIN)
   local result = exec:read("*a")
-  print(result)
   exec:close()
   
   res_file,err = io.open(OUTPUT_BIN, "rb")
@@ -30,15 +30,17 @@ function assembly_test(expected_hex, expected_size)
   
   local compiled_hex = ""
   for i = 1, #content do
-	compiled_hex = compiled_hex .. string.format("%X", content[i])
+	compiled_hex = compiled_hex .. string.format("%.2X", content[i])
   end
   
-  print(string.format("Result: %X = %X, size %u = %u", tonumber(expected_hex), tonumber(compiled_hex, 16), expected_size, compiled_size))
-
-  res_file:close()
-  --os.remove(OUTPUT_BIN)
+  retval = compiled_size == expected_size and tonumber(expected_hex) == tonumber(compiled_hex, 16)
   
-  return compiled_size == expected_size and tonumber(expected_hex) == tonumber(compiled_hex, 16)
+  if not retval and not duplicated then
+    print(string.format("Result: %X = %X, size %u = %u", tonumber(expected_hex), tonumber(compiled_hex, 16), expected_size, compiled_size))
+  end
+
+  res_file:close()  
+return retval
 end
 
 function process_opcode(str)
@@ -50,33 +52,32 @@ function process_opcode(str)
   if null == expected then return end
   expected = trim(expected)
   local size = str:match('#size:(%d)$') 
-  if null == size then return end
-  print(string.format("[Test %u]### Opcode: %s, Expected: %s, size: %d", total_count, op, expected, size))
-  
+  if null == size then return end 
   
   out = io.open (TEMP_LISTING, "w")
   out:write(".org 0\nstart:\n")
   out:write(str..'\n')
   out:write(".end\n")
   io.close(out)
+  if not release then print(string.format("[Test %u]### Opcode: %s, Expected: %s, size: %d", total_count, op, expected, size)) end
   
-  if assembly_test(expected, tonumber(size)) then
+  if assembly_test(expected, tonumber(size), previous == op) then
     passed = passed + 1
-    print("[PASSED]")
+    if not release then print("[PASSED]") end
   else
     if previous == op then
       skipped = skipped + 1
-      print("[SKIPPED]")
+      if not release then print("[SKIPPED]") end
     else
       failed = failed + 1
+      print(string.format("[Test %u]### Opcode: %s, Expected: %s, size: %d", total_count, op, expected, size))
       print("[FAILED]")
-      	fail_log = io.open (FAILED_LIST, "a")	 
-        fail_log:write(str.."\n")
-        io.close(fail_log)
+      fail_log = io.open (FAILED_LIST, "a")	 
+      fail_log:write(str.."\n")
+      io.close(fail_log)
     end
   end
-  previous = op
-  --os.remove(TEMP_LISTING)
+  previous = op  
 end
 
 function process_test_list(filename)
@@ -99,3 +100,5 @@ os.remove(FAILED_LIST)
 print("Assembler test")
 process_test_list("all.asm")
 print(string.format("Total:\n%u PASSED\n%u FAILED\n%u SKIPPED", passed, failed, skipped))
+os.remove(OUTPUT_BIN)
+os.remove(TEMP_LISTING)
