@@ -1,4 +1,4 @@
-#include <common.h>
+#include <z80tab.h>
 
 /**
  * TODO: add menmonics' hashes, may be compress the mnemo
