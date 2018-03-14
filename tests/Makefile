@@ -1,4 +1,4 @@
-LUA:=lua53
+LUA:=lua
 
 .PHONY: all
 all: test
