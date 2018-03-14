@@ -1,6 +1,7 @@
 WINRES:=windres
 RM:= rm -rf
 STRIP:=strip
+MAKE:=make
 ifeq ($(shell uname), Linux)
   CC:=gcc
   CPP:=g++
@@ -115,6 +116,10 @@ endif
 
 	$(STRIP) -s $(ASMEXEC)
 	$(STRIP) -s $(EMUEXEC)
+	
+.PHONY: test
+test:
+	$(MAKE) -C tests
 
 .PHONY: clean
 clean:
