@@ -6,7 +6,7 @@ include:
 
 install:
  - sudo apt-get update -qq
- - sudo apt-get install -y mingw32-binutils mingw32 mingw32-runtime bison flex lua
+ - sudo apt-get install -y mingw32-binutils mingw32 mingw32-runtime bison flex lua5.2
 
 script:
  - make
