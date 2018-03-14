@@ -1,7 +1,6 @@
 #pragma once
-#ifndef Z80_H
-#define Z80_H
 #include <stdint.h>
+#include <stdbool.h>
 
 typedef struct
 {
@@ -13,6 +12,4 @@ typedef struct
 } opcode_table;
 
 extern const opcode_table opcode_tab[];
-
-#endif
 
