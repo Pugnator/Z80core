@@ -13,6 +13,7 @@ end
 function assembly_test(expected_hex, expected_size)
   local exec = io.popen('..\\bin\\zasm.exe -s temp.lst -t ' .. OUTPUT_BIN)
   local result = exec:read("*a")
+  print(result)
   exec:close()
   
   res_file,err = io.open(OUTPUT_BIN, "rb")
@@ -32,7 +33,7 @@ function assembly_test(expected_hex, expected_size)
   print(string.format("Result: %X = %X, size %u = %u", tonumber(expected_hex), tonumber(compiled_hex, 16), expected_size, compiled_size))
 
   res_file:close()
-  os.remove(OUTPUT_BIN)
+  --os.remove(OUTPUT_BIN)
   
   return compiled_size == expected_size and tonumber(expected_hex) == tonumber(compiled_hex, 16)
 end
@@ -47,7 +48,7 @@ function process_opcode(str)
   expected = trim(expected)
   local size = str:match('#size:(%d)$') 
   if null == size then return end
-  print(string.format("[Test %u]### Test opcode: %s, Expected: %s, size: %d", total_count, op, expected, size))
+  print(string.format("[Test %u]### Opcode: %s, Expected: %s, size: %d", total_count, op, expected, size))
   
   
   out = io.open (TEMP_LISTING, "w")
@@ -66,7 +67,7 @@ function process_opcode(str)
 	fail_log:write(str.."\n")
 	io.close(fail_log)
   end
-  os.remove(TEMP_LISTING)
+  --os.remove(TEMP_LISTING)
 end
 
 function process_test_list(filename)
@@ -86,5 +87,5 @@ end
 
 
 print("Assembler test")
-process_test_list("all.asm")
+process_test_list("new.asm")
 print(string.format("Total:\n%u PASSED\n%u FAILED", passed, failed))

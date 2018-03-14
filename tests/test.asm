@@ -1,1 +1,1 @@
-OR 0xaa                  		;0xf6aa        		#size:2
+ADC A, [IX + 0]       		;0xdd8eaa      		#size:3
