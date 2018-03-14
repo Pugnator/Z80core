@@ -224,7 +224,7 @@ void disassembly_listing (char *source)
 	new->data_size = ftell(in);
 	rewind(in);
 	new->prog = malloc(new->data_size);
-	fread(new->prog, 1, new->data_size, in);
+	(void)fread(new->prog, 1, new->data_size, in);
 	new->opcodes_to_fetch = opcodes_to_fetch;
 	new->bytes_to_parse = bytes_to_parse;
 
