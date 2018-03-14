@@ -2,9 +2,12 @@
 
 passed = 0
 failed = 0
+skipped = 0
 total_count = 0
 TEMP_LISTING = "temp.lst"
 OUTPUT_BIN = "out.bin"
+FAILED_LIST = "failed.txt"
+previous = ""
 
 function trim(str)
   return (str:gsub("^%s*(.-)%s*$", "%1"))
@@ -61,12 +64,18 @@ function process_opcode(str)
     passed = passed + 1
     print("[PASSED]")
   else
-    failed = failed + 1
-    print("[FAILED]")
-	fail_log = io.open ("failed.txt", "a")	 
-	fail_log:write(str.."\n")
-	io.close(fail_log)
+    if previous == op then
+      skipped = skipped + 1
+      print("[SKIPPED]")
+    else
+      failed = failed + 1
+      print("[FAILED]")
+      	fail_log = io.open (FAILED_LIST, "a")	 
+        fail_log:write(str.."\n")
+        io.close(fail_log)
+    end
   end
+  previous = op
   --os.remove(TEMP_LISTING)
 end
 
@@ -86,6 +95,7 @@ function process_test_list(filename)
 end
 
 
+os.remove(FAILED_LIST)
 print("Assembler test")
-process_test_list("new.asm")
-print(string.format("Total:\n%u PASSED\n%u FAILED", passed, failed))
+process_test_list("all.asm")
+print(string.format("Total:\n%u PASSED\n%u FAILED\n%u SKIPPED", passed, failed, skipped))
