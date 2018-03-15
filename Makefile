@@ -80,7 +80,7 @@ lexers:
 	$(BISON) -t -v -d $(BISSRC) -o $(ASMDASMDIR)/$(BISOUT).c
 	$(LEX) -f -i -o $(ASMDASMDIR)/$(LEXOUT).c $(LEXSRC)
 
-$(OBJDIR)/app.res: app.rc
+$(OBJDIR)/app.res: src/app.rc
 	$(MKDIR_P) `dirname $@`
 ifeq ($(OS), Windows_NT)
 	$(WINRES) $< -O coff -o $@

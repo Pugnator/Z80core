@@ -13,5 +13,3 @@ typedef struct
 
 extern const opcode_table opcode_tab[];
 extern const int opcode_tab_count;
-
-void generate_test_file();

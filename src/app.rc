@@ -1,6 +1,6 @@
-#include "include/resources.h"
-AppIcon ICON "external/logo.ico"
-id ICON "external/logo.ico"
+#include "../include/resources.h"
+AppIcon ICON "../external/logo.ico"
+id ICON "../external/logo.ico"
 
 // Executable version information.
 1 VERSIONINFO

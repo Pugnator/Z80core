@@ -1296,12 +1296,3 @@ const opcode_table opcode_tab[]=
 
 /* without null terminated entry */
 const int opcode_tab_count = (sizeof( opcode_tab )/(sizeof(opcode_tab[0])))-1;
-
-void generate_test_file()
-{
-  for(int i = 0; i < opcode_tab_count; ++i)
-  {
-    printf(opcode_tab[i].mnemo, 2 == opcode_tab[i].data_size ? 0xAAAA : 0x7F);
-    puts("");
-  }
-}

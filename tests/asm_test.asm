@@ -151,7 +151,7 @@ CP XL                    		;0xddbd        		#size:2
 CP YH                    		;0xfdbc        		#size:2
 CP YL                    		;0xfdbd        		#size:2
 CP [HL]                  		;0xbe          		#size:1
-CP [IX + 0x7F]       		;0xfdbe7f       		#size:3
+CP [IX + 0x7F]       		;0xddbe7f       		#size:3
 CPD                      		;0xeda9        		#size:2
 CPDR                     		;0xedb9        		#size:2
 CPI                      		;0xeda1        		#size:2
@@ -176,7 +176,7 @@ DEC XL                   		;0xdd2d        		#size:2
 DEC YH                   		;0xfd25        		#size:2
 DEC YL                   		;0xfd2d        		#size:2
 DEC [HL]                 		;0x35          		#size:1
-DEC [IX + 0x7F]       		;0xfd357f       		#size:3
+DEC [IX + 0x7F]       		;0xdd357f       		#size:3
 DI                       		;0xf3          		#size:1
 DJNZ 0                		;0x10aa        		#size:2
 EI                       		;0xfb          		#size:1
@@ -218,7 +218,7 @@ INC XL                   		;0xdd2c        		#size:2
 INC YH                   		;0xfd24        		#size:2
 INC YL                   		;0xfd2c        		#size:2
 INC [HL]                 		;0x34          		#size:1
-INC [IX + 0x7F]       		;0xfd347f       		#size:3
+INC [IX + 0x7F]       		;0xdd347f       		#size:3
 IND                      		;0xedaa        		#size:2
 INDR                     		;0xedba        		#size:2
 INI                      		;0xeda2        		#size:2
@@ -374,7 +374,7 @@ LD D, RES 1, [IX + 0x7F]       		;0xddcb7f8a       		#size:4
 LD D, RES 2, [IX + 0x7F]       		;0xddcb7f92       		#size:4
 LD D, RES 3, [IX + 0x7F]       		;0xddcb7f9a       		#size:4
 LD D, RES 4, [IX + 0x7F]       		;0xddcb7fa2       		#size:4
-LD D, RES 5, [IX + 0x7F]       		;0xddcb7f7f       		#size:4
+LD D, RES 5, [IX + 0x7F]       		;0xddcb7faa       		#size:4
 LD D, RES 6, [IX + 0x7F]       		;0xddcb7fb2       		#size:4
 LD D, RES 7, [IX + 0x7F]       		;0xddcb7fba       		#size:4
 LD D, RL [IX + 0x7F]       		;0xddcb7f12       		#size:4
@@ -513,7 +513,7 @@ LD L, SLL [IX + 0x7F]       		;0xddcb7f35       		#size:4
 LD L, SRA [IX + 0x7F]       		;0xddcb7f2d       		#size:4
 LD L, SRL [IX + 0x7F]       		;0xddcb7f3d       		#size:4
 LD L, [HL]               		;0x6e          		#size:1
-LD L, [IX + 0x7F]       		;0xfd6e7f       		#size:3
+LD L, [IX + 0x7F]       		;0xdd6e7f       		#size:3
 LD R, A                  		;0xed4f        		#size:2
 LD SP, 0xaaaa            		;0x31aaaa      		#size:3
 LD SP, HL                		;0xf9          		#size:1
@@ -569,14 +569,14 @@ LD [HL], D               		;0x72          		#size:1
 LD [HL], E               		;0x73          		#size:1
 LD [HL], H               		;0x74          		#size:1
 LD [HL], L               		;0x75          		#size:1
-LD [IX + 0x7F], 0xaa       		;0xfd367f       		#size:3
+LD [IX + 0x7F], 0xaa       		;0xdd367f       		#size:3
 LD [IX + 0x7F], A       		;0xdd777f       		#size:3
 LD [IX + 0x7F], B       		;0xdd707f       		#size:3
 LD [IX + 0x7F], C       		;0xdd717f       		#size:3
 LD [IX + 0x7F], D       		;0xdd727f       		#size:3
 LD [IX + 0x7F], E       		;0xdd737f       		#size:3
 LD [IX + 0x7F], H       		;0xdd747f       		#size:3
-LD [IX + 0x7F], L       		;0xfd757f       		#size:3
+LD [IX + 0x7F], L       		;0xdd757f       		#size:3
 LDD                      		;0xeda8        		#size:2
 LDDR                     		;0xedb8        		#size:2
 LDI                      		;0xeda0        		#size:2

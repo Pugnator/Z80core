@@ -98,7 +98,7 @@ int main (int argc, char** argv)
         target = optarg;
         break;
 			case 't':
-        generate_test_file();
+        puts("Not implemented yet");
 				return 0;
 			case 'h':
 			case '?':
