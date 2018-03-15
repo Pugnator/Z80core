@@ -11,7 +11,7 @@ ADC A, XL                		;0xdd8d        		#size:2
 ADC A, YH                		;0xfd8c        		#size:2
 ADC A, YL                		;0xfd8d        		#size:2
 ADC A, [HL]              		;0x8e          		#size:1
-ADC A, [IX + 0x7F]       		;0xfd8e7f       		#size:3
+ADC A, [IX + 0x7F]       		;0xdd8e7f       		#size:3
 ADC HL, BC               		;0xed4a        		#size:2
 ADC HL, DE               		;0xed5a        		#size:2
 ADC HL, HL               		;0xed6a        		#size:2
@@ -29,7 +29,7 @@ ADD A, XL                		;0xdd85        		#size:2
 ADD A, YH                		;0xfd84        		#size:2
 ADD A, YL                		;0xfd85        		#size:2
 ADD A, [HL]              		;0x86          		#size:1
-ADD A, [IX + 0x7F]       		;0xfd867f       		#size:3
+ADD A, [IX + 0x7F]       		;0xdd867f       		#size:3
 ADD HL, BC               		;0x09          		#size:1
 ADD HL, DE               		;0x19          		#size:1
 ADD HL, HL               		;0x29          		#size:1
@@ -55,7 +55,7 @@ AND XL                   		;0xdda5        		#size:2
 AND YH                   		;0xfda4        		#size:2
 AND YL                   		;0xfda5        		#size:2
 AND [HL]                 		;0xa6          		#size:1
-AND [IX + 0x7F]       		;0xfda67f       		#size:3
+AND [IX + 0x7F]       		  ;0xdda67f       		#size:3
 BIT 0, A                 		;0xcb47        		#size:2
 BIT 0, B                 		;0xcb40        		#size:2
 BIT 0, C                 		;0xcb41        		#size:2
