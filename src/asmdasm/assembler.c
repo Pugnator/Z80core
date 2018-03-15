@@ -25,16 +25,28 @@ const char* error_texts[]=
     NULL
 };
 
-const opcode_table* find_opcode ( char* instruction )
+/* use binary search algorithm, be sure that opcode table sorted by mnemo field */
+const opcode_table* find_opcode( char *instruction )
 {
-    for ( int i=0; opcode_tab[i].mnemo; i++ )
-    {
-        if ( 0 == strcasecmp ( opcode_tab[i].mnemo, instruction ) )
-        {
-            return &opcode_tab[i];
-        }
-    }
-    return NULL;
+  int i, i_low, i_high, cmp;
+  
+  /* get latest valid index */
+  i_high = opcode_tab_count-1;
+  i_low = cmp = i = 0;
+
+  /* find sorted array entry */
+  while( i_low <= i_high )
+	{
+		i = ( i_low + i_high )/2;
+    cmp = strcasecmp( instruction, opcode_tab[i].mnemo );
+		if( !cmp )
+			return &opcode_tab[i];
+		if ( cmp < 0 )
+			i_high = i - 1;
+		else
+			i_low = i + 1;
+	}
+  return (void*)0;
 }
 
 void debug_print ( const char* format, ... )
