@@ -146,7 +146,6 @@ int handle_instruction ( char* instruction, intmax_t data, size_t size )
     if ( true == tgt_label && new_opc->reljmp )
     {
         tgt_label = false;
-        data-=PC-2;
     }
     /* Basic one-byte opcodes */
     if ( is_single(new_opc->opcode) )
