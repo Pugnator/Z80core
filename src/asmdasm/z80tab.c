@@ -5,10 +5,9 @@
  * sorted table for binary search algo, sorted by mnemo field
  */
 
-#define OPCODE_ARRAY_ENTRY_COUNT (1282)
 
 /* give space for zero entry */
-const opcode_table opcode_tab[OPCODE_ARRAY_ENTRY_COUNT+1]=
+const opcode_table opcode_tab[]=
 {
 	[914]=	{	.opcode=0x00,	.mnemo="NOP"	},
 	[546]=	{	.opcode=0x01,	.mnemo="LD BC, %#.4x",	.data_size=2	},
@@ -1296,11 +1295,11 @@ const opcode_table opcode_tab[OPCODE_ARRAY_ENTRY_COUNT+1]=
 };
 
 /* without null terminated entry */
-const int opcode_tab_count = OPCODE_ARRAY_ENTRY_COUNT;
+const int opcode_tab_count = (sizeof( opcode_tab )/(sizeof(opcode_tab[0])))-1;
 
 void generate_test_file()
 {
-  for(int i = 0; i < OPCODE_ARRAY_ENTRY_COUNT; ++i)
+  for(int i = 0; i < opcode_tab_count; ++i)
   {
     printf(opcode_tab[i].mnemo, 2 == opcode_tab[i].data_size ? 0xAAAA : 0x7F);
     puts("");
