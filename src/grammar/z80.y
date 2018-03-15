@@ -13,7 +13,7 @@ int current_line = 1;
 
 %union
 {
-#define MAX_TOKEN_SIZE (32)
+#define MAX_TOKEN_SIZE (64)
     intmax_t var;
     char str[MAX_TOKEN_SIZE];
 }
