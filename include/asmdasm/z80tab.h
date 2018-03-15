@@ -12,4 +12,5 @@ typedef struct
 } opcode_table;
 
 extern const opcode_table opcode_tab[];
+extern const int opcode_tab_count;
 
