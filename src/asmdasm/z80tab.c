@@ -1,4 +1,6 @@
 #include "z80tab.h"
+#include <stdio.h>
+
 /**
  * sorted table for binary search algo, sorted by mnemo field
  */
@@ -1295,3 +1297,12 @@ const opcode_table opcode_tab[OPCODE_ARRAY_ENTRY_COUNT+1]=
 
 /* without null terminated entry */
 const int opcode_tab_count = OPCODE_ARRAY_ENTRY_COUNT;
+
+void generate_test_file()
+{
+  for(int i = 0; i < OPCODE_ARRAY_ENTRY_COUNT; ++i)
+  {
+    printf(opcode_tab[i].mnemo, 2 == opcode_tab[i].data_size ? 0xAAAA : 0x7F);
+    puts("");
+  }
+}

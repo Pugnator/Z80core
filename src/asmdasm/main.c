@@ -64,6 +64,7 @@ int main (int argc, char** argv)
 	char *source = NULL;
 	char *target = NULL;
 	int verbose = 0;
+  int test = 0;
 	int dasm = 0;
 
 #ifdef __GNUC__
@@ -73,12 +74,13 @@ int main (int argc, char** argv)
 			{ "verbose", no_argument, &verbose, 0 },
 			{ "disassemble", no_argument, &dasm, 0 },
 			{ "source", required_argument, 0, 's' },
-			{ "target", required_argument, 0, 't' },
+			{ "output", required_argument, 0, 'o' },
+      { "test", no_argument, &test, 't' },
 			{ NULL, 0, 0, 0 } 
 		};
-	while ((opt = getopt_long (argc, argv, "hs:t:dv", long_options, &option_index))!= -1)
+	while ((opt = getopt_long (argc, argv, "hs:o:tdv", long_options, &option_index))!= -1)
 #else
-	while ((opt = _getopt(argc, argv, "hs:t:dv"))!= -1)
+	while ((opt = _getopt(argc, argv, "hs:o:tdv"))!= -1)
 #endif  
 	{
 		switch (opt)
@@ -92,9 +94,12 @@ int main (int argc, char** argv)
 			case 's':
 				source = optarg;
 				break;
+      case 'o':
+        target = optarg;
+        break;
 			case 't':
-				target = optarg;
-				break;
+        generate_test_file();
+				return 0;
 			case 'h':
 			case '?':
 				usage ();

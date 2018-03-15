@@ -64,7 +64,7 @@ LDFLAGS:=-Wl,--gc-sections
 
 
 .PHONY: all
-all: clean asm emu
+all: asm
 
 .PHONY: emu
 emu: dirs lexers $(EMUEXEC)

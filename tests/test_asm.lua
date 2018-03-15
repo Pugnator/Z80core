@@ -15,14 +15,14 @@ function trim(str)
 end
 
 function assembly_test(expected_hex, expected_size, duplicated)
-  local exec = io.popen('..\\bin\\zasm.exe -s temp.lst -t ' .. OUTPUT_BIN)
+  local exec = io.popen('..\\bin\\zasm.exe -s temp.lst -o ' .. OUTPUT_BIN)
   local result = exec:read("*a")
   exec:close()
   
   res_file,err = io.open(OUTPUT_BIN, "rb")
   if err then
-		print("Error!")
-		return
+		print("Error creating temp source file!" .. result)
+		os.exit()
 	end
   local compiled_bytes = res_file:read("*all")
   local content = {compiled_bytes:byte(1,-1)}
@@ -83,7 +83,7 @@ end
 function process_test_list(filename)
 	fh,err = io.open(filename)
 	if err then
-		print("Error!")
+		print("Error opening source file!")
 		return
 	end
 	while true do
@@ -98,7 +98,7 @@ end
 
 os.remove(FAILED_LIST)
 print("Assembler test")
-process_test_list("all.asm")
+process_test_list("asm_test.asm")
 print(string.format("Total:\n%u PASSED\n%u FAILED\n%u SKIPPED", passed, failed, skipped))
 os.remove(OUTPUT_BIN)
 os.remove(TEMP_LISTING)
