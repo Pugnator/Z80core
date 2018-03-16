@@ -49,6 +49,8 @@ const opcode_table* find_opcode( char *instruction )
 	{
 		i = ( i_low + i_high )/2;
     cmp = strcasecmp( instruction, opcode_tab[i].mnemo );
+    if( !cmp )
+      cmp = 0-opcode_tab[i].duplicate;
 		if( !cmp )
 			return &opcode_tab[i];
 		if ( cmp < 0 )

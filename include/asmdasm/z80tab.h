@@ -23,6 +23,8 @@ typedef struct
 	unsigned opcode : 24;
 	unsigned data_size : 2;
 	unsigned reljmp : 1;
+  /* do not use while assembly */
+  unsigned duplicate: 1;
 	char *mnemo;
 	unsigned flags;
 } opcode_table;
