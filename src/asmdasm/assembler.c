@@ -6,6 +6,7 @@ char* current_label;
 bool tgt_label = false;
 bool abort_on_error = true;
 uint16_t PC = 0;
+uint16_t DATA_PC = 0;
 uint16_t CURRENT_ORG = 0;
 uint8_t prog[PROG_SIZE]= {0};
 user_label* labels = NULL;
@@ -233,7 +234,13 @@ int handle_instruction ( char* instruction, intmax_t data, size_t size )
  */
 void defw ( uint16_t data )
 {
-    prog[PC++] = data & 0xFF;
+  prog[DATA_PC++] = data & 0xFF;
+  prog[DATA_PC++] = (data>>8) & 0xFF;
+}
+
+void defb ( uint16_t data )
+{
+  prog[DATA_PC++] = data & 0xFF;
 }
 
 /**
