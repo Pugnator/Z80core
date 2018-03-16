@@ -1,3 +1,12 @@
+/**
+ *
+ * @file   assembler.c 
+ * @date   16.03.2018 
+ * @license This project is released under the GPL 2 license.
+ * @brief Assembler
+ *
+ */
+
 #include <common.h>
 #include <assembler.h>
 

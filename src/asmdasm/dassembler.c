@@ -1,3 +1,12 @@
+/**
+ *
+ * @file   dassembler.c 
+ * @date   16.03.2018 
+ * @license This project is released under the GPL 2 license.
+ * @brief Disassembler
+ *
+ */
+ 
 #include "dassembler.h"
 
 dsmctx* disasm_ctx_init ( void )

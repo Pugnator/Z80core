@@ -1,3 +1,12 @@
+/**
+ *
+ * @file   z80tab.c 
+ * @date   16.03.2018 
+ * @license This project is released under the GPL 2 license.
+ * @brief Main instruction table
+ *
+ */
+
 #include "z80tab.h"
 #include <stdio.h>
 

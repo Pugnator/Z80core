@@ -1,3 +1,12 @@
+/**
+ *
+ * @file   main.c 
+ * @date   16.03.2018 
+ * @license This project is released under the GPL 2 license.
+ * @brief main file
+ *
+ */
+
 #include <stdarg.h>
 #include <unistd.h>
 #include <assembler.h>

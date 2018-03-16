@@ -1,3 +1,12 @@
+/**
+ *
+ * @file   cpu.hpp
+ * @date   16.03.2018 
+ * @license This project is released under the GPL 2 license.
+ * @brief 
+ *
+ */
+
 #pragma once
 
 #include <stdint.h>
