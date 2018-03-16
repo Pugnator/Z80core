@@ -178,7 +178,7 @@ DEC YL                   		;0xfd2d        		#size:2
 DEC [HL]                 		;0x35          		#size:1
 DEC [IX + 0x7F]       		;0xdd357f       		#size:3
 DI                       		;0xf3          		#size:1
-DJNZ 0                		;0x10aa        		#size:2
+DJNZ 0                		;0x100        		#size:2
 EI                       		;0xfb          		#size:1
 EX AF, AF'               		;0x08          		#size:1
 EX DE, HL                		;0xeb          		#size:1
@@ -235,11 +235,11 @@ JP Z, 0xaaaa             		;0xcaaaaa      		#size:3
 JP [HL]                  		;0xe9          		#size:1
 JP [IX]                  		;0xdde9        		#size:2
 JP [IY]                  		;0xfde9        		#size:2
-JR 100                  		;0x18aa        		#size:2
-JR C, 100               		;0x38aa        		#size:2
-JR NC, 100              		;0x30aa        		#size:2
-JR NZ, 100              		;0x20aa        		#size:2
-JR Z, 100               		;0x28aa        		#size:2
+JR 7f                  		;0x187f        		#size:2
+JR C, 7f               		;0x387f        		#size:2
+JR NC, 7f              		;0x307f        		#size:2
+JR NZ, 7f              		;0x207f        		#size:2
+JR Z, 7f               		;0x287f        		#size:2
 LD A, 0xaa               		;0x3eaa        		#size:2
 LD A, A                  		;0x7f          		#size:1
 LD A, B                  		;0x78          		#size:1
