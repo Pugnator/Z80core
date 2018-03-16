@@ -33,9 +33,8 @@ function assembly_test(expected_hex, expected_size, duplicated)
     compiled_hex = compiled_hex .. string.format("%.2X", content[i])
   end
   
-  if nil == compiled_hex then 
+  if 0 == compiled_size then
     print(result)
-    os.exit()
   end
   
   retval = compiled_size == expected_size and tonumber(expected_hex) == tonumber(compiled_hex, 16)

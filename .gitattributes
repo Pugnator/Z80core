@@ -1,2 +1,3 @@
 tests/*.asm linguist-vendored
 tests/monitor48/* linguist-vendored
+external/* linguist-vendored
