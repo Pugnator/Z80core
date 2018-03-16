@@ -24,7 +24,7 @@ int current_line = 1;
 %right UMINUS
 
 %type  <var> expr IXidx IYidx opbrk clbrk
-%type  <str> instr defw seq org text equ PDREG PREG
+%type  <str> instr defb defw seqb seqw org text equ PDREG PREG
 %type  <str> directive
 
 %token <str> NL REG DREG FLAG IX IY END LABEL
@@ -32,7 +32,7 @@ int current_line = 1;
 %token <str> INC IND INDR INI INIR JP JR LD LDD LDDR LDI LDIR NOP OR OTDR OTIR OUT OUTD OUTI POP PUSH
 %token <str> RES RET RETN RL RLA RLC RLCA RR RRA RRC RRCA RST SBC SCF SET SLA SLL SRA SRL SUB XOR NEG
 %token <str> RETI RLD RRD END_OF_FILE
-%token <str> DEFINE DEFW STRING
+%token <str> DEFINE DEFB DEFW STRING
 
 %token <var> BIT8 WORD DWORD QWORD DQWORD ASMPC ASMORG TEXT EQU ORG DIRECTIVE
 %%
@@ -62,7 +62,12 @@ stmt:     instr
         | equ
 ;
 
-defw:     DEFW seq
+defb:     DEFB { DATA_PC = PC;}
+		  seqb { PC = DATA_PC;}
+;
+
+defw:     DEFW { DATA_PC = PC;}
+		  seqw { PC = DATA_PC;}
 ;
 
 equ:      EQU {$$[0] = '\0';}
@@ -74,8 +79,11 @@ org:      ORG expr {$$[0] = '\0'; CURRENT_ORG = PC = $2;}
 text:     TEXT STRING { strcpy( $$, "kilroy was here" );deft($2);}
 ;
 
-seq:      expr {$$[0] = '\0'; defw ($1);}
-        | seq ',' expr {$$[0] = '\0';defw ($3);}
+seqb:      expr {$$[0] = '\0'; defb ($1);}
+        | seqb ',' expr {$$[0] = '\0';defb ($3);}
+		
+seqw:      expr {$$[0] = '\0'; defw ($1);}
+        | seqw ',' expr {$$[0] = '\0';defw ($3);}
 
 expr:     WORD                                 { $$ = $1;}
         | BIT8                                 { $$ = $1;}
