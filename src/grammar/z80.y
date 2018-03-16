@@ -50,8 +50,8 @@ line:     stmt NL
         | END_OF_FILE {YYACCEPT;}
 ;
 
-directive: defb  
-	defw
+directive:  defb
+		| defw
         | text
         | DEFINE
 ;
@@ -63,12 +63,12 @@ stmt:     instr
         | equ
 ;
 
-defb:     DEFB { DATA_PC = PC; }
-	  seqb { PC = DATA_PC; }
+defb:     DEFB { DATA_PC = PC;}
+		  seqb { PC = DATA_PC;}
 ;
 
-defw:     DEFW { DATA_PC = PC; }
-          seqw { PC = DATA_PC; }
+defw:     DEFW { DATA_PC = PC;}
+		  seqw { PC = DATA_PC;}
 ;
 
 equ:      EQU {$$[0] = '\0';}
@@ -113,10 +113,10 @@ clbrk:    ')'                                  { $$=0;}
 
 
 IXidx:    opbrk IX '+' expr clbrk                          { SIGN8($4);$$ = $4;}
-        | opbrk IX '-' expr clbrk                          { SIGN8($4);$$ = $4;}
+        | opbrk IX '-' expr clbrk                          { SIGN8($4);$$ = -$4;}
 
 IYidx:    opbrk IY '+' expr clbrk                        { SIGN8($4);$$ = $4;}
-        | opbrk IY '-' expr clbrk                        { SIGN8($4);$$ = $4;}
+        | opbrk IY '-' expr clbrk                        { SIGN8($4);$$ = -$4;}
 ;
 
 PDREG:     opbrk DREG clbrk                        { TEMPLATE($$, "[%s]", $2);}
