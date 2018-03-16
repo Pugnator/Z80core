@@ -8,7 +8,7 @@ TEMP_LISTING = "temp.lst"
 OUTPUT_BIN = "out.bin"
 FAILED_LIST = "failed.txt"
 previous = ""
-release = true
+release = false
 
 function trim(str)
   return (str:gsub("^%s*(.-)%s*$", "%1"))
@@ -30,7 +30,12 @@ function assembly_test(expected_hex, expected_size, duplicated)
   
   local compiled_hex = ""
   for i = 1, #content do
-	compiled_hex = compiled_hex .. string.format("%.2X", content[i])
+    compiled_hex = compiled_hex .. string.format("%.2X", content[i])
+  end
+  
+  if nil == compiled_hex then 
+    print(result)
+    os.exit()
   end
   
   retval = compiled_size == expected_size and tonumber(expected_hex) == tonumber(compiled_hex, 16)
