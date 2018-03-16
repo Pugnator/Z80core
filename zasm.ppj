@@ -30,6 +30,7 @@ WizCreator = Pelle Orinius#
 # 
 zasm.exe: \
 	obj\app.res \
+	obj\app.res \
 	obj\assembler.obj \
 	obj\compat.obj \
 	obj\dassembler.obj \
@@ -85,16 +86,17 @@ obj\main.obj: \
 # Build z80tab.obj.
 # 
 obj\z80tab.obj: \
-	src\asmdasm\z80tab.c
+	src\asmdasm\z80tab.c \
+	include\asmdasm\z80tab.h
 	$(CC) $(CCFLAGS) "$!" -Fo"$@"
 
 # 
 # Build app.res.
 # 
 obj\app.res: \
-	app.rc \
-	include\resources.h \
-	logo.ico
+	src\app.rc \
+	external\logo.ico \
+	include\resources.h
 	$(RC) $(RCFLAGS) "$!" -Fo"$@"
 
 .SILENT:

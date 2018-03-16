@@ -1296,3 +1296,4 @@ const opcode_table opcode_tab[]=
 
 /* without null terminated entry */
 const int opcode_tab_count = (sizeof( opcode_tab )/(sizeof(opcode_tab[0])))-1;
+
