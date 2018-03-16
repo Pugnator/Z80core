@@ -76,7 +76,7 @@ void error_print ( const char* format, ... )
 
 bool check_relative_jump ( intmax_t destination )
 {
-    return destination <= 129 && destination >= -126;
+    return destination <= 127 && destination >= -128;
 }
 
 bool check_double_argumented ( uint16_t opcode )
