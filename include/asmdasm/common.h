@@ -80,6 +80,7 @@ extern char* current_label;
 extern bool abort_on_error;
 extern bool tgt_label;
 extern uint16_t PC;
+extern uint16_t DATA_PC;
 extern uint16_t CURRENT_ORG;
 extern uint8_t prog[PROG_SIZE];
 extern RUNPASS run_pass;
