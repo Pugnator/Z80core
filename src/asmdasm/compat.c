@@ -1,3 +1,12 @@
+/**
+ *
+ * @file   compat.c 
+ * @date   16.03.2018 
+ * @license This project is released under the GPL 2 license.
+ * @brief compatibility workarounds
+ *
+ */
+ 
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
