@@ -50,7 +50,8 @@ line:     stmt NL
         | END_OF_FILE {YYACCEPT;}
 ;
 
-directive:  defw
+directive: defb  
+	defw
         | text
         | DEFINE
 ;
@@ -62,12 +63,12 @@ stmt:     instr
         | equ
 ;
 
-defb:     DEFB { DATA_PC = PC;}
-		  seqb { PC = DATA_PC;}
+defb:     DEFB { DATA_PC = PC; }
+	  seqb { PC = DATA_PC; }
 ;
 
-defw:     DEFW { DATA_PC = PC;}
-		  seqw { PC = DATA_PC;}
+defw:     DEFW { DATA_PC = PC; }
+          seqw { PC = DATA_PC; }
 ;
 
 equ:      EQU {$$[0] = '\0';}
