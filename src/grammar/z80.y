@@ -13,7 +13,7 @@ int current_line = 1;
 
 %union
 {
-#define MAX_TOKEN_SIZE (32)
+#define MAX_TOKEN_SIZE (64)
     intmax_t var;
     char str[MAX_TOKEN_SIZE];
 }
@@ -404,7 +404,7 @@ instr:    NOP                                  { TEMPLATE($$, "%s", $1); NO_ARGS
 
         /* RST */
         /*###################################################################################################################*/
-        | RST expr                         { UNSIGN8($2); TEMPLATE($$, "%s %d", $1, (uint8_t)$2); HANDLE($$,0,0); }
+        | RST expr                         { UNSIGN8($2); TEMPLATE($$, "%s %X", $1, (uint8_t)$2); HANDLE($$,0,0); }
         /*###################################################################################################################*/
 
         /* SBC */
