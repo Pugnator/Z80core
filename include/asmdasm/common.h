@@ -136,6 +136,7 @@ void print_labels(user_label* print);
 void asm_load_buffer (const char *input);
 int handle_instruction (char *instruction, intmax_t data, size_t size);
 void defw ( uint16_t data );
+void defb ( uint16_t data );
 void deft ( char* text );
 void add_label (char *label, uint16_t address);
 intmax_t get_label_address (char *label);
