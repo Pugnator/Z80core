@@ -1,1 +1,2 @@
-tests/* linguist-vendored
+tests/*.asm linguist-vendored
+tests/monitor43/*.asm linguist-vendored
