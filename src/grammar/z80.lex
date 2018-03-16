@@ -228,7 +228,8 @@ num               {dec}|{hex}|{oct}|{bcd}|{bin}|{char}
 "$$"                {return ASMORG;}
 "\n"                {return NL;}
 
-".byte"|".word"|"defw"|"defb"              {return DEFW;}
+".byte"|"defb"              {return DEFB;}
+".word"|"defw"              {return DEFW;}
 
 ".org"              {return ORG;}
 ".end"              {return END;}
