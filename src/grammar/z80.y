@@ -77,7 +77,7 @@ equ:      EQU {$$[0] = '\0';}
 org:      ORG expr {$$[0] = '\0'; CURRENT_ORG = PC = $2;}
 ;
 
-text:     TEXT STRING { strcpy( $$, "kilroy was here" );deft($2);}
+text:     TEXT STRING { strcpy( $$, "kilroy was here" );DATA_PC = PC;deft($2);PC = DATA_PC;}
 ;
 
 seqb:      expr {$$[0] = '\0'; defb ($1);}

@@ -263,7 +263,7 @@ void deft ( char* text )
     //skip brackets
     for ( size_t i=1; i<strlen ( text )-1; i++ )
     {
-        prog[PC++] = text[i];
+        prog[DATA_PC++] = text[i];
     }
 }
 
