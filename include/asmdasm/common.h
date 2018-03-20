@@ -16,6 +16,7 @@
 #include <string.h>
 #include <errno.h>
 #include <stdbool.h>
+#include <ctype.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <getopt.h>

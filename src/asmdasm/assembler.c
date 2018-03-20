@@ -254,17 +254,104 @@ void defb ( uint16_t data )
   prog[DATA_PC++] = data & 0xFF;
 }
 
+static uint8_t hex2val(char a)
+{
+  return (a > '9') ?
+  (uint8_t) ((a & 0xDFu) - 0x37u):
+  (uint8_t) (a - '0');
+}
+
+static char process_backslash( char *s, int *index ) 
+{
+	switch( *s )
+  {
+   case 'a':
+     return '\a';
+   case 'b':
+     return '\b';
+   case 'f':
+     return '\f';
+   case 'n':
+     return '\n';
+   case 'r':
+     return '\r';
+   case 't':
+     return '\t';
+   case 'v':
+     return '\v';
+   case '\'':
+   case '"':
+   case '\\':
+   case '\?':
+     break;
+   /* hex value */
+   case 'x':
+   {
+    int val = 0;
+    for( int i = 1; isxdigit( s[i] ); ++i )
+    {
+      ++index[0];
+      val<<=4;
+      val |= hex2val( s[i] );
+    }
+    return val&0xFF;
+   }
+   /* oct value */
+   case '0':
+   case '1':
+   case '2':
+   case '3':
+   case '4':
+   case '5':
+   case '6':
+   case '7':
+   {
+    int val = 0;
+    /* put back */
+    --index[0];
+    for( int i = 0; i < 3; ++i )
+    {
+      if( s[0] < '0' || s[0] > '7' )
+        break;
+      val<<=3;
+      val |= *s-'0';
+      ++s;
+      ++index[0];
+    }
+    return val;
+   }
+  }
+  return s[0];
+}
+
 /**
  * [deft  description]
  * @param text [description]
  */
 void deft ( char* text )
 {
-    //skip brackets
-    for ( size_t i=1; i<strlen ( text )-1; i++ )
+  int len = strlen( text );
+  int escape = 0;
+  for( int i = 0; i < len; ++i )
+  {
+    int ch = text[i];
+    if( !escape )
     {
-        prog[DATA_PC++] = text[i];
+      if( ch == '\"' )
+        continue;
+      if( ch == '\\' )
+      {
+        escape = 1;
+        continue;
+      }
     }
+    else
+    {
+      escape = 0;
+      ch = process_backslash( &text[i], &i );
+    }
+    prog[DATA_PC++] = ch;
+  }
 }
 
 /**
