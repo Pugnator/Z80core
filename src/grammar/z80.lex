@@ -231,7 +231,7 @@ num               {dec}|{hex}|{oct}|{bcd}|{bin}|{char}
 ".byte"|"defb"              {return DEFB;}
 ".word"|"defw"              {return DEFW;}
 
-".org"              {return ORG;}
+".org"|"org"        {return ORG;}
 ".end"              {return END;}
 "defm"              {return TEXT;}
 
