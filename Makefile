@@ -22,6 +22,8 @@ ASMDASMDIR:=$(SRCDIR)/asmdasm
 EMUDIR:=$(SRCDIR)/emucore
 OBJDIR:=obj
 OUTDIR:=bin
+MONITOR:=tests/monitor48/monitor48k.asm
+TEST_BIN:=test.bin
 
 LEXSRC:=$(GRAMMARDIR)/z80.lex
 LEXOUT:=z80lex
@@ -117,9 +119,9 @@ endif
 	$(STRIP) -s $(ASMEXEC)
 	$(STRIP) -s $(EMUEXEC)
 	
-.PHONY: test
-test:
-	$(MAKE) -C tests
+.PHONY: selftest
+selftest:
+	$(ASMEXEC) $(MONITOR) -o $(TEST_BIN)
 
 .PHONY: clean
 clean:
@@ -129,4 +131,5 @@ clean:
 	$(RM) $(ASMDASMDIR)/$(BISOUT).c
 	$(RM) $(ASMDASMDIR)/$(LEXOUT).c
 	$(RM) Debug
+	$(RM) $(TEST_BIN)
 	$(RM) *.backup

@@ -14,6 +14,8 @@
 #include <getopt.h>
 #include <inttypes.h>
 
+int verbose = 0;
+
 void usage (void)
 {
 	const char *help = 
@@ -26,57 +28,57 @@ void usage (void)
 	puts(help);
 }
 
-void assembly_listing (char *filename, char *output_filename)
+bool assembly_listing (char *filename, char *output_filename)
 {
  	FILE *source, *target;
   char *source_listing;
   size_t read, sz;
 	puts("Z80 assembler");
   
-  	source = fopen (filename, "rb");
+  source = fopen (filename, "rb");
 	if(!source)
 	{
 		puts("Failed to open source file");
-		return;
+		return false;
 	}
   	/* get file size */
 	fseek(source, 0L, SEEK_END);
-  	sz = ftell(source);
+  sz = ftell(source);
 	rewind(source);
-  	/* file size + null terminator */
-  	source_listing = malloc(sz+1);
-  	assert( source_listing );
-  	read = fread( source_listing, 1, sz, source);
-  	fclose( source );
-  	if( read != sz )
-  	{
-		puts("Failed to read input file");
-		return;
-  	}
-  	/* make null terminated string */
+  /* file size + null terminator */
+  source_listing = malloc(sz+1);
+  assert( source_listing );
+  read = fread( source_listing, 1, sz, source);
+  fclose( source );
+  if( read != sz )
+  {
+    puts("Failed to read input file");
+    return false;
+  }
+  /* make null terminated string */
 	source_listing[sz] = '\0';
-  	target = fopen (output_filename, "wb");
+  target = fopen (output_filename, "wb");
 	if(!target)
 	{
 		free(source_listing);
 		puts("Failed to open output file");
-		return;
+		return false;
 	}
-	process_source(source_listing, target);
+	int result = process_source(source_listing, target);
 	free(source_listing);
 	fclose(target);
+  return ASM_OK == result;
 }
 
 int main (int argc, char** argv)
 {
 	int opt = 0;
 	char *source = NULL;
-	char *target = NULL;
-	int verbose = 0;
+	char *target = NULL;	
   int test = 0;
 	int dasm = 0;
 
-#ifdef __GNUC__
+#if defined(__GNUC__) || defined(__MINGW32__)
 	int option_index = 0;
 	struct option long_options[] =
 		{
@@ -116,6 +118,18 @@ int main (int argc, char** argv)
 				break;
 			}
 	}
+  
+  /* Check for any non option params here */
+  if (optind < argc)
+  {
+    source = argv[optind];
+    /*TODO: asm include
+    while (optind < argc)
+    {
+      //argv[optind++];
+    }
+    */
+  }
 
 	if(dasm && source)
 	{
@@ -127,5 +141,5 @@ int main (int argc, char** argv)
 		return 1;
 	}
 	
-	assembly_listing (source, target);
+	return assembly_listing (source, target);
 }

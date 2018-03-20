@@ -20,7 +20,6 @@ uint16_t CURRENT_ORG = 0;
 uint8_t prog[PROG_SIZE]= {0};
 user_label* labels = NULL;
 dereffered_label* dereffered = NULL;
-int verbose  = 1;
 
 enum
 {
