@@ -108,7 +108,7 @@ num               {dec}|{hex}|{oct}|{bcd}|{bin}|{char}
                       }
 
 
-[a-zA-Z0-9]+":"      { add_label(asmtext, PC);}
+^[_a-zA-Z][_a-zA-Z0-9]+":"      { add_label(asmtext, PC);}
 
 "#"                   |
 ";"                   |
@@ -232,10 +232,11 @@ num               {dec}|{hex}|{oct}|{bcd}|{bin}|{char}
 ".word"|"defw"|"dw"              {return DEFW;}
 
 ".org"|"org"        {return ORG;}
+".equ"|"equ"        {return EQU;}
 ".end"              {return END;}
 "defm"              {return TEXT;}
 
-[a-zA-Z0-9]+         { SAVE_CTX; return STRING;}
+[a-zA-Z0-9]+      {  SAVE_CTX; return STRING;}
 ["]([\x00-\x7F]{-}["\\\n]|\\(.|\n))*["]        { SAVE_CTX; return STRING;}
 .
 %%

@@ -46,7 +46,7 @@ bool assembly_listing (char *filename, char *output_filename)
   sz = ftell(source);
 	rewind(source);
   /* file size + null terminator */
-  source_listing = malloc(sz+1);
+  source_listing = malloc(sz + 2);
   assert( source_listing );
   read = fread( source_listing, 1, sz, source);
   fclose( source );

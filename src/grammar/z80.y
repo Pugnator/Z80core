@@ -51,7 +51,7 @@ line:     stmt NL
 ;
 
 directive:  defb
-		| defw
+        | defw
         | text
         | DEFINE
 ;
