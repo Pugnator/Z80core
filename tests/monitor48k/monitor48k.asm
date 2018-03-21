@@ -24,7 +24,7 @@
 ;   Generally most approaches try to maintain main entry points as they are
 ;   often used by third-party software.
 
-.ORG 0000
+ORG 0000
 
 ;*****************************************
 ;** Part 1. RESTART ROUTINES AND TABLES **

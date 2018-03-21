@@ -22,7 +22,7 @@ ASMDASMDIR:=$(SRCDIR)/asmdasm
 EMUDIR:=$(SRCDIR)/emucore
 OBJDIR:=obj
 OUTDIR:=bin
-MONITOR:=tests/monitor48/monitor48k.asm
+MONITOR:=tests/monitor48k/monitor48k.asm
 TEST_BIN:=test.bin
 
 LEXSRC:=$(GRAMMARDIR)/z80.lex
@@ -59,14 +59,18 @@ ASMEXEC:=$(OUTDIR)/zasm.exe
 
 EMUEXEC:=$(OUTDIR)/zemu.exe
 
-FLAGS:=-O2 -g3 -ffunction-sections -fdata-sections -Iinclude/emucore -Iinclude/asmdasm -Isrc/asmdasm
+FLAGS:=-ffunction-sections -fdata-sections -Iinclude/emucore -Iinclude/asmdasm -Isrc/asmdasm
 CFLAGS+=-std=gnu99 $(FLAGS)
 CXXFLAGS+=-std=c++11 $(FLAGS)
 LDFLAGS:=-Wl,--gc-sections
 
-
 .PHONY: all
-all: asm
+all: FLAGS+=-O3
+all: asm strip
+
+.PHONY: debug
+debug: FLAGS+=-O0 -g
+debug: asm
 
 .PHONY: emu
 emu: dirs lexers $(EMUEXEC)
@@ -116,8 +120,10 @@ else
 		$(CPP) -o $@ $^ $(CXXFLAGS) $(LDFLAGS)
 endif
 
-	$(STRIP) -s $(ASMEXEC)
-	$(STRIP) -s $(EMUEXEC)
+.PHONY: strip
+
+strip:
+	-$(STRIP) -s $(ASMEXEC)
 	
 .PHONY: selftest
 selftest:

@@ -1,14 +1,23 @@
 language: c
-include:
-  # cross-compile using mingw 
-  - compiler: ": w32"
-    env: PLATFORM="mingw32" ARCH="x86" BITSIZE=32 HOST="i686"
+sudo: true
+
+before_install:
+- ulimit -c
+- ulimit -a -S
+- ulimit -a -H
+- cat /proc/sys/kernel/core_pattern
+- cat /etc/default/apport
+- service --status-all || true
+- initctl list || true
 
 install:
  - sudo apt-get update -qq
- - sudo apt-get install -y mingw32-binutils mingw32 mingw32-runtime bison flex lua5.2
+ - sudo apt-get install -y mingw32-binutils mingw32 mingw32-runtime bison flex gdb lua5.2
 
-script:
+script: 
  - make
+ - ulimit -c unlimited -S
  - make selftest
+ - ls -l
+ - for i in $(find ./ -maxdepth 1 -name 'core*' -print); do gdb $(pwd)/bin/zasm.exe core* -ex "thread apply all bt" -ex "set pagination 0" -batch; done;
 
