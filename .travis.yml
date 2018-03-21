@@ -17,6 +17,8 @@ install:
 script: 
  - make
  - ulimit -c unlimited -S
+ - make clean
+ - make debug
  - make selftest
  - ls -l
  - for i in $(find ./ -maxdepth 1 -name 'core*' -print); do gdb $(pwd)/bin/zasm.exe core* -ex "thread apply all bt" -ex "set pagination 0" -batch; done;
