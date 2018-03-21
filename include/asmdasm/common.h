@@ -95,7 +95,7 @@ extern uint16_t CURRENT_ORG;
 extern uint8_t prog[PROG_SIZE];
 extern RUNPASS run_pass;
 
-#define NO_ARGS(x,y) if(!handle_instruction(x,0,0)){YYABORT;}free(y)
+#define NO_ARGS(x,y) if(!handle_instruction(x,0,0)){YYABORT;}
 #define HANDLE(x,y,z) if(!handle_instruction(x,y,z)){YYABORT;}
 #define TEMPLATE( _xbufr, ... ) snprintf( _xbufr, MAX_TOKEN_SIZE, __VA_ARGS__ )
 #define UNSIGN8(x) \
