@@ -56,7 +56,8 @@ bool assembly_listing (char *filename, char *output_filename)
     return false;
   }
   /* make null terminated string */
-	source_listing[sz] = '\0';
+	source_listing[sz] = '\n';
+  source_listing[sz + 1] = '\0';  
   target = fopen (output_filename, "wb");
 	if(!target)
 	{
