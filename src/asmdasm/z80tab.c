@@ -346,7 +346,7 @@ const opcode_table opcode_tab[]=
 	{	.opcode=0xED6E,	.mnemo="IM 1",	.duplicate=true	},
 	{	.opcode=0xED76,	.mnemo="IM 1",	.duplicate=true	},
 	{	.opcode=0xED5E,	.mnemo="IM 2"	},
-	{	.opcode=0xED7E,	.mnemo="IM 2"	},
+	{	.opcode=0xED7E,	.mnemo="IM 2", .duplicate=true	},
 	{	.opcode=0xED70,	.mnemo="IN [C], [C]"	},
 	{	.opcode=0xDB,	.mnemo="IN A, [%#.2x]",	.data_size=1	},
 	{	.opcode=0xED78,	.mnemo="IN A, [C]"	},
