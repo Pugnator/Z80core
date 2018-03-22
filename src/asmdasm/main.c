@@ -21,7 +21,8 @@ void usage (void)
 	const char *help = 
 "USAGE:\r\n"
 "[-s | --source] source filename\r\n"
-"[-t | --target] output filename\r\n"
+"[-o | --output] output filename\r\n"
+"[-t | --test]\r\n"
 "[-d | --disassemble] filename of the binary to disassemble\r\n"
 "[-v | --verbose] verbose output"
 ;
