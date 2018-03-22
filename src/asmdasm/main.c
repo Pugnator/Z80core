@@ -76,11 +76,11 @@ int main (int argc, char** argv)
 	int opt = 0;
 	char *source = NULL;
 	char *target = NULL;	
-  int test = 0;
 	int dasm = 0;
 
 #if defined(__GNUC__) || defined(__MINGW32__)
 	int option_index = 0;
+  int test = 0;
 	struct option long_options[] =
 		{
 			{ "verbose", no_argument, &verbose, 0 },
