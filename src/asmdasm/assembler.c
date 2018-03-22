@@ -362,7 +362,9 @@ void add_label ( char* label, uint16_t address )
 {
     if ( PASS1 != run_pass )
         return;
-    label[strlen ( label )-1]=0;
+    char *s = strchr( label, ':' );
+    if( s )
+      s[0] = '\0';
     user_label* new = NULL;
     HASH_FIND_INT ( labels, &address, new );
     if ( new )
