@@ -89,8 +89,9 @@ seqt:      expt			 { $$[0] = '\0'; }
 expt:	  expr { defb ($1); }
 		| QSTRING { deft($1); } 
 		
-seqb:      expr {$$[0] = '\0'; defb ($1);}
-        | seqb ',' expr {$$[0] = '\0';defb ($3);}
+seqb:     expr {defb ($1);}
+		| QSTRING { deft($1); }
+        | seqb ',' expr {defb ($3);}
 		
 seqw:      expr {$$[0] = '\0'; defw ($1);}
         | seqw ',' expr {$$[0] = '\0';defw ($3);}

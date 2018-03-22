@@ -106,6 +106,12 @@ num               {dec}|{hex}|{oct}|{bcd}|{bin}|{char}
                         asmlval.var = asmtext[1];
                         return WORD;
                       }
+'(\\.|[^\\'])+'    { 	
+						/* convert to q-string */
+						asmtext[0] = '\"';
+						asmtext[strlen(asmtext)-1] = '\"';
+						SAVE_CTX; return QSTRING;
+					  }
 
 "#"                   |
 ";"                   |
