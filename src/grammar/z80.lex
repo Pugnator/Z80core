@@ -244,7 +244,7 @@ num               {dec}|{hex}|{oct}|{bcd}|{bin}|{char}
 void asmerror(const char *error_txt)
 {
 
-    #ifndef __WIN32
+    #ifdef __linux__
     printf("\x1B[31m%d error%s detected, line %d: %s near \"%s\"\x1B[0m\n", asmnerrs, 1 == asmnerrs ? "":"s" , asmlineno, error_txt, asmtext);
     #else
     printf("%d error%s detected, line %d: %s near \"%s\"\n", asmnerrs, 1 == asmnerrs ? "":"s" , asmlineno, error_txt, asmtext);
