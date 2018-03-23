@@ -133,18 +133,17 @@ else
 		$(CPP) -o $@ $^ $(CXXFLAGS) $(LDFLAGS)
 endif
 
+.PHONY: linlua
 linlua:
 	$(MAKE) -C external/lua/src linux
-	$(CP) externals/lua/src/luac.exe tools/
-	$(MAKE) -C external/lua/src clean
-	$(MAKE) -C external/lua/src mingw
+	$(CP) external/lua/src/luac.exe tools/
 
-.PHONY: selftest
+.PHONY: win32lua
 win32lua:
 	$(MAKE) -C external/lua/src win32
 	$(CP) external/lua/src/luac.exe tools/	
 
-.PHONY: selftest
+
 .PHONY: strip
 strip:
 	-$(STRIP) -s $(ASMEXEC)
