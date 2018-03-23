@@ -9,6 +9,7 @@
 
 #include <common.h>
 #include <assembler.h>
+#include <tap.h>
 
 RUNPASS run_pass = PASS1;
 char* current_label;
@@ -17,6 +18,7 @@ bool abort_on_error = true;
 uint16_t PC = 0;
 uint16_t DATA_PC = 0;
 uint16_t CURRENT_ORG = 0;
+uint16_t PROG_START = 0xFFFF;
 uint8_t prog[PROG_SIZE]= {0};
 user_label* labels = NULL;
 dereffered_label* dereffered = NULL;
@@ -500,7 +502,7 @@ void cleanup ( void )
  * @param  source [description]
  * @return        [description]
  */
-int process_source ( char* source, FILE *out)
+int process_source ( char* source, char *fmt, FILE *out)
 {
     asm_load_buffer ( source );
     int retval = asmparse();
@@ -508,7 +510,20 @@ int process_source ( char* source, FILE *out)
     PC=0;
     asm_load_buffer ( source );
     retval = asmparse();
-    fwrite(prog, 1, PC, out);
+    if( !strcmp( fmt, "bin" ) )
+    {
+      fwrite(prog, 1, PC, out);
+    }
+    else if( !strcmp( fmt, "tap" ) )
+    {
+      struct t_tap_info tap = { 0 };
+
+	    tap.prog_start = PROG_START;
+	    tap.entry_point = PROG_START;
+      tap.rom_size = PC-PROG_START;
+      tap.rom = &prog[tap.prog_start];
+      (void)tap_create( &tap, out );
+    }
     //hex_print(prog, PC);
     return retval;
 }

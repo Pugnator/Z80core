@@ -92,6 +92,7 @@ extern bool tgt_label;
 extern uint16_t PC;
 extern uint16_t DATA_PC;
 extern uint16_t CURRENT_ORG;
+extern uint16_t PROG_START;
 extern uint8_t prog[PROG_SIZE];
 extern RUNPASS run_pass;
 

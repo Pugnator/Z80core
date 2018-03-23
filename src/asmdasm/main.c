@@ -24,12 +24,13 @@ void usage (void)
 "[-o | --output] output filename\r\n"
 "[-t | --test]\r\n"
 "[-d | --disassemble] filename of the binary to disassemble\r\n"
+"[-x | --xformat] output file format\r\n"
 "[-v | --verbose] verbose output"
 ;
 	puts(help);
 }
 
-bool assembly_listing (char *filename, char *output_filename)
+bool assembly_listing (char *filename, char *output_filename, char *output_format )
 {
  	FILE *source, *target;
   char *source_listing;
@@ -66,7 +67,7 @@ bool assembly_listing (char *filename, char *output_filename)
 		puts("Failed to open output file");
 		return false;
 	}
-	int result = process_source(source_listing, target);
+	int result = process_source(source_listing, output_format, target);
 	free(source_listing);
 	fclose(target);
   return ASM_OK == result;
@@ -76,7 +77,8 @@ int main (int argc, char** argv)
 {
 	int opt = 0;
 	char *source = NULL;
-	char *target = NULL;	
+	char *target = NULL;
+  char *output_fmt = "bin";
 	int dasm = 0;
 
 #if defined(__GNUC__) || defined(__MINGW32__)
@@ -91,13 +93,16 @@ int main (int argc, char** argv)
       { "test", no_argument, &test, 't' },
 			{ NULL, 0, 0, 0 } 
 		};
-	while ((opt = getopt_long (argc, argv, "hs:o:tdv", long_options, &option_index))!= -1)
+	while ((opt = getopt_long (argc, argv, "x:hs:o:tdv", long_options, &option_index))!= -1)
 #else
-	while ((opt = _getopt(argc, argv, "hs:o:tdv"))!= -1)
+	while ((opt = _getopt(argc, argv, "x:hs:o:tdv"))!= -1)
 #endif  
 	{
 		switch (opt)
 			{
+      case 'x':
+        output_fmt = optarg;
+        break;
 			case 'v':
 				verbose = 1;
 				break;
@@ -143,5 +148,5 @@ int main (int argc, char** argv)
 		return 1;
 	}
 	
-	return assembly_listing (source, target);
+	return assembly_listing (source, target, output_fmt);
 }
