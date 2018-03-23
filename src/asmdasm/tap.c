@@ -185,7 +185,6 @@ int tap_create( struct t_tap_info *p_tap, FILE *out )
   data_size = create_zx_basic_loader( p_tap, p );
   hdr.type = BLOCK_TYPE_PROGRAM;
   hdr.filename = "loader";
-  /* include xor8 */
   hdr.data_size = data_size;
   /* basic code, autostart line */
   hdr.param1 = 10;
