@@ -499,7 +499,9 @@ void cleanup ( void )
 
 /**
  * [process_source  description]
- * @param  source [description]
+ * @param  source [buffer with source code null-terminated text]
+ * @param  fmt [output format: tap, bin]
+ * @param  out [file descriptor to the output file]
  * @return        [description]
  */
 int process_source ( char* source, char *fmt, FILE *out)

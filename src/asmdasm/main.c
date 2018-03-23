@@ -35,7 +35,6 @@ bool assembly_listing (char *filename, char *output_filename, char *output_forma
  	FILE *source, *target;
   char *source_listing;
   size_t read, sz;
-	puts("Z80 assembler");
   
   source = fopen (filename, "rb");
 	if(!source)
@@ -90,7 +89,8 @@ int main (int argc, char** argv)
 			{ "disassemble", no_argument, &dasm, 0 },
 			{ "source", required_argument, 0, 's' },
 			{ "output", required_argument, 0, 'o' },
-      { "test", no_argument, &test, 't' },
+      { "format", required_argument, 0, 'x' },
+      { "test", required_argument, &test, 't' },
 			{ NULL, 0, 0, 0 } 
 		};
 	while ((opt = getopt_long (argc, argv, "x:hs:o:tdv", long_options, &option_index))!= -1)
