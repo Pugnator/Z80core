@@ -2,17 +2,23 @@ WINRES:=windres
 RM:= rm -rf
 STRIP:=strip
 MAKE:=make
+LUATOOLS=""
+
 ifeq ($(shell uname), Linux)
   CC:=gcc
   CPP:=g++
   BISON:=bison
-  LEX:=flex  
+  LEX:=flex
+  LUATOOLS=linlua
+  CP = cp
 else
   CC:=mingw32-gcc
   CPP:=mingw32-g++
   WINRES:=windres
   BISON:=external/win_bison.exe
   LEX:=external/win_flex.exe
+  LUATOOLS=win32lua
+  CP = cp
 endif
 MKDIR_P = mkdir -p
 
@@ -22,8 +28,8 @@ ASMDASMDIR:=$(SRCDIR)/asmdasm
 EMUDIR:=$(SRCDIR)/emucore
 OBJDIR:=obj
 OUTDIR:=bin
+TOOLDIR:=tools
 MONITOR:=tests/monitor48k/monitor48k.asm
-FALLINGBLOCKS:=tests/fallingblocks/fallingblocks.asm
 TEST_BIN:=test.bin
 
 LEXSRC:=$(GRAMMARDIR)/z80.lex
@@ -42,7 +48,7 @@ ASMSRC:=\
 	$(ASMDASMDIR)/$(BISOUT).c \
 	$(ASMDASMDIR)/$(LEXOUT).c \
 	$(ASMDASMDIR)/assembler.c \
-	$(ASMDASMDIR)/tap.c
+  $(ASMDASMDIR)/tap.c
 
 DASMSRC:=\
 	$(ASMDASMDIR)/dassembler.c
@@ -68,7 +74,7 @@ LDFLAGS:=-Wl,--gc-sections
 
 .PHONY: all
 all: FLAGS+=-O3
-all: asm strip
+all: $(LUATOOLS) asm strip
 
 .PHONY: debug
 debug: FLAGS+=-O0 -g
@@ -81,7 +87,10 @@ emu: dirs lexers $(EMUEXEC)
 asm: dirs lexers $(ASMEXEC)
 
 .PHONY: dirs
-dirs: $(OBJDIR) $(OUTDIR)
+dirs: 
+	mkdir -p $(OBJDIR) 
+	mkdir -p $(OUTDIR) 
+	mkdir -p $(TOOLDIR)
 
 .PHONY: lexers
 lexers:
@@ -122,15 +131,25 @@ else
 		$(CPP) -o $@ $^ $(CXXFLAGS) $(LDFLAGS)
 endif
 
-.PHONY: strip
+linlua:
+	$(MAKE) -C external/lua/src linux
+	$(CP) externals/lua/src/luac.exe tools/
+	$(MAKE) -C external/lua/src clean
+	$(MAKE) -C external/lua/src mingw
 
+.PHONY: selftest
+win32lua:
+	$(MAKE) -C external/lua/src win32
+	$(CP) external/lua/src/luac.exe tools/	
+
+.PHONY: selftest
+.PHONY: strip
 strip:
 	-$(STRIP) -s $(ASMEXEC)
 	
 .PHONY: selftest
 selftest:
-	$(ASMEXEC) $(MONITOR) -o $(TEST_BIN) -x bin
-	$(ASMEXEC) $(FALLINGBLOCKS) -o $(TEST_BIN) -x tap
+	$(ASMEXEC) $(MONITOR) -o $(TEST_BIN)
 
 .PHONY: clean
 clean:
