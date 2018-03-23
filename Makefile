@@ -23,6 +23,7 @@ EMUDIR:=$(SRCDIR)/emucore
 OBJDIR:=obj
 OUTDIR:=bin
 MONITOR:=tests/monitor48k/monitor48k.asm
+FALLINGBLOCKS:=tests/fallingblocks/fallingblocks.asm
 TEST_BIN:=test.bin
 
 LEXSRC:=$(GRAMMARDIR)/z80.lex
@@ -40,7 +41,8 @@ ASMSRC:=\
 	$(ASMDASMDIR)/main.c \
 	$(ASMDASMDIR)/$(BISOUT).c \
 	$(ASMDASMDIR)/$(LEXOUT).c \
-	$(ASMDASMDIR)/assembler.c
+	$(ASMDASMDIR)/assembler.c \
+	$(ASMDASMDIR)/tap.c
 
 DASMSRC:=\
 	$(ASMDASMDIR)/dassembler.c
@@ -127,7 +129,8 @@ strip:
 	
 .PHONY: selftest
 selftest:
-	$(ASMEXEC) $(MONITOR) -o $(TEST_BIN)
+	$(ASMEXEC) $(MONITOR) -o $(TEST_BIN) -x bin
+	$(ASMEXEC) $(FALLINGBLOCKS) -o $(TEST_BIN) -x tap
 
 .PHONY: clean
 clean:

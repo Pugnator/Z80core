@@ -16,11 +16,11 @@ AS = poasm.exe#
 RC = porc.exe#
 LINK = polink.exe#
 SIGN = posign.exe#
-CCFLAGS = -std:C11 -Tx86-coff -Os -Ob1 -fp:precise -W1 -Gd -Go -DNO_DECLTYPE#
-ASFLAGS = -AIA32 -Gd#
+CCFLAGS = -std:C11 -Tx86-coff -Zi -Ob1 -fp:precise -W1 -Gd -Go -DNO_DECLTYPE#
+ASFLAGS = -AIA32 -Zi -Gd#
 RCFLAGS = #
-LINKFLAGS = -subsystem:console -machine:x86 kernel32.lib advapi32.lib delayimp.lib#
-SIGNFLAGS = -location:CU -store:MY -timeurl:http://timestamp.verisign.com/scripts/timstamp.dll -errkill#
+LINKFLAGS = -debug -debugtype:both -subsystem:console -machine:x86 kernel32.lib#
+SIGNFLAGS = -timeurl:http://timestamp.verisign.com/scripts/timstamp.dll -location:CU -store:MY -errkill#
 INCLUDE = $(PellesCDir)\Include\Win;$(PellesCDir)\Include;..\include\asmdasm;include\asmdasm;src\asmdasm#
 LIB = $(PellesCDir)\Lib\Win;$(PellesCDir)\Lib#
 WizCreator = Pelle Orinius#
@@ -36,6 +36,7 @@ zasm.exe: \
 	obj\dassembler.obj \
 	obj\grammar.obj \
 	obj\main.obj \
+	obj\tap.obj \
 	obj\z80lex.obj \
 	obj\z80tab.obj
 	$(LINK) $(LINKFLAGS) -out:"$@" $**
@@ -65,7 +66,10 @@ obj\assembler.obj: \
 # Build dassembler.obj.
 # 
 obj\dassembler.obj: \
-	src\asmdasm\dassembler.c
+	src\asmdasm\dassembler.c \
+	include\asmdasm\dassembler.h \
+	include\asmdasm\uthash.h \
+	include\asmdasm\z80tab.h
 	$(CC) $(CCFLAGS) "$!" -Fo"$@"
 
 # 
@@ -98,6 +102,13 @@ obj\app.res: \
 	external\logo.ico \
 	include\resources.h
 	$(RC) $(RCFLAGS) "$!" -Fo"$@"
+
+# 
+# Build tap.obj.
+# 
+obj\tap.obj: \
+	src\asmdasm\tap.c
+	$(CC) $(CCFLAGS) "$!" -Fo"$@"
 
 .SILENT:
 
