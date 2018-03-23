@@ -131,6 +131,7 @@ selftest:
 
 .PHONY: clean
 clean:
+	$(MAKE) -C external/lua/src clean
 	$(RM) $(OBJ)
 	$(RM) $(OBJDIR)
 	$(RM) $(OUTDIR)
