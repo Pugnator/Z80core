@@ -73,14 +73,14 @@ CXXFLAGS+=-std=c++11 $(FLAGS)
 LDFLAGS:=-Wl,--gc-sections
 
 .PHONY: all
-all: dirs
 all: FLAGS+=-O3
+all: dirs
 all: $(LUATOOLS) asm strip
 
 .PHONY: debug
 debug: FLAGS+=-O0 -g
 debug: dirs
-debug: asm
+debug: $(LUATOOLS) asm
 
 .PHONY: emu
 emu: lexers $(EMUEXEC)
