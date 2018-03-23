@@ -8,12 +8,21 @@
  */
  
 #include "dassembler.h"
+#include "uthash.h"
 
 dsmctx* disasm_ctx_init ( void )
 {
 	dsmctx* new = calloc ( 1,sizeof *new );
 	return new;
 }
+
+typedef struct 
+{
+  int id;          
+  UT_hash_handle hh;
+}disasm_label;
+
+disasm_label *disasm_labels = NULL;
 
 void disasm_ctx_free ( dsmctx* ctx )
 {
@@ -57,10 +66,10 @@ const char* disasm_find_opcode ( uint32_t instruction, int8_t* data_size )
 			return ( opcode_tab[i].mnemo );
 		}
 	}
-	return "";
+	return NULL;
 }
 
-bool disasm_is_an_abs_jump ( uint32_t opcode )
+bool disasm_is_abs_jump ( uint32_t opcode )
 {
 	switch ( opcode )
 	{
@@ -72,7 +81,34 @@ bool disasm_is_an_abs_jump ( uint32_t opcode )
 	}
 }
 
-bool disasm_is_an_rel_jump ( uint32_t opcode )
+bool disasm_is_return ( uint32_t opcode )
+{
+	switch ( opcode )
+	{
+		case 0xC9:
+    case 0xD8:
+    case 0xF8:
+    case 0xD0:
+    case 0xC0:
+    case 0xF0:
+    case 0xE8:
+    case 0xE0:
+    case 0xC8:
+    case 0xED4D:
+    case 0xED45:
+    case 0xED55:
+    case 0xED65:
+    case 0xED5D:
+    case 0xED75:
+    case 0xED6D:
+    case 0xED7D:
+			return true;
+		default:
+			return false;
+	}
+}
+
+bool disasm_is_rel_jump ( uint32_t opcode )
 {
 	switch ( opcode )
 	{
@@ -82,6 +118,27 @@ bool disasm_is_an_rel_jump ( uint32_t opcode )
 		case 0x28:
 		case 0x30:
 		case 0x38:
+			return true;
+			break;
+		default:
+			return false;
+	}
+}
+
+bool disasm_is_call ( uint32_t opcode )
+{
+	switch ( opcode )
+	{
+		case 0x10:
+    case 0xCD:
+    case 0xDC:
+    case 0xFC:
+    case 0xD4:
+    case 0xC4:
+    case 0xF4:
+    case 0xEC:
+    case 0xE4:
+    case 0xCC:
 			return true;
 			break;
 		default:
@@ -99,11 +156,49 @@ char* disasm_compile_string ( const char* format, ... )
 	return string;
 }
 
+int32_t disasm_add_label(uint16_t address)
+{  
+  disasm_label* lab = NULL;
+  HASH_FIND_INT ( disasm_labels, &address, lab );
+  if ( lab )
+  {
+    if(PASS2 == run_pass)
+    {
+      return lab->id;
+    }
+    return -1;
+  }
+  if(PASS2 == run_pass)
+  {
+    return -1;
+  }
+  lab = (disasm_label*)malloc(sizeof(disasm_label));
+  lab->id = address;
+  HASH_ADD_INT( disasm_labels, id, lab);
+  return -1;
+}
+
 dsmopc* disasm_fetch_next_opcode ( dsmctx* ctx )
 {
 	if ( CURRENT_PC >= ctx->data_size )
+  {
 		return NULL;
-		
+  }
+  
+  if (PASS2 == run_pass)
+  {
+    disasm_label* lab = NULL;
+    HASH_FIND_INT ( disasm_labels, &CURRENT_PC, lab );
+    if(lab)
+    {
+      printf("L%.4X:\n", lab->id & 0xFFFF);
+    }
+    else
+    {
+      printf("Label not found at %.4X\n", CURRENT_PC);
+    }
+  }
+  
 	int8_t opcode_byte_counter=0;
 	bool opcode_prefixed = false;
 	int8_t data_size = 0;
@@ -151,26 +246,26 @@ dsmopc* disasm_fetch_next_opcode ( dsmctx* ctx )
 			free ( opc );
 			return NULL;
 		}
-		CURRENT_BYTE=CURRENT_DATA[CURRENT_PC + 1];
+		CURRENT_BYTE = CURRENT_DATA[CURRENT_PC + 1];
 		uint8_t temp[4] = {0};
 		memcpy ( temp, ctx->opcode.byte, 4 );
 		disasm_byte_swap ( ctx->opcode.byte, 3 );
 		const char* mnemo = disasm_find_opcode ( CURRENT_INSTRUCTION, &data_size );
 		memcpy ( ctx->opcode.byte, temp, 4 );
-		ctx->opcode.byte[opcode_byte_counter++]=CURRENT_DATA[INC_PC];
+		ctx->opcode.byte[opcode_byte_counter++] = CURRENT_DATA[INC_PC];
 		if ( CURRENT_PC >= ctx->data_size )
 		{
 			free ( opc );
 			return NULL;
 		}
-		CURRENT_BYTE=CURRENT_DATA[INC_PC];
+		CURRENT_BYTE = CURRENT_DATA[INC_PC];
 		disasm_byte_swap ( ctx->opcode.byte, 4 );
 		opc->mnemonic = disasm_compile_string ( mnemo, ctx->opcode.byte[1] );
 		return opc;
 	}
 	else
 	{
-		ctx->opcode.byte[opcode_byte_counter++]=CURRENT_DATA[INC_PC];
+		ctx->opcode.byte[opcode_byte_counter++] = CURRENT_DATA[INC_PC];
 		const char* mnemo = disasm_find_opcode ( CURRENT_INSTRUCTION, &data_size );
 		if ( data_size )
 		{
@@ -182,48 +277,81 @@ dsmopc* disasm_fetch_next_opcode ( dsmctx* ctx )
 					free ( opc );
 					return NULL;
 				}
-				ctx->data.byte[data_counter++]=CURRENT_DATA[INC_PC];
-			}
+				ctx->data.byte[data_counter++] = CURRENT_DATA[INC_PC];
+			}   
 			
-			if ( disasm_is_an_rel_jump ( CURRENT_INSTRUCTION ) )
-			{
-				int16_t addr = ( int8_t ) ctx->data.data + CURRENT_PC;
-				opc->mnemonic = disasm_compile_string ( mnemo, addr );
-			}
-			else
-			{
-				opc->mnemonic = disasm_compile_string ( mnemo, ctx->data.data );
-			}
+      /* Check if it is a jump instruction */
+      if ( disasm_is_rel_jump ( CURRENT_INSTRUCTION ))
+      {
+        int32_t addr = disasm_add_label(ctx->data.data + CURRENT_PC);     
+        opc->mnemonic = disasm_compile_string ( mnemo, ctx->data.data + CURRENT_PC);
+      }
+      else if (disasm_is_abs_jump ( CURRENT_INSTRUCTION ) || disasm_is_call(CURRENT_INSTRUCTION))
+      {
+        int32_t addr = disasm_add_label(ctx->data.data);        
+        opc->mnemonic = disasm_compile_string ( mnemo, ctx->data.data );
+      }
+      else
+      {
+        opc->mnemonic = disasm_compile_string ( mnemo, ctx->data.data );
+      }			
 			return opc;
-		}
+		}    
+    
+    if (disasm_is_return( CURRENT_INSTRUCTION ))
+    {
+     
+    }
 		opc->mnemonic =  disasm_compile_string ( "%s", mnemo );
 		return opc;
 	}
 	
 }
 
+void disasm_call_graph()
+{
+  disasm_label *cur, *tmp;
+  HASH_ITER ( hh, disasm_labels, cur, tmp )
+  {
+    printf ( "L%.4X\n", cur->id);
+  }
+}
+
 int disasm_parse_input_stream ( dsmctx* ctx )
 {
 	dsmopc* opcode = 0;
+  /* PASS 1 */
 	intmax_t opcode_ctr = ctx->opcodes_to_fetch;
-	while ( ( opcode = disasm_fetch_next_opcode ( ctx ) ) )
-	{
-		if ( ! opcode_ctr-- )
-			break;
-		printf ( "%s ", opcode->mnemonic );
-		free ( opcode->mnemonic );
-		printf ( "\t\t\t;%#.4x\n", CURRENT_PC - 1 );
-		free ( opcode );
-		CURRENT_INSTRUCTION=0;
-		ctx->data.data=0;
-		ctx->opcode_size=0;
-	}
+  for(run_pass = PASS1; PASS2 >= run_pass ; run_pass++)
+  {
+    CURRENT_PC = 0;
+    CURRENT_INSTRUCTION=0;
+    ctx->data.data=0;
+    ctx->opcode_size=0;
+    while ( ( opcode = disasm_fetch_next_opcode ( ctx ) ) )
+    {
+      if ( ! opcode_ctr-- )
+      {
+        break;
+      }
+      if (PASS2 == run_pass)
+      {       
+        printf ( "%s\t\t\t;%.4Xh\n", opcode->mnemonic, CURRENT_PC - 1);
+      }
+      free ( opcode->mnemonic );
+      free ( opcode );
+      CURRENT_INSTRUCTION=0;
+      ctx->data.data=0;
+      ctx->opcode_size=0;      
+    }
+  }
+  disasm_call_graph();
 	return 1;
 }
 
 void disassembly_listing (char *source)
 {
-	puts("Starting disasm");
+  run_pass = PASS1;
 	intmax_t opcodes_to_fetch = -1;
 	intmax_t bytes_to_parse = -1;
 	dsmctx* new = disasm_ctx_init();
@@ -238,66 +366,8 @@ void disassembly_listing (char *source)
 	new->bytes_to_parse = bytes_to_parse;
 
 	disasm_parse_input_stream(new);
-	printf(";Parsed %zu bytes\n", new->data_size);
+  
 	disasm_ctx_free(new);
 	fclose(in);
+ 
 }
-
-#if 0
-int main(int argc, char** argv)
-{
-
-	char* source_file = NULL;
-	char* output_file = NULL;
-	int32_t opt = 0;
-	intmax_t opcodes_to_fetch = -1;
-	intmax_t bytes_to_parse = -1;
-	if (argc == 1)
-	{
-		return (EXIT_FAILURE);
-	}
-	while ((opt = getopt(argc, argv, "o:n:f:")) != -1)
-	{
-		switch (opt)
-		{
-		case 'o':
-			output_file = optarg;
-			break;
-		case 'f':
-			opcodes_to_fetch = strtoimax(optarg, 0, 10);
-			if (opcodes_to_fetch <= 0)
-			{
-				opcodes_to_fetch = 0;
-			}
-			break;
-		case 'n':
-			bytes_to_parse = strtoimax(optarg, 0, 10);
-			if (bytes_to_parse <= -2)
-			{
-				bytes_to_parse = 0;
-			}
-			break;
-		}
-	}
-
-	for (int index = optind; index < argc; index++)
-		source_file = argv[index];
-
-	dsmctx* new = disasm_ctx_init();
-	FILE* in = fopen(source_file, "r");
-	assert(in);
-	fseek(in, 0, SEEK_END);
-	new->data_size = ftell(in);
-	rewind(in);
-	new->prog = malloc(new->data_size);
-	fread(new->prog, 1, new->data_size, in);
-	new->opcodes_to_fetch = opcodes_to_fetch;
-	new->bytes_to_parse = bytes_to_parse;
-
-	disasm_parse_input_stream(new);
-	printf(";Parsed %zu bytes\n", new->data_size);
-	disasm_ctx_free(new);
-	fclose(in);
-}
-
-#endif // 0
