@@ -136,8 +136,6 @@ endif
 linlua:
 	$(MAKE) -C external/lua/src linux
 	$(CP) externals/lua/src/luac.exe tools/
-	$(MAKE) -C external/lua/src clean
-	$(MAKE) -C external/lua/src mingw
 
 .PHONY: selftest
 win32lua:
