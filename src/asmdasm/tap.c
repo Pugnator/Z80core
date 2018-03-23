@@ -57,7 +57,7 @@ static int write_zx_number( uint8_t p[], uint16_t val )
   p[n++] = TOK_NUMPREFIX;
   p[n++] = '\0';
   p[n++] = '\0';
-  p += write_zx_u16_le( &p[n], val );
+  n += write_zx_u16_le( &p[n], val );
   p[n++] = '\0';
 
   return n;
