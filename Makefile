@@ -71,6 +71,7 @@ FLAGS:=-ffunction-sections -fdata-sections -Iinclude/emucore -Iinclude/asmdasm -
 CFLAGS+=-std=gnu99 $(FLAGS)
 CXXFLAGS+=-std=c++11 $(FLAGS)
 LDFLAGS:=-Wl,--gc-sections
+LDFLAGS+=external/lua/src/liblua.a -lm
 
 .PHONY: all
 all: FLAGS+=-O3
@@ -158,8 +159,8 @@ clean:
 	$(RM) $(OBJ)
 	$(RM) $(OBJDIR)
 	$(RM) $(OUTDIR)
+	$(RM) $(TOOLDIR)
 	$(RM) $(ASMDASMDIR)/$(BISOUT).c
 	$(RM) $(ASMDASMDIR)/$(LEXOUT).c
-	$(RM) Debug
 	$(RM) $(TEST_BIN)
 	$(RM) *.backup

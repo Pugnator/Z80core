@@ -349,6 +349,19 @@ int disasm_parse_input_stream ( dsmctx* ctx )
 	return 1;
 }
 
+
+void disassembly_buffer (char *buffer)
+{
+  run_pass = PASS1;
+	intmax_t opcodes_to_fetch = -1;
+	intmax_t bytes_to_parse = -1;
+	dsmctx* new = disasm_ctx_init();	
+	new->opcodes_to_fetch = opcodes_to_fetch;
+	new->bytes_to_parse = bytes_to_parse;
+	disasm_parse_input_stream(new);  
+	disasm_ctx_free(new); 
+}
+
 void disassembly_listing (char *source)
 {
   run_pass = PASS1;

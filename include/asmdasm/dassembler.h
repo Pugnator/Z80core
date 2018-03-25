@@ -75,6 +75,7 @@ typedef struct dsmopc
 } dsmopc;
 
 void disassembly_listing (char *source);
+void disassembly_buffer (char *buffer);
 dsmctx* disasm_ctx_init ( void );
 void disasm_ctx_free ( dsmctx* ctx );
 bool disasm_is_a_prefix ( uint8_t byte );
