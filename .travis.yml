@@ -1,6 +1,11 @@
 language: c
 sudo: true
 
+# safelist
+branches:
+  only:
+  - master
+
 before_install:
 - ulimit -c
 - ulimit -a -S
