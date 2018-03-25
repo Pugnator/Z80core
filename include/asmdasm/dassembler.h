@@ -74,8 +74,8 @@ typedef struct dsmopc
 	char* mnemonic;
 } dsmopc;
 
-void disassembly_listing (char *source);
-void disassembly_buffer (char *buffer);
+unsigned disassembly_file (const char *filename, char *out);
+void disassembly_buffer (const char *buffer, unsigned size, char *out);
 dsmctx* disasm_ctx_init ( void );
 void disasm_ctx_free ( dsmctx* ctx );
 bool disasm_is_a_prefix ( uint8_t byte );
@@ -85,7 +85,7 @@ bool disasm_is_an_abs_jump ( uint32_t opcode );
 bool disasm_is_an_rel_jump ( uint32_t opcode );
 char* disasm_compile_string ( const char* format, ... );
 dsmopc* disasm_fetch_next_opcode ( dsmctx* ctx );
-int disasm_parse_input_stream ( dsmctx* ctx );
+int disasm_parse_input_stream ( dsmctx* ctx, char* out);
 
 
 #endif

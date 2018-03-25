@@ -317,7 +317,7 @@ void disasm_call_graph()
   }
 }
 
-int disasm_parse_input_stream ( dsmctx* ctx )
+int disasm_parse_input_stream ( dsmctx* ctx, char *out)
 {
 	dsmopc* opcode = 0;
   /* PASS 1 */
@@ -335,8 +335,8 @@ int disasm_parse_input_stream ( dsmctx* ctx )
         break;
       }
       if (PASS2 == run_pass)
-      {       
-        printf ( "%s\t\t\t;%.4Xh\n", opcode->mnemonic, CURRENT_PC - 1);
+      {
+        fprintf ( out ? stdout, "%s\t\t\t;%.4Xh\n", opcode->mnemonic, CURRENT_PC - 1);
       }
       free ( opcode->mnemonic );
       free ( opcode );
@@ -350,35 +350,33 @@ int disasm_parse_input_stream ( dsmctx* ctx )
 }
 
 
-void disassembly_buffer (char *buffer)
+void disassembly_buffer (const char *buffer, unsigned size, char *out)
 {
   run_pass = PASS1;
-	intmax_t opcodes_to_fetch = -1;
-	intmax_t bytes_to_parse = -1;
 	dsmctx* new = disasm_ctx_init();	
-	new->opcodes_to_fetch = opcodes_to_fetch;
-	new->bytes_to_parse = bytes_to_parse;
-	disasm_parse_input_stream(new);  
+	new->opcodes_to_fetch = -1;
+	new->bytes_to_parse = -1;
+  new->data_size = size;
+  new->prog = malloc(new->data_size);
+	disasm_parse_input_stream(new, out);  
 	disasm_ctx_free(new); 
 }
 
-void disassembly_listing (char *source)
+unsigned disassembly_file (const char *filename, char *out)
 {
   run_pass = PASS1;
-	intmax_t opcodes_to_fetch = -1;
-	intmax_t bytes_to_parse = -1;
 	dsmctx* new = disasm_ctx_init();
-	FILE* in = fopen(source, "r");
+	FILE* in = fopen(filename, "r");
 	assert(in);
 	fseek(in, 0, SEEK_END);
 	new->data_size = ftell(in);
 	rewind(in);
 	new->prog = malloc(new->data_size);
 	(void)fread(new->prog, 1, new->data_size, in);
-	new->opcodes_to_fetch = opcodes_to_fetch;
-	new->bytes_to_parse = bytes_to_parse;
+	new->opcodes_to_fetch = -1;
+	new->bytes_to_parse = -1;
 
-	disasm_parse_input_stream(new);
+	disasm_parse_input_stream(new, out);
   
 	disasm_ctx_free(new);
 	fclose(in);

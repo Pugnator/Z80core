@@ -30,7 +30,7 @@ void usage (void)
 	puts(help);
 }
 
-bool assembly_listing (char *filename, char *output_filename, char *output_format )
+bool assembly_listing (const char *filename, const char *output_filename, const char *output_format )
 {
  	FILE *source, *target;
   char *source_listing;
@@ -140,7 +140,7 @@ int main (int argc, char** argv)
 
 	if(dasm && source)
 	{
-		disassembly_listing(source);
+		disassembly_file(source, NULL);
 	}
 
 	if (!source || !target)

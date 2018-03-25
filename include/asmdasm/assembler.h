@@ -32,5 +32,5 @@ void hex_print ( const void* pv, size_t len );
 int load_file ( char* filename, char** buffer );
 void print_labels ( user_label* print );
 void cleanup ( void );
-bool assembly_listing (char *filename, char *output_filename, char *output_format );
-int process_source ( char* source, char *fmt, FILE *out);
+bool assembly_listing (const char *filename, const char *output_filename, const char *output_format );
+int process_source ( const char* source, const char *fmt, FILE *out);

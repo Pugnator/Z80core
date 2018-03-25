@@ -504,7 +504,7 @@ void cleanup ( void )
  * @param  out [file descriptor to the output file]
  * @return        [description]
  */
-int process_source ( char* source, char *fmt, FILE *out)
+int process_source ( const char* source, const char *fmt, FILE *out)
 {
     asm_load_buffer ( source );
     int retval = asmparse();

@@ -31,6 +31,7 @@ OUTDIR:=bin
 TOOLDIR:=tools
 MONITOR:=tests/monitor48k/monitor48k.asm
 TEST_BIN:=test.bin
+Z80DLL:=z80
 
 LEXSRC:=$(GRAMMARDIR)/z80.lex
 LEXOUT:=z80lex
@@ -48,7 +49,8 @@ ASMSRC:=\
 	$(ASMDASMDIR)/$(BISOUT).c \
 	$(ASMDASMDIR)/$(LEXOUT).c \
 	$(ASMDASMDIR)/assembler.c \
-  $(ASMDASMDIR)/tap.c
+	$(ASMDASMDIR)/tap.c \
+	$(ASMDASMDIR)/luabind.c
 
 DASMSRC:=\
 	$(ASMDASMDIR)/dassembler.c
@@ -67,7 +69,7 @@ ASMEXEC:=$(OUTDIR)/zasm.exe
 
 EMUEXEC:=$(OUTDIR)/zemu.exe
 
-FLAGS:=-ffunction-sections -fdata-sections -Iinclude/emucore -Iinclude/asmdasm -Isrc/asmdasm
+FLAGS:=-ffunction-sections -fdata-sections -Iinclude/emucore -Iinclude/asmdasm -Isrc/asmdasm -Iexternal/lua/src
 CFLAGS+=-std=gnu99 $(FLAGS)
 CXXFLAGS+=-std=c++11 $(FLAGS)
 LDFLAGS:=-Wl,--gc-sections
@@ -76,12 +78,12 @@ LDFLAGS+=external/lua/src/liblua.a -lm
 .PHONY: all
 all: FLAGS+=-O3
 all: dirs
-all: $(LUATOOLS) asm strip
+all: $(LUATOOLS) asm z80lib strip
 
 .PHONY: debug
 debug: FLAGS+=-O0 -g
 debug: dirs
-debug: $(LUATOOLS) asm
+debug: $(LUATOOLS) asm z80lib
 
 .PHONY: emu
 emu: lexers $(EMUEXEC)
@@ -100,6 +102,10 @@ lexers:
 	$(BISON) -t -v -d $(BISSRC) -o $(ASMDASMDIR)/$(BISOUT).c
 	$(LEX) -f -i -o $(ASMDASMDIR)/$(LEXOUT).c $(LEXSRC)
 
+.PHONY: z80lib
+z80lib: $(OBJ) $(ASMOBJ) $(DASMOBJ)
+	$(CC) -shared -fpic -o $(OUTDIR)/$@.dll $^ $(LDFLAGS) -Wl,--export-all-symbols,--enable-auto-import
+  
 $(OBJDIR)/app.res: src/app.rc
 	$(MKDIR_P) `dirname $@`
 ifeq ($(OS), Windows_NT)
@@ -142,8 +148,7 @@ linlua:
 .PHONY: win32lua
 win32lua:
 	$(MAKE) -C external/lua/src win32
-	$(CP) external/lua/src/luac.exe tools/	
-
+	$(CP) external/lua/src/luac.exe tools/
 
 .PHONY: strip
 strip:
