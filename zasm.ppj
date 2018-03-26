@@ -7,7 +7,7 @@ POC_PROJECT_VERSION = 7.00#
 POC_PROJECT_TYPE = 3#
 POC_PROJECT_OUTPUTDIR = obj#
 POC_PROJECT_RESULTDIR = .#
-POC_PROJECT_ARGUMENTS = #
+POC_PROJECT_ARGUMENTS = -s fallingblocks.asm  -o game.hex -x ihex#
 POC_PROJECT_WORKPATH = .#
 POC_PROJECT_EXECUTOR = #
 POC_PROJECT_ZIPEXTRA = #
@@ -38,7 +38,9 @@ zasm.exe: \
 	obj\main.obj \
 	obj\tap.obj \
 	obj\z80lex.obj \
-	obj\z80tab.obj
+	obj\z80tab.obj \
+	obj\ihex.obj \
+	obj\utils.obj
 	$(LINK) $(LINKFLAGS) -out:"$@" $**
 
 # 
@@ -108,6 +110,21 @@ obj\app.res: \
 # 
 obj\tap.obj: \
 	src\asmdasm\tap.c
+	$(CC) $(CCFLAGS) "$!" -Fo"$@"
+
+# 
+# Build ihex.obj.
+# 
+obj\ihex.obj: \
+	src\asmdasm\ihex.c
+	$(CC) $(CCFLAGS) "$!" -Fo"$@"
+
+# 
+# Build utils.obj.
+# 
+obj\utils.obj: \
+	src\asmdasm\utils.c \
+	include\asmdasm\utils.h
 	$(CC) $(CCFLAGS) "$!" -Fo"$@"
 
 .SILENT:

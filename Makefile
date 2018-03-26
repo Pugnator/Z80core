@@ -42,7 +42,9 @@ ASMSRC:=\
 	$(ASMDASMDIR)/$(BISOUT).c \
 	$(ASMDASMDIR)/$(LEXOUT).c \
 	$(ASMDASMDIR)/assembler.c \
-	$(ASMDASMDIR)/tap.c
+	$(ASMDASMDIR)/tap.c \
+	$(ASMDASMDIR)/ihex.c \
+	$(ASMDASMDIR)/utils.c
 
 DASMSRC:=\
 	$(ASMDASMDIR)/dassembler.c

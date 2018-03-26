@@ -10,6 +10,7 @@
 #include <common.h>
 #include <assembler.h>
 #include <tap.h>
+#include <ihex.h>
 
 RUNPASS run_pass = PASS1;
 char* current_label;
@@ -512,6 +513,8 @@ int process_source ( char* source, char *fmt, FILE *out)
     PC=0;
     asm_load_buffer ( source );
     retval = asmparse();
+    if( PROG_START == 0xFFFF )
+      PROG_START = 0x0000;
     if( !strcmp( fmt, "bin" ) )
     {
       fwrite(prog, 1, PC, out);
@@ -525,6 +528,10 @@ int process_source ( char* source, char *fmt, FILE *out)
       tap.rom_size = PC-PROG_START;
       tap.rom = &prog[tap.prog_start];
       (void)tap_create( &tap, out );
+    }
+    else if( !strcmp( fmt, "ihex" ) )
+    {
+      (void)save_array_to_ihex( out, PROG_START, &prog[PROG_START], PC-PROG_START );
     }
     //hex_print(prog, PC);
     return retval;
