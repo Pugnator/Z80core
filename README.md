@@ -1,4 +1,4 @@
-![Zilog logo](external/Zilog_logo.png)
+![Zilog logo](zilog.png)
 
 [![Build Status](https://travis-ci.org/Pugnator/Z80core.svg?branch=master)](https://travis-ci.org/Pugnator/Z80core)
 

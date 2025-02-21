@@ -1,3 +1,4 @@
-tests/*.asm linguist-vendored
+tests/all.asm linguist-vendored
+tests/asm_test.asm linguist-vendored
+tests/fallingblocks/* linguist-vendored
 tests/monitor48/* linguist-vendored
-external/* linguist-vendored

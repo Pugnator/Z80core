@@ -1,6 +1,6 @@
 %{
 #include <common.h>
-ASMSTYPE asmlval;
+extern ASMSTYPE asmlval;
 void asm_load_buffer (const char* input);
 extern int asmnerrs;
 int asmcolumn = 0;

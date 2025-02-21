@@ -4,7 +4,7 @@
 int current_line = 1;
 %}
 
-%error-verbose
+%define parse.error verbose
 %expect 0
 %define parse.lac full
 %define api.prefix {asm}

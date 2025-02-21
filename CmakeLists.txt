@@ -1,0 +1,107 @@
+cmake_minimum_required(VERSION 3.10)
+project(z80_assembler_emulator)
+
+# Set source directories
+set(SRCDIR ${CMAKE_SOURCE_DIR}/src)
+set(GRAMMARDIR ${SRCDIR}/grammar)
+set(ASMDASMDIR ${SRCDIR}/asmdasm)
+set(EMUDIR ${SRCDIR}/emucore)
+
+# Compiler selection based on platform
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(CC gcc)
+    set(CPP g++)
+    set(BISON bison)
+    set(LEX flex)
+else()
+    set(CC mingw32-gcc)
+    set(CPP mingw32-g++)
+    set(WINRES windres)
+    set(BISON bison.exe)
+    set(LEX flex.exe)
+endif()
+
+if(WIN32)
+  add_definitions("-D_WIN32_WINNT=_WIN32_WINNT_VISTA")
+  add_definitions("-D_CRT_SECURE_NO_WARNINGS")
+  add_definitions("-D_CRT_NONSTDC_NO_DEPRECATE")
+endif()
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(CODE_COVERAGE "-fprofile-arcs -ftest-coverage")
+    set(LIBCODE_COVERAGE "-lgcov --coverage")
+    set(OPTIM "-ggdb -Og")
+else()
+    set(OPTIM "-Ofast")
+endif()
+
+set(CFLAGS "${CFLAGS} ${OPTIM}" -mwindows)
+set(CXXFLAGS "${CXXFLAGS} ${OPTIM}" -mwindows)
+
+# Set output directories
+set(OBJDIR ${CMAKE_BINARY_DIR}/obj)
+set(OUTDIR ${CMAKE_BINARY_DIR}/bin)
+file(MAKE_DIRECTORY ${OBJDIR} ${OUTDIR})
+
+# Source files
+set(SRC
+    ${ASMDASMDIR}/compat.c
+    ${ASMDASMDIR}/z80tab.c)
+
+set(ASMSRC
+    ${ASMDASMDIR}/main.c
+    ${ASMDASMDIR}/grammar.c
+    ${ASMDASMDIR}/z80lex.c
+    ${ASMDASMDIR}/assembler.c
+    ${ASMDASMDIR}/tap.c
+    ${ASMDASMDIR}/ihex.c
+    ${ASMDASMDIR}/utils.c)
+
+set(DASMSRC
+    ${ASMDASMDIR}/dassembler.c)
+
+set(EMUSRC
+    ${EMUDIR}/cpu.cc
+    ${EMUDIR}/exec.cc)
+
+# Compile lexer and parser
+add_custom_command(
+    OUTPUT ${ASMDASMDIR}/grammar.c ${ASMDASMDIR}/grammar.h
+    COMMAND ${BISON} -t -v -d ${GRAMMARDIR}/z80.y -o ${ASMDASMDIR}/grammar.c
+    DEPENDS ${GRAMMARDIR}/z80.y
+)
+
+add_custom_command(
+    OUTPUT ${ASMDASMDIR}/z80lex.c
+    COMMAND ${LEX} -f -i -o ${ASMDASMDIR}/z80lex.c ${GRAMMARDIR}/z80.lex
+    DEPENDS ${GRAMMARDIR}/z80.lex
+)
+
+# Create executables
+add_executable(zasm ${SRC} ${ASMSRC} ${DASMSRC})
+#add_executable(zemu ${EMUSRC} ${SRC} ${DASMSRC})
+
+# Include directories
+include_directories(include/emucore include/asmdasm src/asmdasm)
+
+# Compiler flags
+set(CMAKE_C_FLAGS "-std=gnu99 -ffunction-sections -fdata-sections")
+set(CMAKE_CXX_FLAGS "-std=c++11 -ffunction-sections -fdata-sections")
+set(CMAKE_EXE_LINKER_FLAGS "-Wl,--gc-sections")
+set_target_properties(zasm PROPERTIES OUTPUT_NAME "zasm")
+
+# Self-test target
+add_custom_target(selftest
+    COMMAND ${OUTDIR}/zasm.exe tests/monitor48k/monitor48k.asm -o test.bin -x bin
+    COMMAND ${OUTDIR}/zasm.exe tests/fallingblocks/fallingblocks.asm -o test.bin -x tap
+    DEPENDS zasm
+)
+
+# Clean target
+add_custom_target(clean_all
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${OBJDIR}
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${OUTDIR}
+    COMMAND ${CMAKE_COMMAND} -E remove ${ASMDASMDIR}/grammar.c
+    COMMAND ${CMAKE_COMMAND} -E remove ${ASMDASMDIR}/z80lex.c
+    COMMAND ${CMAKE_COMMAND} -E remove test.bin
+)
