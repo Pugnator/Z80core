@@ -27,13 +27,10 @@ if(WIN32)
   add_definitions("-D_CRT_NONSTDC_NO_DEPRECATE")
 endif()
 
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(CODE_COVERAGE "-fprofile-arcs -ftest-coverage")
-    set(LIBCODE_COVERAGE "-lgcov --coverage")
-    set(OPTIM "-ggdb -Og")
-else()
-    set(OPTIM "-Ofast")
-endif()
+
+set(CODE_COVERAGE "-fprofile-arcs -ftest-coverage")
+set(LIBCODE_COVERAGE "-lgcov --coverage")
+set(OPTIM "-ggdb -Og")
 
 set(CFLAGS "${CFLAGS} ${OPTIM}" -mwindows)
 set(CXXFLAGS "${CXXFLAGS} ${OPTIM}" -mwindows)

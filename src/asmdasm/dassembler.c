@@ -148,12 +148,27 @@ bool disasm_is_call(uint32_t opcode)
 
 char *disasm_compile_string(const char *format, ...)
 {
-    char *string;
+    if (!format)
+    {
+        return NULL;
+    }
     va_list args;
     va_start(args, format);
-    if (0 > vasprintf(&string, format, args))
-        string = NULL;
+
+    int size = vsnprintf(NULL, 0, format, args);
     va_end(args);
+
+    if (size < 0)
+        return NULL;
+
+    char *string = malloc(size + 1);
+    if (!string)
+        return NULL;
+
+    va_start(args, format);
+    vsnprintf(string, size + 1, format, args);
+    va_end(args);
+
     return string;
 }
 
@@ -218,9 +233,12 @@ dsmopc *disasm_fetch_next_opcode(dsmctx *ctx)
     int8_t data_size = 0;
 
     dsmopc *opc = malloc(sizeof *opc);
+    if (!opc)
+        return NULL;
+    opc->mnemonic = NULL; // Ensure safe freeing if needed
     opc->address = CURRENT_PC;
 
-    while (disasm_is_a_prefix(CURRENT_DATA[CURRENT_PC]))
+    while (CURRENT_PC < ctx->data_size && disasm_is_a_prefix(CURRENT_DATA[CURRENT_PC]))
     {
         ctx->opcode.byte[opcode_byte_counter++] = CURRENT_DATA[INC_PC];
         opcode_prefixed = true;
@@ -230,30 +248,43 @@ dsmopc *disasm_fetch_next_opcode(dsmctx *ctx)
             return NULL;
         }
     }
-    if (opcode_prefixed && 1 == opcode_byte_counter)
+
+    if (opcode_prefixed && opcode_byte_counter == 1)
     {
+        if (CURRENT_PC >= ctx->data_size)
+        {
+            free(opc);
+            return NULL;
+        }
         CURRENT_BYTE = CURRENT_DATA[INC_PC];
         disasm_byte_swap(ctx->opcode.byte, 2);
         const char *mnemo = disasm_find_opcode(CURRENT_INSTRUCTION, &data_size);
+        if (!mnemo)
+        {
+            free(opc);
+            return NULL;
+        }
         if (data_size)
         {
-            int8_t data_counter = 0;
-            while (data_counter < data_size)
+            for (int8_t i = 0; i < data_size; i++)
             {
                 if (CURRENT_PC >= ctx->data_size)
                 {
                     free(opc);
                     return NULL;
                 }
-                ctx->data.byte[data_counter++] = CURRENT_DATA[INC_PC];
+                ctx->data.byte[i] = CURRENT_DATA[INC_PC];
             }
             opc->mnemonic = disasm_compile_string(mnemo, ctx->data.data);
-            return opc;
         }
-        opc->mnemonic = disasm_compile_string("%s", mnemo);
+        else
+        {
+            opc->mnemonic = disasm_compile_string("%s", mnemo);
+        }
         return opc;
     }
-    if (opcode_prefixed && 2 == opcode_byte_counter)
+
+    if (opcode_prefixed && opcode_byte_counter == 2)
     {
         if (CURRENT_PC + 1 >= ctx->data_size)
         {
@@ -363,22 +394,28 @@ int disasm_parse_input_stream(dsmctx *ctx)
 
 void disassembly_listing(char *source)
 {
+    puts("Disassembly. Pass 1\n");
     run_pass = PASS1;
     intmax_t opcodes_to_fetch = -1;
     intmax_t bytes_to_parse = -1;
     dsmctx *new = disasm_ctx_init();
     FILE *in = fopen(source, "r");
-    assert(in);
+    if (!in)
+    {
+        puts("Failed to open source file");
+        return;
+    }
     fseek(in, 0, SEEK_END);
     new->data_size = ftell(in);
     rewind(in);
-    new->prog = malloc(new->data_size);
-    (void)fread(new->prog, 1, new->data_size, in);
+    new->prog = malloc(new->data_size + 1);
+    fread(new->prog, 1, new->data_size, in);
     new->opcodes_to_fetch = opcodes_to_fetch;
     new->bytes_to_parse = bytes_to_parse;
+    printf("Data size: %d\n", new->data_size);
 
     disasm_parse_input_stream(new);
-
+    puts("Disassembly completed\n");
     disasm_ctx_free(new);
     fclose(in);
 }
