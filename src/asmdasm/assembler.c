@@ -72,10 +72,16 @@ void debug_print(const char *format, ...)
     va_list args;
     va_start(args, format);
     if (0 > vasprintf(&string, format, args))
+    {
         string = NULL;
+    }
+
     va_end(args);
-    printf("Line %d: %s", current_line, string);
-    free(string);
+    if (string)
+    {
+        printf("Line %d: %s", current_line, string);
+        free(string);
+    }
 }
 
 void error_print(const char *format, ...)
@@ -84,10 +90,15 @@ void error_print(const char *format, ...)
     va_list args;
     va_start(args, format);
     if (0 > vasprintf(&string, format, args))
+    {
         string = NULL;
+    }
     va_end(args);
-    printf("Line %d: %s", current_line, string);
-    free(string);
+    if (string)
+    {
+        printf("Line %d: %s", current_line, string);
+        free(string);
+    }
 }
 
 bool check_relative_jump(intmax_t destination)

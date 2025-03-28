@@ -224,7 +224,7 @@ dsmopc *disasm_fetch_next_opcode(dsmctx *ctx)
         }
         else
         {
-            printf("Label not found at %.4X\n", CURRENT_PC);
+            //printf("Label not found at %.4X\n", CURRENT_PC);
         }
     }
 
@@ -235,7 +235,8 @@ dsmopc *disasm_fetch_next_opcode(dsmctx *ctx)
     dsmopc *opc = malloc(sizeof *opc);
     if (!opc)
         return NULL;
-    opc->mnemonic = NULL; // Ensure safe freeing if needed
+
+    opc->mnemonic = NULL; 
     opc->address = CURRENT_PC;
 
     while (CURRENT_PC < ctx->data_size && disasm_is_a_prefix(CURRENT_DATA[CURRENT_PC]))
