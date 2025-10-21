@@ -24,13 +24,3 @@ int vasprintf( char **sptr, const char *fmt, va_list argv )
     return -1;
   return vsnprintf( *sptr, wanted, fmt, argv );
 }
-
-int asprintf( char **sptr, char *fmt, ... )
-{
-  int retval;
-  va_list argv;
-  va_start( argv, fmt );
-  retval = vasprintf( sptr, fmt, argv );
-  va_end( argv );
-  return retval;
-}

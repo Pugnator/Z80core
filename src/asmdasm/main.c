@@ -25,7 +25,8 @@ void usage(void)
         "[-t | --test]\r\n"
         "[-d | --disassemble] filename of the binary to disassemble\r\n"
         "[-x | --xformat] output file format\r\n"
-        "[-v | --verbose] verbose output";
+        "[-v | --verbose] verbose output\r\n"
+        "[-r | --report] print completion summary";
     puts(help);
 }
 
@@ -78,22 +79,24 @@ int main(int argc, char **argv)
     char *target = NULL;
     char *output_fmt = "bin";
     int dasm = 0;
+    int report = 0;
 
 #if defined(__GNUC__) || defined(__MINGW32__)
     int option_index = 0;
     int test = 0;
     struct option long_options[] =
         {
-            {"verbose", no_argument, &verbose, 0},
+            {"verbose", no_argument, &verbose, 1},
+            {"report", no_argument, &report, 1},
             {"disassemble", no_argument, &dasm, 0},
             {"source", required_argument, 0, 's'},
             {"output", required_argument, 0, 'o'},
             {"format", required_argument, 0, 'x'},
             {"test", required_argument, &test, 't'},
             {NULL, 0, 0, 0}};
-    while ((opt = getopt_long(argc, argv, "x:hs:o:tdv", long_options, &option_index)) != -1)
+    while ((opt = getopt_long(argc, argv, "x:hs:o:tdvr", long_options, &option_index)) != -1)
 #else
-    while ((opt = _getopt(argc, argv, "x:hs:o:tdv")) != -1)
+    while ((opt = _getopt(argc, argv, "x:hs:o:tdvr")) != -1)
 #endif
     {
         switch (opt)
@@ -103,6 +106,9 @@ int main(int argc, char **argv)
             break;
         case 'v':
             verbose = 1;
+            break;
+        case 'r':
+            report = 1;
             break;
         case 'd':
             dasm = 1;
@@ -145,6 +151,12 @@ int main(int argc, char **argv)
     {
         return 1;
     }
+    int result = assembly_listing(source, target, output_fmt);
+    bool success = (0 == result);
+    if (success && report && PASS2 == run_pass && assembled_bytes > 0)
+    {
+        printf("Assembled %zu bytes to %s (%s)\n", assembled_bytes, target, output_fmt);
+    }
 
-    return assembly_listing(source, target, output_fmt);
+    return result;
 }

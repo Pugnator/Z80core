@@ -21,6 +21,7 @@ uint16_t DATA_PC = 0;
 uint16_t CURRENT_ORG = 0;
 uint16_t PROG_START = 0xFFFF;
 uint8_t prog[PROG_SIZE] = {0};
+size_t assembled_bytes = 0;
 user_label *labels = NULL;
 dereffered_label *dereffered = NULL;
 
@@ -536,6 +537,7 @@ void cleanup(void)
  */
 int process_source(char *source, char *fmt, FILE *out)
 {
+    assembled_bytes = 0;
     asm_load_buffer(source);
     int retval = asmparse();
     run_pass = PASS2;
@@ -544,9 +546,11 @@ int process_source(char *source, char *fmt, FILE *out)
     retval = asmparse();
     if (PROG_START == 0xFFFF)
         PROG_START = 0x0000;
+    size_t payload = (PC >= PROG_START) ? (size_t)(PC - PROG_START) : (size_t)PC;
     if (!strcmp(fmt, "bin"))
     {
         fwrite(prog, 1, PC, out);
+        assembled_bytes = PC;
     }
     else if (!strcmp(fmt, "tap"))
     {
@@ -557,10 +561,16 @@ int process_source(char *source, char *fmt, FILE *out)
         tap.rom_size = PC - PROG_START;
         tap.rom = &prog[tap.prog_start];
         (void)tap_create(&tap, out);
+        assembled_bytes = payload;
     }
     else if (!strcmp(fmt, "ihex"))
     {
         (void)save_array_to_ihex(out, PROG_START, &prog[PROG_START], PC - PROG_START);
+        assembled_bytes = payload;
+    }
+    else
+    {
+        assembled_bytes = payload;
     }
     // hex_print(prog, PC);
     return retval;
