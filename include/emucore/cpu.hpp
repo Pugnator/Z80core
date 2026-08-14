@@ -1,9 +1,9 @@
 /**
  *
  * @file   cpu.hpp
- * @date   16.03.2018 
+ * @date   16.03.2018
  * @license This project is released under the GPL 2 license.
- * @brief 
+ * @brief
  *
  */
 
@@ -19,281 +19,288 @@
 
 enum Z80_FLAG
 {
-	NONE, S_FLAG, Z_FLAG, HC_FLAG, P_FLAG, V_FLAG, N0_FLAG, N1_FLAG, CY_FLAG
+    NONE,
+    S_FLAG,
+    Z_FLAG,
+    HC_FLAG,
+    P_FLAG,
+    V_FLAG,
+    N0_FLAG,
+    N1_FLAG,
+    CY_FLAG
 };
 
 enum M_STATE
 {
-	FETCH, MEMR, MEMW, IOR, IOW, INTACK, WAIT
+    FETCH,
+    MEMR,
+    MEMW,
+    IOR,
+    IOW,
+    INTACK,
+    WAIT
 };
 
 typedef struct
 {
-	union
-	{
-		uint16_t _A;
-		struct __attribute__((packed, aligned(2)))
-		{
-			uint16_t A15 : 1;
-			uint16_t A14 : 1;
-			uint16_t A13 : 1;
-			uint16_t A12 : 1;
-			uint16_t A11 : 1;
-			uint16_t A10 : 1;
-			uint16_t A9 : 1;
-			uint16_t A8 : 1;
-			uint16_t A7 : 1;
-			uint16_t A6 : 1;
-			uint16_t A5 : 1;
-			uint16_t A4 : 1;
-			uint16_t A3 : 1;
-			uint16_t A2 : 1;
-			uint16_t A1 : 1;
-			uint16_t A0 : 1;
-		};
-	}_A;
+    union
+    {
+        uint16_t _A;
+        struct __attribute__((packed, aligned(2)))
+        {
+            uint16_t A15 : 1;
+            uint16_t A14 : 1;
+            uint16_t A13 : 1;
+            uint16_t A12 : 1;
+            uint16_t A11 : 1;
+            uint16_t A10 : 1;
+            uint16_t A9 : 1;
+            uint16_t A8 : 1;
+            uint16_t A7 : 1;
+            uint16_t A6 : 1;
+            uint16_t A5 : 1;
+            uint16_t A4 : 1;
+            uint16_t A3 : 1;
+            uint16_t A2 : 1;
+            uint16_t A1 : 1;
+            uint16_t A0 : 1;
+        };
+    } _A;
 
-	union
-	{
-		uint8_t _D;
-		struct __attribute__((packed, aligned(1)))
-		{
-			uint8_t D7 : 1;
-			uint8_t D6 : 1;
-			uint8_t D5 : 1;
-			uint8_t D4 : 1;
-			uint8_t D3 : 1;
-			uint8_t D2 : 1;
-			uint8_t D1 : 1;
-			uint8_t D0 : 1;
-		};
+    union
+    {
+        uint8_t _D;
+        struct __attribute__((packed, aligned(1)))
+        {
+            uint8_t D7 : 1;
+            uint8_t D6 : 1;
+            uint8_t D5 : 1;
+            uint8_t D4 : 1;
+            uint8_t D3 : 1;
+            uint8_t D2 : 1;
+            uint8_t D1 : 1;
+            uint8_t D0 : 1;
+        };
 
-	}_D;
-	union
-	{
-		uint8_t _iface;
-		struct __attribute__((packed, aligned(1)))
-		{
-			uint8_t WR : 1;
-			uint8_t RD : 1;
-			uint8_t IORQ : 1;
-			uint8_t MREQ : 1;
-			uint8_t M1 : 1;
-			uint8_t    : 3;
-		};
+    } _D;
+    union
+    {
+        uint8_t _iface;
+        struct __attribute__((packed, aligned(1)))
+        {
+            uint8_t WR : 1;
+            uint8_t RD : 1;
+            uint8_t IORQ : 1;
+            uint8_t MREQ : 1;
+            uint8_t M1 : 1;
+            uint8_t : 3;
+        };
 
-	}pins_mem_iface;
-	uint16_t CLK : 1;
-	uint16_t RESET : 1;
-	uint16_t BUSAC : 1;
-	uint16_t BUSREQ : 1;
-	uint16_t INT : 1;
-	uint16_t NMI : 1;
-	uint16_t WAIT : 1;
-	uint16_t HALT : 1;
-	uint16_t REFSH : 1;
-	uint16_t : 2;
+    } pins_mem_iface;
+    uint16_t CLK : 1;
+    uint16_t RESET : 1;
+    uint16_t BUSAC : 1;
+    uint16_t BUSREQ : 1;
+    uint16_t INT : 1;
+    uint16_t NMI : 1;
+    uint16_t WAIT : 1;
+    uint16_t HALT : 1;
+    uint16_t REFSH : 1;
+    uint16_t : 2;
 
-}vcpu_pins;
+} vcpu_pins;
 
-static uint8_t m_states_table[][2]=
-{
-	{0b00101000, 4}, /* Fetch */
-	{0b10101000, 3}, /* MEMR */
-	{0b10110000, 3}, /* MEMW */
-	{0b11001000, 4}, /* IOR */
-	{0b11010000, 4}, /* IOW */
-	{0b01000000, 7}  /* INT ACK */
+static uint8_t m_states_table[][2] = {
+    {0b00101000, 4}, /* Fetch */
+    {0b10101000, 3}, /* MEMR */
+    {0b10110000, 3}, /* MEMW */
+    {0b11001000, 4}, /* IOR */
+    {0b11010000, 4}, /* IOW */
+    {0b01000000, 7}  /* INT ACK */
 };
 
 typedef struct
 {
-	union
-	{
-		uint16_t _AF;
-		struct
-		{
-			union
-			{
-				uint8_t _F;
-				struct __attribute__((packed, aligned(1)))
-				{
-					uint8_t C_flag  : 1;
-					uint8_t N_flag  : 1;
-					uint8_t PV_flag : 1;
-					uint8_t F3_flag : 1;
-					uint8_t HF_flag : 1;
-					uint8_t F5_flag : 1;
-					uint8_t Z_flag  : 1;
-					uint8_t S_flag  : 1;
-				};
-			}_F;
-			uint8_t _A;
-		};
-	}_AF;
+    union
+    {
+        uint16_t _AF;
+        struct
+        {
+            union
+            {
+                uint8_t _F;
+                struct __attribute__((packed, aligned(1)))
+                {
+                    uint8_t C_flag : 1;
+                    uint8_t N_flag : 1;
+                    uint8_t PV_flag : 1;
+                    uint8_t F3_flag : 1;
+                    uint8_t HF_flag : 1;
+                    uint8_t F5_flag : 1;
+                    uint8_t Z_flag : 1;
+                    uint8_t S_flag : 1;
+                };
+            } _F;
+            uint8_t _A;
+        };
+    } _AF;
 
-	union
-	{
-		uint16_t _AF2;
-		struct
-		{
-			union
-			{
-				uint8_t _F2;
-				struct __attribute__((packed, aligned(1)))
-				{
-					uint8_t C_flag  : 1;
-					uint8_t N_flag  : 1;
-					uint8_t PV_flag : 1;
-					uint8_t F3_flag : 1;
-					uint8_t HF_flag : 1;
-					uint8_t F5_flag : 1;
-					uint8_t Z_flag  : 1;
-					uint8_t S_flag  : 1;
-				};
-			}_F2;
-			uint8_t _A2;
-		};
-	}_AF2;
+    union
+    {
+        uint16_t _AF2;
+        struct
+        {
+            union
+            {
+                uint8_t _F2;
+                struct __attribute__((packed, aligned(1)))
+                {
+                    uint8_t C_flag : 1;
+                    uint8_t N_flag : 1;
+                    uint8_t PV_flag : 1;
+                    uint8_t F3_flag : 1;
+                    uint8_t HF_flag : 1;
+                    uint8_t F5_flag : 1;
+                    uint8_t Z_flag : 1;
+                    uint8_t S_flag : 1;
+                };
+            } _F2;
+            uint8_t _A2;
+        };
+    } _AF2;
 
-	union
-	{
-		uint16_t _BC;
-		struct
-		{
-			uint8_t _C;
-			uint8_t _B;
-		};
-	}_BC;
-	union
-	{
-		uint16_t _BC2;
-		struct
-		{
-			uint8_t _C2;
-			uint8_t _B2;
+    union
+    {
+        uint16_t _BC;
+        struct
+        {
+            uint8_t _C;
+            uint8_t _B;
+        };
+    } _BC;
+    union
+    {
+        uint16_t _BC2;
+        struct
+        {
+            uint8_t _C2;
+            uint8_t _B2;
+        };
+    } _BC2;
+    union
+    {
+        uint16_t _DE;
+        struct
+        {
+            uint8_t _E;
+            uint8_t _D;
+        };
 
-		};
-	}_BC2;
-	union
-	{
-		uint16_t _DE;
-		struct
-		{
-			uint8_t _E;
-			uint8_t _D;
-		};
+    } _DE;
+    union
+    {
+        uint16_t _DE2;
+        struct
+        {
+            uint8_t _E2;
+            uint8_t _D2;
+        };
 
-	}_DE;
-	union
-	{
-		uint16_t _DE2;
-		struct
-		{
-			uint8_t _E2;
-			uint8_t _D2;
-		};
+    } _DE2;
+    union
+    {
+        uint16_t _HL;
+        struct
+        {
+            uint8_t _L;
+            uint8_t _H;
+        };
 
-	}_DE2;
-	union
-	{
-		uint16_t _HL;
-		struct
-		{
-			uint8_t _L;
-			uint8_t _H;
+    } _HL;
+    union
+    {
+        uint16_t _HL2;
+        struct
+        {
+            uint8_t _L2;
+            uint8_t _H2;
+        };
 
-		};
+    } _HL2;
+    union
+    {
+        uint16_t _IX;
+        struct
+        {
+            uint8_t _IXH;
+            uint8_t _IXL;
+        };
 
-	}_HL;
-	union
-	{
-		uint16_t _HL2;
-		struct
-		{
-			uint8_t _L2;
-			uint8_t _H2;
+    } _IX;
 
-		};
+    union
+    {
+        uint16_t _IY;
+        struct
+        {
+            uint8_t _IYH;
+            uint8_t _IYL;
+        };
 
-	}_HL2;
-	union
-	{
-		uint16_t _IX;
-		struct
-		{
-			uint8_t _IXH;
-			uint8_t _IXL;
+    } _IY;
 
-		};
+    union
+    {
+        uint16_t _PC;
+        struct
+        {
+            uint8_t _PCH;
+            uint8_t _PCL;
+        };
 
-	}_IX;
+    } _PC;
 
-	union
-	{
-		uint16_t _IY;
-		struct
-		{
-			uint8_t _IYH;
-			uint8_t _IYL;
-
-		};
-
-	}_IY;
-
-	union
-	{
-		uint16_t _PC;
-		struct
-		{
-			uint8_t _PCH;
-			uint8_t _PCL;
-		};
-
-	}_PC;
-
-	uint16_t SP;
-	union __attribute__((packed, aligned(1)))
-	{
-		uint8_t _R;
-		struct
-		{
-			uint8_t __R : 7;
-			uint8_t   : 1;
-
-		};
-	} _R;
-	uint8_t I;
-	uint8_t IFF1 : 1;
-	uint8_t IFF2 : 1;
-	uint8_t IM : 1;
-}vcpu_regs;
+    uint16_t SP;
+    union __attribute__((packed, aligned(1)))
+    {
+        uint8_t _R;
+        struct
+        {
+            uint8_t __R : 7;
+            uint8_t : 1;
+        };
+    } _R;
+    uint8_t I;
+    uint8_t IFF1 : 1;
+    uint8_t IFF2 : 1;
+    uint8_t IM : 1;
+} vcpu_regs;
 
 union __attribute__((packed, aligned(2)))
 {
-	uint16_t _prefix;
-	struct
-	{
-		uint8_t second;
-		uint8_t first;
-	};
+    uint16_t _prefix;
+    struct
+    {
+        uint8_t second;
+        uint8_t first;
+    };
 } op_prefix;
 
 union __attribute__((packed, aligned(1)))
 {
-	uint8_t _opcode;
-	struct
-	{
-		uint8_t z : 3;
-		uint8_t y : 3;
-		uint8_t x : 2;
-	};
-	struct
-	{
-		uint8_t   : 3;
-		uint8_t p : 2;
-		uint8_t q : 1;
-	};
+    uint8_t _opcode;
+    struct
+    {
+        uint8_t z : 3;
+        uint8_t y : 3;
+        uint8_t x : 2;
+    };
+    struct
+    {
+        uint8_t : 3;
+        uint8_t p : 2;
+        uint8_t q : 1;
+    };
 } op_opcode;
 
 /* Macroses for CPU registers */
@@ -375,25 +382,26 @@ void emu_start(void);
 
 class vcpu
 {
-public:
-	vcpu()
-{
-	reset();
-	cached_ram = std::make_shared<std::vector<uint8_t>>(MAX_RAM_SIZE);
-}
-	~vcpu();
+  public:
+    vcpu()
+    {
+        reset();
+        cached_ram = std::make_shared<std::vector<uint8_t>>(MAX_RAM_SIZE);
+    }
+    ~vcpu();
 
-public:
-	void clock();
-private:
-	void reset();
-	void fetch();
+  public:
+    void clock();
 
-private:
-	std::shared_ptr<std::vector<uint8_t>> cached_ram;
-	M_STATE state;
-	Z80_FLAG flag;
-	vcpu_pins pins;
-	vcpu_regs regs;
-	uint32_t clocks_passed;
+  private:
+    void reset();
+    void fetch();
+
+  private:
+    std::shared_ptr<std::vector<uint8_t>> cached_ram;
+    M_STATE state;
+    Z80_FLAG flag;
+    vcpu_pins pins;
+    vcpu_regs regs;
+    uint32_t clocks_passed;
 };

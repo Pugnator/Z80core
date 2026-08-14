@@ -36,21 +36,21 @@ int asprintf(char **, const char *, ...);
 int vasprintf(char **, const char *, va_list);
 
 // Safer asprintf macro
-#define sasprintf(write_to, ...)                  \
-    {                                             \
-        char *tmp_string_for_extend = (write_to); \
-        asprintf(&(write_to), __VA_ARGS__);       \
-        free(tmp_string_for_extend);              \
+#define sasprintf(write_to, ...)                                                                                       \
+    {                                                                                                                  \
+        char *tmp_string_for_extend = (write_to);                                                                      \
+        asprintf(&(write_to), __VA_ARGS__);                                                                            \
+        free(tmp_string_for_extend);                                                                                   \
     }
 
 #define MAX_SOURCE_SIZE 1000000L
 #define PROG_SIZE 0xFFFF
-#define fn_apply(type, fn, ...)                                             \
-    {                                                                       \
-        void *stopper_for_apply = (int[]){0};                               \
-        type **list_for_apply = (type *[]){__VA_ARGS__, stopper_for_apply}; \
-        for (int i = 0; list_for_apply[i] != stopper_for_apply; i++)        \
-            fn(list_for_apply[i]);                                          \
+#define fn_apply(type, fn, ...)                                                                                        \
+    {                                                                                                                  \
+        void *stopper_for_apply = (int[]){0};                                                                          \
+        type **list_for_apply = (type *[]){__VA_ARGS__, stopper_for_apply};                                            \
+        for (int i = 0; list_for_apply[i] != stopper_for_apply; i++)                                                   \
+            fn(list_for_apply[i]);                                                                                     \
     }
 
 #define FREE(...) fn_apply(void, free, __VA_ARGS__);
@@ -103,55 +103,55 @@ extern uint8_t prog[PROG_SIZE];
 extern size_t assembled_bytes;
 extern RUNPASS run_pass;
 
-#define NO_ARGS(x, y)                 \
-    if (!handle_instruction(x, 0, 0)) \
-    {                                 \
-        YYABORT;                      \
+#define NO_ARGS(x, y)                                                                                                  \
+    if (!handle_instruction(x, 0, 0))                                                                                  \
+    {                                                                                                                  \
+        YYABORT;                                                                                                       \
     }
-#define HANDLE(x, y, z)               \
-    if (!handle_instruction(x, y, z)) \
-    {                                 \
-        YYABORT;                      \
+#define HANDLE(x, y, z)                                                                                                \
+    if (!handle_instruction(x, y, z))                                                                                  \
+    {                                                                                                                  \
+        YYABORT;                                                                                                       \
     }
 #define TEMPLATE(_xbufr, ...) snprintf(_xbufr, MAX_TOKEN_SIZE, __VA_ARGS__)
-#define UNSIGN8(x)                                                                    \
-    if (x)                                                                            \
-    {                                                                                 \
-        if (x > 0xFF)                                                                 \
-        {                                                                             \
-            printf("Number %jd is too large, it will be truncated to fit 8bit\n", x); \
-            x = 0xFF;                                                                 \
-        }                                                                             \
+#define UNSIGN8(x)                                                                                                     \
+    if (x)                                                                                                             \
+    {                                                                                                                  \
+        if (x > 0xFF)                                                                                                  \
+        {                                                                                                              \
+            printf("Number %jd is too large, it will be truncated to fit 8bit\n", x);                                  \
+            x = 0xFF;                                                                                                  \
+        }                                                                                                              \
     }
 
-#define SIGN8(x)                                                                          \
-    if (x)                                                                                \
-    {                                                                                     \
-        if (x > 127 || x < -128)                                                          \
-        {                                                                                 \
-            printf("JR can only jump forward up to 127 and back to 128 bytes: %jd\n", x); \
-            YYABORT;                                                                      \
-        }                                                                                 \
+#define SIGN8(x)                                                                                                       \
+    if (x)                                                                                                             \
+    {                                                                                                                  \
+        if (x > 127 || x < -128)                                                                                       \
+        {                                                                                                              \
+            printf("JR can only jump forward up to 127 and back to 128 bytes: %jd\n", x);                              \
+            YYABORT;                                                                                                   \
+        }                                                                                                              \
     }
 
-#define UNSIGN16(x)                                                                    \
-    if (x)                                                                             \
-    {                                                                                  \
-        if (x > 0xFFFF)                                                                \
-        {                                                                              \
-            printf("Number %jd is too large, it will be truncated to fit 16bit\n", x); \
-            x = 0xFFFF;                                                                \
-        }                                                                              \
+#define UNSIGN16(x)                                                                                                    \
+    if (x)                                                                                                             \
+    {                                                                                                                  \
+        if (x > 0xFFFF)                                                                                                \
+        {                                                                                                              \
+            printf("Number %jd is too large, it will be truncated to fit 16bit\n", x);                                 \
+            x = 0xFFFF;                                                                                                \
+        }                                                                                                              \
     }
 
-#define UNSIGN32(x)                                                                    \
-    if (x)                                                                             \
-    {                                                                                  \
-        if (x > 0xFFFFFFFF)                                                            \
-        {                                                                              \
-            printf("Number %jd is too large, it will be truncated to fit 32bit\n", x); \
-            x = 0xFFFFFFFF;                                                            \
-        }                                                                              \
+#define UNSIGN32(x)                                                                                                    \
+    if (x)                                                                                                             \
+    {                                                                                                                  \
+        if (x > 0xFFFFFFFF)                                                                                            \
+        {                                                                                                              \
+            printf("Number %jd is too large, it will be truncated to fit 32bit\n", x);                                 \
+            x = 0xFFFFFFFF;                                                                                            \
+        }                                                                                                              \
     }
 
 int asmlex(void);

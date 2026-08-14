@@ -1,9 +1,9 @@
 /**
  *
  * @file   exec.cc
- * @date   16.03.2018 
+ * @date   16.03.2018
  * @license This project is released under the GPL 2 license.
- * @brief 
+ * @brief
  *
  */
 
@@ -12,11 +12,11 @@
 
 void emu_start(void)
 {
-	puts("Starting Emu");
-	std::shared_ptr<vcpu> test();
+    puts("Starting Emu");
+    std::shared_ptr<vcpu> test();
 }
 
-int main(int argc, char**argv)
+int main(int argc, char **argv)
 {
-	emu_start();
+    emu_start();
 }

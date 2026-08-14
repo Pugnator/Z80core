@@ -32,12 +32,8 @@ enum
     ERROR_LABEL_EXISTS
 };
 
-const char *error_texts[] =
-    {
-        "Relative jump is out of range: %jd [must be between -126:129]\n",
-        "Mnemonic was not found: \"%s\"\n",
-        "Label with the same address already declared",
-        NULL};
+const char *error_texts[] = {"Relative jump is out of range: %jd [must be between -126:129]\n",
+                             "Mnemonic was not found: \"%s\"\n", "Label with the same address already declared", NULL};
 
 /* use binary search algorithm, be sure that opcode table sorted by mnemo field */
 const opcode_table *find_opcode(char *instruction)
@@ -54,13 +50,21 @@ const opcode_table *find_opcode(char *instruction)
         i = (i_low + i_high) / 2;
         cmp = strcasecmp(instruction, opcode_tab[i].mnemo);
         if (!cmp)
+        {
             cmp = 0 - opcode_tab[i].duplicate;
+        }
         if (!cmp)
+        {
             return &opcode_tab[i];
+        }
         if (cmp < 0)
+        {
             i_high = i - 1;
+        }
         else
+        {
             i_low = i + 1;
+        }
     }
     return (void *)0;
 }
@@ -68,7 +72,9 @@ const opcode_table *find_opcode(char *instruction)
 void debug_print(const char *format, ...)
 {
     if (!verbose)
+    {
         return;
+    }
     char *string;
     va_list args;
     va_start(args, format);
@@ -328,7 +334,9 @@ static char process_backslash(char *s, int *index)
         for (int i = 0; i < 3; ++i)
         {
             if (s[0] < '0' || s[0] > '7')
+            {
                 break;
+            }
             val <<= 3;
             val |= *s - '0';
             ++s;
@@ -354,7 +362,9 @@ void deft(char *text)
         if (!escape)
         {
             if (ch == '\"')
+            {
                 continue;
+            }
             if (ch == '\\')
             {
                 escape = 1;
@@ -378,11 +388,15 @@ void deft(char *text)
 void add_label(char *label, uint16_t address)
 {
     if (PASS1 != run_pass)
+    {
         return;
+    }
 
     char *s = strchr(label, ':');
     if (s)
+    {
         *s = '\0';
+    }
 
     user_label *new = NULL;
     HASH_FIND(hh, labels, &address, sizeof(address), new);
@@ -440,7 +454,9 @@ void hex_print(const void *pv, size_t len)
     puts("======================START====================");
     const uint8_t *p = (const uint8_t *)pv;
     if (NULL == pv)
+    {
         puts("NULL");
+    }
     else
     {
         size_t i = 0;
@@ -448,7 +464,9 @@ void hex_print(const void *pv, size_t len)
         for (; i < len; ++i)
         {
             if (width++ % 16 == 0)
+            {
                 puts("");
+            }
 
             printf("%.2X ", *p++);
         }
@@ -545,7 +563,9 @@ int process_source(char *source, char *fmt, FILE *out)
     asm_load_buffer(source);
     retval = asmparse();
     if (PROG_START == 0xFFFF)
+    {
         PROG_START = 0x0000;
+    }
     size_t payload = (PC >= PROG_START) ? (size_t)(PC - PROG_START) : (size_t)PC;
     if (!strcmp(fmt, "bin"))
     {

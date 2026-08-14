@@ -159,11 +159,15 @@ char *disasm_compile_string(const char *format, ...)
     va_end(args);
 
     if (size < 0)
+    {
         return NULL;
+    }
 
     char *string = malloc(size + 1);
     if (!string)
+    {
         return NULL;
+    }
 
     va_start(args, format);
     vsnprintf(string, size + 1, format, args);
@@ -224,7 +228,7 @@ dsmopc *disasm_fetch_next_opcode(dsmctx *ctx)
         }
         else
         {
-            //printf("Label not found at %.4X\n", CURRENT_PC);
+            // printf("Label not found at %.4X\n", CURRENT_PC);
         }
     }
 
@@ -234,9 +238,11 @@ dsmopc *disasm_fetch_next_opcode(dsmctx *ctx)
 
     dsmopc *opc = malloc(sizeof *opc);
     if (!opc)
+    {
         return NULL;
+    }
 
-    opc->mnemonic = NULL; 
+    opc->mnemonic = NULL;
     opc->address = CURRENT_PC;
 
     while (CURRENT_PC < ctx->data_size && disasm_is_a_prefix(CURRENT_DATA[CURRENT_PC]))

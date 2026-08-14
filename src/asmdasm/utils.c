@@ -10,7 +10,9 @@ char *rtrim(char *s)
     while (len--)
     {
         if (!strchr(ws, s[len]))
+        {
             break;
+        }
         s[len] = '\0';
     }
 
@@ -23,7 +25,9 @@ char *ltrim(char *s)
     while (s[i])
     {
         if (!strchr(ws, s[i]))
+        {
             break;
+        }
         ++i;
     }
 
@@ -35,7 +39,9 @@ int isxstring(char *s)
     while (*s)
     {
         if (!isxdigit(*s))
+        {
             return 0;
+        }
         ++s;
     }
     return 1;
@@ -58,7 +64,9 @@ int shrink_xs2bin(char *io)
     len = strlen(io);
 
     if (len & 1)
+    {
         return -1;
+    }
 
     for (int i = 0; i < len; i += 2)
     {

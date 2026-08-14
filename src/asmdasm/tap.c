@@ -210,17 +210,23 @@ int tap_create(struct t_tap_info *p_tap, FILE *out)
 
     /* write all headers to file */
     if (fwrite(p, 1, l, out) != l)
+    {
         return -1;
+    }
 
     /* write actual rom data */
     if (p_tap->rom)
     {
         if (fwrite(p_tap->rom, 1, p_tap->rom_size, out) != p_tap->rom_size)
+        {
             return -1;
+        }
     }
     /* write xor8 checksum */
     if (fwrite(&xor8, 1, 1, out) != 1)
+    {
         return -1;
+    }
     fflush(out);
     /* return actual tap file size */
     return l + p_tap->rom_size + 1;
