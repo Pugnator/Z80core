@@ -8,27 +8,52 @@ int asmcolumn = 0;
 extern int asmlex(void);
 extern YY_BUFFER_STATE asm_scan_buffer(char *, size_t);
 #define YY_USER_ACTION current_line=asmlineno;asmcolumn+=asmleng;
-#define SAVE_CTX strncpy(asmlval.str, asmtext, MAX_TOKEN_SIZE )
+
+/* Copy the token text into the semantic value. strncpy() leaves the buffer
+   unterminated when the token fills it, and silently shortening two different
+   long names to the same 63 characters would assemble the wrong code, so an
+   over-long token is reported rather than truncated. */
+#define SAVE_CTX                                                             \
+    do                                                                       \
+    {                                                                        \
+        size_t token_len = (size_t)asmleng;                                  \
+        /* a trailing ':' is stripped from labels anyway, so it does not      \
+           count towards the limit */                                        \
+        if (token_len && ':' == asmtext[token_len - 1])                      \
+        {                                                                    \
+            --token_len;                                                     \
+        }                                                                    \
+        if (token_len > MAX_TOKEN_SIZE - 1)                                  \
+        {                                                                    \
+            error_print("Name is longer than %d characters: \"%.32s...\"\n", \
+                        MAX_TOKEN_SIZE - 1, asmtext);                        \
+            token_len = MAX_TOKEN_SIZE - 1;                                  \
+        }                                                                    \
+        memcpy(asmlval.str, asmtext, token_len);                             \
+        asmlval.str[token_len] = '\0';                                       \
+    } while (0)
 %}
 
-%option backup
 %option prefix="asm"
 /* %option debug */
 %option noyywrap
 %option yylineno
+%option nounput noinput
 %option ecs
 %option align
 %array
 
 digit             [0-9]
-alpha             [A-Za-z]+
 
 dec               {digit}+
-hex               0[xX]{1}[0-9A-Fa-f]+|[0-9A-Fa-f]+[hH]{1}|0[0-9A-Fa-f]+[hH]{1}|[$]{1}[0-9A-Fa-f]+
-oct               o{1}[0-7]+
-bcd               [01]*bcd
+ /* The h-suffix form must start with a decimal digit (0ABCh, 10h). Without
+    that, identifiers like "ch" or "cafeh" are indistinguishable from numbers
+    and every reference to such a label silently becomes a constant. */
+hex               0[xX][0-9A-Fa-f]+|[0-9][0-9A-Fa-f]*[hH]|[$][0-9A-Fa-f]+
+oct               o[0-7]+
+ /* "%" is a binary literal only when binary digits follow it directly;
+    elsewhere it is the modulo operator. Use 0b1011, or spaces around %. */
 bin               0b[01]+|%[01]+
-num               {dec}|{hex}|{oct}|{bcd}|{bin}|{char}
 
 %x SKIP
 %%
@@ -90,7 +115,8 @@ num               {dec}|{hex}|{oct}|{bcd}|{bin}|{char}
                       }
 
 {oct}                 {
-                        asmlval.var = strtoimax(asmtext, 0, 8);
+                        /* skip the 'o' prefix; it is not an octal digit */
+                        asmlval.var = strtoimax(asmtext + 1, 0, 8);
                         if(asmlval.var <= 0x7)
                             return BIT8;
                         else if(asmlval.var <= 0xFF)
@@ -247,7 +273,11 @@ num               {dec}|{hex}|{oct}|{bcd}|{bin}|{char}
 ".end"              {return END;}
 "defm"              {return TEXT;}
 
-^[_a-zA-Z][_a-zA-Z0-9]*":"?      { SAVE_CTX; return LABEL;}
+ /* A name followed by ':' is a label definition wherever it appears; without
+    the colon it is only a definition at the start of a line, since anywhere
+    else it is an operand. */
+[_a-zA-Z][_a-zA-Z0-9]*":"        { SAVE_CTX; return LABEL;}
+^[_a-zA-Z][_a-zA-Z0-9]*          { SAVE_CTX; return LABEL;}
 
 [_a-zA-Z0-9]+      {  SAVE_CTX; return STRING;}
 ["]([\x00-\x7F]{-}["\\\n]|\\(.|\n))*["]        { SAVE_CTX; return QSTRING;}

@@ -215,6 +215,21 @@ void debug_print(const char *format, ...)
     }
 }
 
+static void report(const char *format, va_list args)
+{
+    ++semantic_errors;
+    char *string;
+    if (0 > vasprintf(&string, format, args))
+    {
+        string = NULL;
+    }
+    if (string)
+    {
+        printf("Line %d: %s", current_line, string);
+        free(string);
+    }
+}
+
 void error_print(const char *format, ...)
 {
     /* Pass 1 works with an incomplete label table, so anything it considers
@@ -224,20 +239,29 @@ void error_print(const char *format, ...)
     {
         return;
     }
-    ++semantic_errors;
-    char *string;
     va_list args;
     va_start(args, format);
-    if (0 > vasprintf(&string, format, args))
-    {
-        string = NULL;
-    }
+    report(format, args);
     va_end(args);
-    if (string)
+}
+
+/**
+@brief Report something pass 1 already knows is wrong.
+
+Pass 2 never runs if pass 1 hits a syntax error, so a problem with a
+definition has to be reported where it is found or a later, less helpful
+error takes its place.
+*/
+void error_print_early(const char *format, ...)
+{
+    if (PASS1 != run_pass)
     {
-        printf("Line %d: %s", current_line, string);
-        free(string);
+        return;
     }
+    va_list args;
+    va_start(args, format);
+    report(format, args);
+    va_end(args);
 }
 
 bool check_relative_jump(intmax_t destination)
@@ -489,6 +513,31 @@ void deft(char *text)
     }
 }
 
+/* Names the lexer always turns into a register, flag or mnemonic token. A
+   label may be declared with one of these, but every reference to it would be
+   scanned as that token instead, so the definition is rejected outright. */
+static const char *const reserved_words[] = {
+    "a",    "b",   "c",    "d",    "e",    "f",    "h",   "l",    "i",    "r",    "xl",  "xh",  "yl",   "yh",
+    "af",   "af'", "bc",   "de",   "hl",   "sp",   "pc",  "ix",   "iy",   "z",    "s",   "m",   "n",    "nz",
+    "nc",   "p",   "po",   "pe",   "adc",  "add",  "and", "bit",  "call", "ccf",  "cp",  "cpd", "cpdr", "cpi",
+    "cpir", "cpl", "daa",  "dec",  "di",   "djnz", "ei",  "ex",   "exx",  "halt", "im",  "in",  "inc",  "ind",
+    "indr", "ini", "inir", "jp",   "jr",   "ld",   "ldd", "lddr", "ldi",  "ldir", "neg", "nop", "or",   "otdr",
+    "otir", "out", "outd", "outi", "pop",  "push", "res", "ret",  "reti", "retn", "rl",  "rla", "rlc",  "rld",
+    "rlca", "rr",  "rra",  "rrc",  "rrd",  "rrca", "rst", "sbc",  "scf",  "set",  "sla", "sll", "sra",  "srl",
+    "sub",  "xor", "defb", "defw", "defm", "db",   "dw",  "org",  "equ",  NULL};
+
+static bool is_reserved_word(const char *name)
+{
+    for (int i = 0; reserved_words[i]; ++i)
+    {
+        if (0 == strcasecmp(name, reserved_words[i]))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 /* labels are case-insensitive: the hash key is the lowercased name */
 static user_label *find_label(const char *name)
 {
@@ -517,6 +566,12 @@ void add_label(char *label, intmax_t address)
     if (s)
     {
         *s = '\0';
+    }
+
+    if (is_reserved_word(label))
+    {
+        error_print_early("\"%s\" is a register, flag or instruction name and cannot be a label\n", label);
+        return;
     }
 
     user_label *found = find_label(label);

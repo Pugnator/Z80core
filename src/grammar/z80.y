@@ -27,8 +27,8 @@ int current_line = 1;
 %left SHL SHR
 %left '-' '+'
 %left '*' '/' '%'
-%right UMINUS
-%right '~'
+%precedence UMINUS
+%precedence '~'
 
 %type  <var> expr IXidx IYidx opbrk clbrk
 %type  <str> instr defb defw seqb seqw org text equ seqt expt PDREG PREG
@@ -39,9 +39,9 @@ int current_line = 1;
 %token <str> INC IND INDR INI INIR JP JR LD LDD LDDR LDI LDIR NOP OR OTDR OTIR OUT OUTD OUTI POP PUSH
 %token <str> RES RET RETN RL RLA RLC RLCA RR RRA RRC RRCA RST SBC SCF SET SLA SLL SRA SRL SUB XOR NEG
 %token <str> RETI RLD RRD END_OF_FILE
-%token <str> DEFINE DEFB DEFW STRING QSTRING
+%token <str> DEFB DEFW STRING QSTRING
 
-%token <var> BIT8 WORD DWORD QWORD DQWORD ASMPC ASMORG TEXT EQU ORG DIRECTIVE
+%token <var> BIT8 WORD DWORD QWORD DQWORD ASMPC ASMORG TEXT EQU ORG
 %token SHL SHR
 %%
 
@@ -63,7 +63,6 @@ line:     stmt NL
 directive:  defb
         | defw
         | text
-        | DEFINE
 ;
 
 stmt:     instr
@@ -100,6 +99,7 @@ expt:	  expr { defb ($1); }
 seqb:     expr {defb ($1);}
 		| QSTRING { deft($1); }
         | seqb ',' expr {defb ($3);}
+        | seqb ',' QSTRING { deft($3); }
 		
 seqw:      expr {$$[0] = '\0'; defw ($1);}
         | seqw ',' expr {$$[0] = '\0';defw ($3);}
@@ -358,10 +358,10 @@ instr:    NOP                                  { TEMPLATE($$, "%s", $1); NO_ARGS
 
         /* RES */
         /*###################################################################################################################*/
-        | RES BIT8 ',' IXidx             { TEMPLATE($$, "%s %jd, [IX + %%#.2x]", $1, $2); HANDLE($$,$4,1); }
-        | RES BIT8 ',' IYidx             { TEMPLATE($$, "%s %jd, [IY + %%#.2x]", $1, $2); HANDLE($$,$4,1); }
-        | RES BIT8 ',' REG                         { TEMPLATE($$, "%s %jd, %s", $1, $2, $4); HANDLE($$,0,0); }
-        | RES BIT8 ',' PDREG                        { TEMPLATE($$, "%s %jd, %s", $1, $2, $4); HANDLE($$,0,0); }
+        | RES expr ',' IXidx             { TEMPLATE($$, "%s %jd, [IX + %%#.2x]", $1, $2); HANDLE($$,$4,1); }
+        | RES expr ',' IYidx             { TEMPLATE($$, "%s %jd, [IY + %%#.2x]", $1, $2); HANDLE($$,$4,1); }
+        | RES expr ',' REG                         { TEMPLATE($$, "%s %jd, %s", $1, $2, $4); HANDLE($$,0,0); }
+        | RES expr ',' PDREG                        { TEMPLATE($$, "%s %jd, %s", $1, $2, $4); HANDLE($$,0,0); }
         /*###################################################################################################################*/
 
 
@@ -451,10 +451,10 @@ instr:    NOP                                  { TEMPLATE($$, "%s", $1); NO_ARGS
 
         /* SET */
         /*###################################################################################################################*/
-        | SET BIT8 ',' IXidx                    { TEMPLATE($$, "%s %jd, [IX + %%#.2x]", $1, $2); HANDLE($$,$4,1); }
-        | SET BIT8 ',' IYidx                    { TEMPLATE($$, "%s %jd, [IY + %%#.2x]", $1, $2); HANDLE($$,$4,1); }
-        | SET BIT8 ',' REG                    { TEMPLATE($$, "%s %jd, %s", $1, $2, $4); HANDLE($$,0,0); }
-        | SET BIT8 ',' PDREG                    { TEMPLATE($$, "%s %jd, %s", $1, $2, $4); HANDLE($$,0,0); }
+        | SET expr ',' IXidx                    { TEMPLATE($$, "%s %jd, [IX + %%#.2x]", $1, $2); HANDLE($$,$4,1); }
+        | SET expr ',' IYidx                    { TEMPLATE($$, "%s %jd, [IY + %%#.2x]", $1, $2); HANDLE($$,$4,1); }
+        | SET expr ',' REG                    { TEMPLATE($$, "%s %jd, %s", $1, $2, $4); HANDLE($$,0,0); }
+        | SET expr ',' PDREG                    { TEMPLATE($$, "%s %jd, %s", $1, $2, $4); HANDLE($$,0,0); }
         /*###################################################################################################################*/
 
         /* SLA */

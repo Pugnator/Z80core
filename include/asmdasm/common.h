@@ -150,6 +150,10 @@ extern RUNPASS run_pass;
 
 int asmlex(void);
 void asmerror(const char *s);
+/* diagnostics; a reported error fails the assembly (see assembler.c) */
+void error_print(const char *format, ...);
+void error_print_early(const char *format, ...);
+void debug_print(const char *format, ...);
 void print_labels(user_label *print);
 void asm_load_buffer(const char *input);
 int handle_instruction(char *instruction, intmax_t data, size_t size);
