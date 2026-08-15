@@ -1,5 +1,8 @@
 ![Zilog logo](Zilog.png)
 
+[![CI](https://github.com/Pugnator/Z80core/actions/workflows/ci.yml/badge.svg)](https://github.com/Pugnator/Z80core/actions/workflows/ci.yml)
+[![License: GPL v2](https://img.shields.io/badge/license-GPL--2.0-blue.svg)](LICENSE.md)
+
 #### Set of tools for Z80 DIY projects
 
 `zasm` is a Z80 assembler and disassembler supporting the documented and the
@@ -53,9 +56,23 @@ zasm -d -s program.bin                       # disassemble to stdout
 | `opcode_coverage` | every instruction in the table is reachable from the grammar and assembles to the bytes the table specifies |
 | `selftest_fallingblocks` | a second real program still assembles |
 
+###### Continuous integration
+
+Every pull request against `master` is built and tested on Linux and Windows,
+and checked against `.clang-format`. The build treats warnings as errors
+(`-Wall -Wextra -Werror`) for all hand-written code; the generated parser and
+scanner are exempt, since their warnings belong to bison and flex.
+
 ###### Code style
 
 See [docs/CODE-STYLE.md](docs/CODE-STYLE.md); the rules live in `.clang-format`.
+
+###### License
+
+Z80core is copyright (C) 2016-2026 Lavrentiy Ivanov and the Z80core
+contributors, released under the **GNU General Public License, version 2**.
+See [LICENSE.md](LICENSE.md) for the full text and [AUTHORS.md](AUTHORS.md)
+for contributors and third-party code.
 
 ###### TODO
 

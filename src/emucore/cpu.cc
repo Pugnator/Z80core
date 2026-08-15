@@ -1,10 +1,12 @@
 /**
- *
  * @file   cpu.cc
- * @date   16.03.2018
- * @license This project is released under the GPL 2 license.
- * @brief
+ * @brief  Emulator core: CPU state
  *
+ * SPDX-License-Identifier: GPL-2.0-only
+ * Copyright (C) 2016-2026 Lavrentiy Ivanov and the Z80core contributors
+ *
+ * This file is part of Z80core, released under the terms of the GNU General
+ * Public License version 2. See LICENSE.md for the full text.
  */
 
 #include <cpu.hpp>

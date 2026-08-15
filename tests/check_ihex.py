@@ -5,6 +5,12 @@ The ihex writer reported failure on success for a long time, which nothing
 caught because the only ihex coverage was "does it crash". This validates the
 record structure, every checksum, and the decoded bytes.
 """
+
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2016-2026 Lavrentiy Ivanov and the Z80core contributors
+#
+# This file is part of Z80core, released under the terms of the GNU General
+# Public License version 2. See LICENSE.md for the full text.
 import argparse
 import os
 import subprocess

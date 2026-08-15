@@ -5,6 +5,12 @@ This exercises both directions against each other: the disassembler has to
 decode every instruction at the right length and print it in a form the
 assembler accepts, and the assembler has to encode it back to the same bytes.
 """
+
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2016-2026 Lavrentiy Ivanov and the Z80core contributors
+#
+# This file is part of Z80core, released under the terms of the GNU General
+# Public License version 2. See LICENSE.md for the full text.
 import argparse
 import os
 import re

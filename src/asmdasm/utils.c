@@ -1,3 +1,14 @@
+/**
+ * @file   utils.c
+ * @brief  String trimming, hex conversion and byte-order helpers
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ * Copyright (C) 2016-2026 Lavrentiy Ivanov and the Z80core contributors
+ *
+ * This file is part of Z80core, released under the terms of the GNU General
+ * Public License version 2. See LICENSE.md for the full text.
+ */
+
 #include <ctype.h>
 #include <string.h>
 #include "utils.h"
