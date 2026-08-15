@@ -1,10 +1,12 @@
 /**
- *
  * @file   assembler.c
- * @date   16.03.2018
- * @license This project is released under the GPL 2 license.
- * @brief Assembler
+ * @brief  Assembler: instruction encoding, labels and output formats
  *
+ * SPDX-License-Identifier: GPL-2.0-only
+ * Copyright (C) 2016-2026 Lavrentiy Ivanov and the Z80core contributors
+ *
+ * This file is part of Z80core, released under the terms of the GNU General
+ * Public License version 2. See LICENSE.md for the full text.
  */
 
 #include <common.h>
@@ -13,8 +15,6 @@
 #include <ihex.h>
 
 RUNPASS run_pass = PASS1;
-char *current_label;
-bool tgt_label = false;
 bool abort_on_error = true;
 uint16_t PC = 0;
 uint16_t DATA_PC = 0;
@@ -23,21 +23,143 @@ uint16_t PROG_START = 0xFFFF;
 uint8_t prog[PROG_SIZE] = {0};
 size_t assembled_bytes = 0;
 user_label *labels = NULL;
-dereffered_label *dereffered = NULL;
+bool label_unresolved = false;
+
+/* semantic errors reported via error_print(); nonzero fails the assembly */
+static int semantic_errors = 0;
+
+/* highest address written + 1, i.e. the size of the emitted image */
+static uint32_t prog_end = 0;
+/* set once output has reached the top of the address space */
+static bool address_overflow = false;
+static bool overflow_reported = false;
 
 enum
 {
     ERROR_RELJM_RANGE = 0,
-    ERROR_MNEM_NOT_FOUND,
-    ERROR_LABEL_EXISTS
+    ERROR_MNEM_NOT_FOUND
 };
 
-const char *error_texts[] =
+const char *error_texts[] = {"Relative jump is out of range: %jd [must be between -128:127]\n",
+                             "Mnemonic was not found: \"%s\"\n", NULL};
+
+/**
+@brief Write one byte at *cursor and advance it.
+
+Refuses to wrap past 0xFFFF: the old code let PC roll over to 0, which both
+wrote out of bounds (prog[] was one byte short of the address space) and
+silently truncated the output image.
+
+@return true if the byte was stored
+*/
+static bool emit_byte(uint16_t *cursor, uint8_t byte)
+{
+    if (address_overflow)
     {
-        "Relative jump is out of range: %jd [must be between -126:129]\n",
-        "Mnemonic was not found: \"%s\"\n",
-        "Label with the same address already declared",
-        NULL};
+        if (!overflow_reported)
+        {
+            overflow_reported = true;
+            error_print("Program does not fit into the 64K address space\n");
+        }
+        return false;
+    }
+
+    prog[*cursor] = byte;
+    if (*cursor + 1u > prog_end)
+    {
+        prog_end = *cursor + 1u;
+    }
+
+    if (PROG_SIZE - 1 == *cursor)
+    {
+        /* a byte at 0xFFFF is legal; only the one after it has nowhere to go */
+        address_overflow = true;
+    }
+    else
+    {
+        ++(*cursor);
+    }
+    return true;
+}
+
+/**
+@brief Expression helpers with the checks C does not do for us.
+
+A zero divisor or an out-of-range shift count is undefined behaviour, and an
+expression referencing a label pass 1 has not seen yet legitimately evaluates
+to 0, so these cases have to be handled rather than trusted.
+*/
+intmax_t divide_expr(intmax_t left, intmax_t right)
+{
+    if (0 == right)
+    {
+        error_print("Division by zero\n");
+        return 0;
+    }
+    return left / right;
+}
+
+intmax_t modulo_expr(intmax_t left, intmax_t right)
+{
+    if (0 == right)
+    {
+        error_print("Division by zero\n");
+        return 0;
+    }
+    return left % right;
+}
+
+intmax_t shift_expr(intmax_t value, intmax_t count, bool left)
+{
+    if (count < 0 || count >= 64)
+    {
+        error_print("Shift count %jd is out of range\n", count);
+        return 0;
+    }
+    return left ? (value << count) : (value >> count);
+}
+
+/**
+@brief Handle the ORG directive: set the assembly address.
+*/
+void set_origin(intmax_t address)
+{
+    if (address < 0 || address > 0xFFFF)
+    {
+        error_print("Origin %jd is outside the 64K address space\n", address);
+        return;
+    }
+
+    CURRENT_ORG = PC = (uint16_t)address;
+    if (CURRENT_ORG < PROG_START)
+    {
+        PROG_START = CURRENT_ORG;
+    }
+    /* output may continue below the top again */
+    address_overflow = false;
+}
+
+/**
+@brief Report an operand that does not fit the field the instruction encodes it in.
+
+Accepts both the signed and the unsigned reading of the field, so -1 and 0xFF
+are equally valid for a byte operand.
+
+This only diagnoses: the caller emits the same number of bytes either way. An
+expression containing a label that pass 1 has not seen yet evaluates to a
+placeholder that may well be out of range, and dropping those bytes would move
+every later label (the assembly fails on the pass-2 report instead).
+*/
+static void diagnose_operand_range(intmax_t data, size_t size, const char *mnemo)
+{
+    intmax_t low = (1 == size) ? -128 : -32768;
+    intmax_t high = (1 == size) ? 0xFF : 0xFFFF;
+
+    if (data < low || data > high)
+    {
+        error_print("Value %jd does not fit in %zu byte(s): \"%s\"\n", data, size, mnemo);
+    }
+}
 
 /* use binary search algorithm, be sure that opcode table sorted by mnemo field */
 const opcode_table *find_opcode(char *instruction)
@@ -54,13 +176,21 @@ const opcode_table *find_opcode(char *instruction)
         i = (i_low + i_high) / 2;
         cmp = strcasecmp(instruction, opcode_tab[i].mnemo);
         if (!cmp)
+        {
             cmp = 0 - opcode_tab[i].duplicate;
+        }
         if (!cmp)
+        {
             return &opcode_tab[i];
+        }
         if (cmp < 0)
+        {
             i_high = i - 1;
+        }
         else
+        {
             i_low = i + 1;
+        }
     }
     return (void *)0;
 }
@@ -68,7 +198,9 @@ const opcode_table *find_opcode(char *instruction)
 void debug_print(const char *format, ...)
 {
     if (!verbose)
+    {
         return;
+    }
     char *string;
     va_list args;
     va_start(args, format);
@@ -78,6 +210,21 @@ void debug_print(const char *format, ...)
     }
 
     va_end(args);
+    if (string)
+    {
+        printf("Line %d: %s", current_line, string);
+        free(string);
+    }
+}
+
+static void report(const char *format, va_list args)
+{
+    ++semantic_errors;
+    char *string;
+    if (0 > vasprintf(&string, format, args))
+    {
+        string = NULL;
+    }
     if (string)
     {
         printf("Line %d: %s", current_line, string);
@@ -87,19 +234,36 @@ void debug_print(const char *format, ...)
 
 void error_print(const char *format, ...)
 {
-    char *string;
+    /* Pass 1 works with an incomplete label table, so anything it considers
+       wrong is re-checked (and reported) on pass 2. Reporting only there also
+       keeps every diagnostic from being printed twice. */
+    if (PASS2 != run_pass)
+    {
+        return;
+    }
     va_list args;
     va_start(args, format);
-    if (0 > vasprintf(&string, format, args))
-    {
-        string = NULL;
-    }
+    report(format, args);
     va_end(args);
-    if (string)
+}
+
+/**
+@brief Report something pass 1 already knows is wrong.
+
+Pass 2 never runs if pass 1 hits a syntax error, so a problem with a
+definition has to be reported where it is found or a later, less helpful
+error takes its place.
+*/
+void error_print_early(const char *format, ...)
+{
+    if (PASS1 != run_pass)
     {
-        printf("Line %d: %s", current_line, string);
-        free(string);
+        return;
     }
+    va_list args;
+    va_start(args, format);
+    report(format, args);
+    va_end(args);
 }
 
 bool check_relative_jump(intmax_t destination)
@@ -171,23 +335,27 @@ int handle_instruction(char *instruction, intmax_t data, size_t size)
         error_print(error_texts[ERROR_RELJM_RANGE], data);
         return ASM_ERROR;
     }
-    /* If relative jump is pointed to a label */
-    if (true == tgt_label && new_opc->reljmp)
+    /* DD36/FD36 pack a displacement and an immediate into one 16-bit value */
+    bool wide_operand = (2 == size) || check_double_argumented(new_opc->opcode);
+    if (size && !new_opc->reljmp)
     {
-        tgt_label = false;
+        diagnose_operand_range(data, wide_operand ? 2 : 1, new_opc->mnemo);
     }
+
+    uint16_t start = PC;
+
     /* Basic one-byte opcodes */
     if (is_single(new_opc->opcode))
     {
-        prog[PC++] = new_opc->opcode & 0xFF;
+        emit_byte(&PC, new_opc->opcode & 0xFF);
     }
     /* Single prefixed */
     else if (is_prefixed(new_opc->opcode))
     {
-        prog[PC++] = new_opc->opcode >> 8;
-        prog[PC++] = new_opc->opcode & 0xFF;
+        emit_byte(&PC, new_opc->opcode >> 8);
+        emit_byte(&PC, new_opc->opcode & 0xFF);
     }
-    /* Double prefixed */
+    /* Double prefixed: prefix, prefix, displacement, opcode */
     else
     {
         if (PASS2 == run_pass && verbose)
@@ -196,41 +364,10 @@ int handle_instruction(char *instruction, intmax_t data, size_t size)
             printf(new_opc->mnemo, data);
             puts("");
         }
-        prog[PC++] = new_opc->opcode >> 16;
-        prog[PC++] = new_opc->opcode >> 8;
-        prog[PC++] = data & 0xFF;
-        prog[PC++] = new_opc->opcode & 0xFF;
-        return 1;
-    }
-
-    if (INTMAX_MIN == data)
-    {
-        dereffered_label *new = NULL;
-        uint16_t address = PC;
-
-        // Use HASH_FIND with the correct key size
-        HASH_FIND(hh, dereffered, &address, sizeof(address), new);
-        if (new)
-        {
-            error_print(error_texts[ERROR_LABEL_EXISTS]);
-            return ASM_ERROR;
-        }
-
-        new = malloc(sizeof(*new));
-        if (!new)
-        {
-            error_print("Memory allocation failed\n");
-            return ASM_ERROR;
-        }
-
-        new->address = address;
-        new->size = size;
-        PC += size;
-        new->label = current_label;
-
-        // Use HASH_ADD with the correct key size
-        HASH_ADD(hh, dereffered, address, sizeof(address), new);
-
+        emit_byte(&PC, new_opc->opcode >> 16);
+        emit_byte(&PC, new_opc->opcode >> 8);
+        emit_byte(&PC, data & 0xFF);
+        emit_byte(&PC, new_opc->opcode & 0xFF);
         return ASM_OK;
     }
 
@@ -238,38 +375,42 @@ int handle_instruction(char *instruction, intmax_t data, size_t size)
     {
         if (PASS2 == run_pass && verbose)
         {
-            printf("%#.4x: ", PC - 1);
+            printf("%#.4x: ", start);
             printf("%s\n", new_opc->mnemo);
         }
         return ASM_OK;
     }
     if (PASS2 == run_pass && verbose)
     {
-        printf("%#.4x: ", PC - 1);
+        printf("%#.4x: ", start);
         printf(new_opc->mnemo, (uint16_t)data);
         puts("");
     }
-    prog[PC++] = (uint8_t)data & 0xFF;
-    if (2 == size || check_double_argumented(new_opc->opcode))
+    emit_byte(&PC, data & 0xFF);
+    if (wide_operand)
     {
-        prog[PC++] = (uint8_t)(data >> 8) & 0xFF;
+        emit_byte(&PC, (data >> 8) & 0xFF);
     }
     return ASM_OK;
 }
 
 /**
- * [Define word(s)]
- * @param data [description]
- */
-void defw(uint16_t data)
+@brief Define word(s): emit a 16-bit little-endian constant
+*/
+void defw(intmax_t data)
 {
-    prog[DATA_PC++] = data & 0xFF;
-    prog[DATA_PC++] = (data >> 8) & 0xFF;
+    diagnose_operand_range(data, 2, "defw");
+    emit_byte(&DATA_PC, data & 0xFF);
+    emit_byte(&DATA_PC, (data >> 8) & 0xFF);
 }
 
-void defb(uint16_t data)
+/**
+@brief Define byte(s): emit an 8-bit constant
+*/
+void defb(intmax_t data)
 {
-    prog[DATA_PC++] = data & 0xFF;
+    diagnose_operand_range(data, 1, "defb");
+    emit_byte(&DATA_PC, data & 0xFF);
 }
 
 static uint8_t hex2val(char a)
@@ -328,7 +469,9 @@ static char process_backslash(char *s, int *index)
         for (int i = 0; i < 3; ++i)
         {
             if (s[0] < '0' || s[0] > '7')
+            {
                 break;
+            }
             val <<= 3;
             val |= *s - '0';
             ++s;
@@ -354,7 +497,9 @@ void deft(char *text)
         if (!escape)
         {
             if (ch == '\"')
+            {
                 continue;
+            }
             if (ch == '\\')
             {
                 escape = 1;
@@ -366,33 +511,93 @@ void deft(char *text)
             escape = 0;
             ch = process_backslash(&text[i], &i);
         }
-        prog[DATA_PC++] = ch;
+        emit_byte(&DATA_PC, (uint8_t)ch);
     }
 }
 
-/**
- * [add_label  description]
- * @param label   [description]
- * @param address [description]
- */
-void add_label(char *label, uint16_t address)
-{
-    if (PASS1 != run_pass)
-        return;
+/* Names the lexer always turns into a register, flag or mnemonic token. A
+   label may be declared with one of these, but every reference to it would be
+   scanned as that token instead, so the definition is rejected outright. */
+static const char *const reserved_words[] = {
+    "a",    "b",   "c",    "d",    "e",    "f",    "h",   "l",    "i",    "r",    "xl",  "xh",  "yl",   "yh",
+    "af",   "af'", "bc",   "de",   "hl",   "sp",   "pc",  "ix",   "iy",   "z",    "s",   "m",   "n",    "nz",
+    "nc",   "p",   "po",   "pe",   "adc",  "add",  "and", "bit",  "call", "ccf",  "cp",  "cpd", "cpdr", "cpi",
+    "cpir", "cpl", "daa",  "dec",  "di",   "djnz", "ei",  "ex",   "exx",  "halt", "im",  "in",  "inc",  "ind",
+    "indr", "ini", "inir", "jp",   "jr",   "ld",   "ldd", "lddr", "ldi",  "ldir", "neg", "nop", "or",   "otdr",
+    "otir", "out", "outd", "outi", "pop",  "push", "res", "ret",  "reti", "retn", "rl",  "rla", "rlc",  "rld",
+    "rlca", "rr",  "rra",  "rrc",  "rrd",  "rrca", "rst", "sbc",  "scf",  "set",  "sla", "sll", "sra",  "srl",
+    "sub",  "xor", "defb", "defw", "defm", "db",   "dw",  "org",  "equ",  NULL};
 
+static bool is_reserved_word(const char *name)
+{
+    for (int i = 0; reserved_words[i]; ++i)
+    {
+        if (0 == strcasecmp(name, reserved_words[i]))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* labels are case-insensitive: the hash key is the lowercased name */
+static user_label *find_label(const char *name)
+{
+    char key[MAX_TOKEN_SIZE];
+    size_t len = 0;
+    while (name[len] && len < sizeof(key) - 1)
+    {
+        key[len] = (char)tolower((unsigned char)name[len]);
+        ++len;
+    }
+    key[len] = '\0';
+
+    user_label *found = NULL;
+    HASH_FIND(hh, labels, key, len, found);
+    return found;
+}
+
+/**
+@brief Define a label or EQU constant.
+@param label Name, optionally with a trailing ':' (stripped in place)
+@param address Value; INTMAX_MIN if it cannot be computed yet (forward reference)
+*/
+void add_label(char *label, intmax_t address)
+{
     char *s = strchr(label, ':');
     if (s)
-        *s = '\0';
-
-    user_label *new = NULL;
-    HASH_FIND(hh, labels, &address, sizeof(address), new);
-    if (new)
     {
-        error_print("Label with the same address already declared\n");
+        *s = '\0';
+    }
+
+    if (is_reserved_word(label))
+    {
+        error_print_early("\"%s\" is a register, flag or instruction name and cannot be a label\n", label);
         return;
     }
 
-    new = malloc(sizeof(*new));
+    user_label *found = find_label(label);
+
+    if (found)
+    {
+        /* Every definition is seen once per pass, so a name encountered twice
+           within the same pass is a genuine redefinition. */
+        if (found->pass_defined == (unsigned)run_pass)
+        {
+            error_print("Label \"%s\" is already defined\n", label);
+            return;
+        }
+        found->pass_defined = (unsigned)run_pass;
+        /* pass 2 knows every label, so an EQU that could not be evaluated on
+           pass 1 can be resolved now */
+        if (INTMAX_MIN != address)
+        {
+            found->address = address;
+        }
+        return;
+    }
+
+    user_label *new = malloc(sizeof(*new));
     if (!new)
     {
         error_print("Memory allocation failed\n");
@@ -400,6 +605,7 @@ void add_label(char *label, uint16_t address)
     }
 
     new->address = address;
+    new->pass_defined = (unsigned)run_pass;
     new->label = strdup(label);
     if (!new->label)
     {
@@ -407,26 +613,34 @@ void add_label(char *label, uint16_t address)
         error_print("Memory allocation failed\n");
         return;
     }
+    for (s = new->label; *s; ++s)
+    {
+        *s = (char)tolower((unsigned char)*s);
+    }
 
-    HASH_ADD(hh, labels, address, sizeof(address), new);
+    HASH_ADD_KEYPTR(hh, labels, new->label, strlen(new->label), new);
 }
 
 /**
- * [get_label_address  description]
- * @param  label [description]
- * @return       [description]
- */
+@brief Look up a label or EQU constant by name (case-insensitive).
+@return The value, or 0 for a name that is not defined (yet). Such a name is a
+        legitimate forward reference on pass 1, but an error on pass 2. Either
+        way label_unresolved is set, so callers can tell the placeholder apart
+        from a genuine zero.
+*/
 intmax_t get_label_address(char *label)
 {
-    for (user_label *tmp = labels; tmp != NULL; tmp = tmp->hh.next)
+    user_label *found = find_label(label);
+    if (found && INTMAX_MIN != found->address)
     {
-        if (0 == strcasecmp(tmp->label, label))
-        {
-            return tmp->address;
-        }
+        return found->address;
     }
-    current_label = strdup(label);
-    return INTMAX_MIN;
+    label_unresolved = true;
+    if (PASS2 == run_pass)
+    {
+        error_print("Undefined label \"%s\"\n", label);
+    }
+    return 0;
 }
 
 /**
@@ -440,7 +654,9 @@ void hex_print(const void *pv, size_t len)
     puts("======================START====================");
     const uint8_t *p = (const uint8_t *)pv;
     if (NULL == pv)
+    {
         puts("NULL");
+    }
     else
     {
         size_t i = 0;
@@ -448,7 +664,9 @@ void hex_print(const void *pv, size_t len)
         for (; i < len; ++i)
         {
             if (width++ % 16 == 0)
+            {
                 puts("");
+            }
 
             printf("%.2X ", *p++);
         }
@@ -509,48 +727,52 @@ void print_labels(user_label *print)
 }
 
 /**
- * [cleanup  description]
- */
-void cleanup(void)
-{
-    FILE *lbls = fopen("labels.txt", "wb");
-    char txt[512];
-    assert(lbls);
-    user_label *cur, *tmp;
-    HASH_ITER(hh, labels, cur, tmp)
-    {
-        HASH_DEL(labels, cur);
-        sprintf(txt, "%#.4x: \"%s\"\n", (uint16_t)cur->address, cur->label);
-        fwrite(txt, 1, strlen(txt), lbls);
-        free(cur->label);
-        free(cur);
-    }
-    fclose(lbls);
-}
-
-/**
- * [process_source  description]
- * @param  source [buffer with source code null-terminated text]
- * @param  fmt [output format: tap, bin]
- * @param  out [file descriptor to the output file]
- * @return        [description]
- */
+@brief Assemble a source buffer and write the result.
+@param source Null-terminated source text
+@param fmt Output format: bin, tap or ihex
+@param out Output file, already open for writing
+@return ASM_OK on success, ASM_ERROR if any pass reported an error
+*/
 int process_source(char *source, char *fmt, FILE *out)
 {
     assembled_bytes = 0;
+    semantic_errors = 0;
+
+    /* Pass 1 collects label definitions; forward references are expected and
+       are not diagnosed until pass 2 knows every label. */
+    run_pass = PASS1;
+    PC = 0;
+    prog_end = 0;
+    address_overflow = false;
+    overflow_reported = false;
     asm_load_buffer(source);
-    int retval = asmparse();
+    if (0 != asmparse())
+    {
+        return ASM_ERROR;
+    }
+
     run_pass = PASS2;
     PC = 0;
+    prog_end = 0;
+    address_overflow = false;
+    overflow_reported = false;
     asm_load_buffer(source);
-    retval = asmparse();
+    if (0 != asmparse() || semantic_errors)
+    {
+        return ASM_ERROR;
+    }
+
     if (PROG_START == 0xFFFF)
+    {
         PROG_START = 0x0000;
-    size_t payload = (PC >= PROG_START) ? (size_t)(PC - PROG_START) : (size_t)PC;
+    }
+    /* prog_end is the highest address written + 1, so it survives a program
+       that ends exactly at 0xFFFF (where PC can no longer advance) */
+    size_t payload = (prog_end > PROG_START) ? (size_t)(prog_end - PROG_START) : 0;
     if (!strcmp(fmt, "bin"))
     {
-        fwrite(prog, 1, PC, out);
-        assembled_bytes = PC;
+        fwrite(prog, 1, prog_end, out);
+        assembled_bytes = prog_end;
     }
     else if (!strcmp(fmt, "tap"))
     {
@@ -558,20 +780,24 @@ int process_source(char *source, char *fmt, FILE *out)
 
         tap.prog_start = PROG_START;
         tap.entry_point = PROG_START;
-        tap.rom_size = PC - PROG_START;
+        tap.rom_size = payload;
         tap.rom = &prog[tap.prog_start];
         (void)tap_create(&tap, out);
         assembled_bytes = payload;
     }
     else if (!strcmp(fmt, "ihex"))
     {
-        (void)save_array_to_ihex(out, PROG_START, &prog[PROG_START], PC - PROG_START);
+        if (0 != save_array_to_ihex(out, PROG_START, &prog[PROG_START], payload))
+        {
+            puts("Failed to write Intel HEX output");
+            return ASM_ERROR;
+        }
         assembled_bytes = payload;
     }
     else
     {
-        assembled_bytes = payload;
+        printf("Unknown output format \"%s\"\n", fmt);
+        return ASM_ERROR;
     }
-    // hex_print(prog, PC);
-    return retval;
+    return ASM_OK;
 }

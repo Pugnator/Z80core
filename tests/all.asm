@@ -13,8 +13,8 @@
 start:
 ADC A, 0xaa              		;0xceaa        		#size:2
 ADC A, [HL]              		;0x8e          		#size:1
-ADC A, [IX + 0x7F]       		;0xdd8e7f       		#size:3
 ADC A, [IX + 0x7F]       		;0xfd8e7f       		#size:3
+ADC A, [IX + 0x7F]       		;0xdd8e7f       		#size:3
 ADC A, A                 		;0x8f          		#size:1
 ADC A, B                 		;0x88          		#size:1
 ADC A, C                 		;0x89          		#size:1
@@ -32,8 +32,8 @@ ADC HL, HL               		;0xed6a        		#size:2
 ADC HL, SP               		;0xed7a        		#size:2
 ADD A, 0xaa              		;0xc6aa        		#size:2
 ADD A, [HL]              		;0x86          		#size:1
-ADD A, [IX + 0x7F]       		;0xdd867f       		#size:3
 ADD A, [IX + 0x7F]       		;0xfd867f       		#size:3
+ADD A, [IX + 0x7F]       		;0xdd867f       		#size:3
 ADD A, A                 		;0x87          		#size:1
 ADD A, B                 		;0x80          		#size:1
 ADD A, C                 		;0x81          		#size:1
@@ -59,8 +59,8 @@ ADD IY, IY               		;0xfd29        		#size:2
 ADD IY, SP               		;0xfd39        		#size:2
 AND 0xaa                 		;0xe6aa        		#size:2
 AND [HL]                 		;0xa6          		#size:1
-AND [IX + 0x7F]       		;0xdda67f       		#size:3
 AND [IX + 0x7F]       		;0xfda67f       		#size:3
+AND [IX + 0x7F]       		;0xdda67f       		#size:3
 AND A                    		;0xa7          		#size:1
 AND B                    		;0xa0          		#size:1
 AND C                    		;0xa1          		#size:1
@@ -79,7 +79,6 @@ BIT 0, [IX + 0x7F]       		;0xddcb7f42       		#size:4
 BIT 0, [IX + 0x7F]       		;0xddcb7f43       		#size:4
 BIT 0, [IX + 0x7F]       		;0xddcb7f44       		#size:4
 BIT 0, [IX + 0x7F]       		;0xddcb7f45       		#size:4
-BIT 0, [IX + 0x7F]       		;0xddcb7f46       		#size:4
 BIT 0, [IX + 0x7F]       		;0xddcb7f47       		#size:4
 BIT 0, [IX + 0x7F]       		;0xfdcb7f40       		#size:4
 BIT 0, [IX + 0x7F]       		;0xfdcb7f41       		#size:4
@@ -89,6 +88,7 @@ BIT 0, [IX + 0x7F]       		;0xfdcb7f44       		#size:4
 BIT 0, [IX + 0x7F]       		;0xfdcb7f45       		#size:4
 BIT 0, [IX + 0x7F]       		;0xfdcb7f46       		#size:4
 BIT 0, [IX + 0x7F]       		;0xfdcb7f47       		#size:4
+BIT 0, [IX + 0x7F]       		;0xddcb7f46       		#size:4
 BIT 0, A                 		;0xcb47        		#size:2
 BIT 0, B                 		;0xcb40        		#size:2
 BIT 0, C                 		;0xcb41        		#size:2
@@ -103,7 +103,6 @@ BIT 1, [IX + 0x7F]       		;0xddcb7f4a       		#size:4
 BIT 1, [IX + 0x7F]       		;0xddcb7f4b       		#size:4
 BIT 1, [IX + 0x7F]       		;0xddcb7f4c       		#size:4
 BIT 1, [IX + 0x7F]       		;0xddcb7f4d       		#size:4
-BIT 1, [IX + 0x7F]       		;0xddcb7f4e       		#size:4
 BIT 1, [IX + 0x7F]       		;0xddcb7f4f       		#size:4
 BIT 1, [IX + 0x7F]       		;0xfdcb7f48       		#size:4
 BIT 1, [IX + 0x7F]       		;0xfdcb7f49       		#size:4
@@ -113,6 +112,7 @@ BIT 1, [IX + 0x7F]       		;0xfdcb7f4c       		#size:4
 BIT 1, [IX + 0x7F]       		;0xfdcb7f4d       		#size:4
 BIT 1, [IX + 0x7F]       		;0xfdcb7f4e       		#size:4
 BIT 1, [IX + 0x7F]       		;0xfdcb7f4f       		#size:4
+BIT 1, [IX + 0x7F]       		;0xddcb7f4e       		#size:4
 BIT 1, A                 		;0xcb4f        		#size:2
 BIT 1, B                 		;0xcb48        		#size:2
 BIT 1, C                 		;0xcb49        		#size:2
@@ -127,7 +127,6 @@ BIT 2, [IX + 0x7F]       		;0xddcb7f52       		#size:4
 BIT 2, [IX + 0x7F]       		;0xddcb7f53       		#size:4
 BIT 2, [IX + 0x7F]       		;0xddcb7f54       		#size:4
 BIT 2, [IX + 0x7F]       		;0xddcb7f55       		#size:4
-BIT 2, [IX + 0x7F]       		;0xddcb7f56       		#size:4
 BIT 2, [IX + 0x7F]       		;0xddcb7f57       		#size:4
 BIT 2, [IX + 0x7F]       		;0xfdcb7f50       		#size:4
 BIT 2, [IX + 0x7F]       		;0xfdcb7f51       		#size:4
@@ -137,6 +136,7 @@ BIT 2, [IX + 0x7F]       		;0xfdcb7f54       		#size:4
 BIT 2, [IX + 0x7F]       		;0xfdcb7f55       		#size:4
 BIT 2, [IX + 0x7F]       		;0xfdcb7f56       		#size:4
 BIT 2, [IX + 0x7F]       		;0xfdcb7f57       		#size:4
+BIT 2, [IX + 0x7F]       		;0xddcb7f56       		#size:4
 BIT 2, A                 		;0xcb57        		#size:2
 BIT 2, B                 		;0xcb50        		#size:2
 BIT 2, C                 		;0xcb51        		#size:2
@@ -151,7 +151,6 @@ BIT 3, [IX + 0x7F]       		;0xddcb7f5a       		#size:4
 BIT 3, [IX + 0x7F]       		;0xddcb7f5b       		#size:4
 BIT 3, [IX + 0x7F]       		;0xddcb7f5c       		#size:4
 BIT 3, [IX + 0x7F]       		;0xddcb7f5d       		#size:4
-BIT 3, [IX + 0x7F]       		;0xddcb7f5e       		#size:4
 BIT 3, [IX + 0x7F]       		;0xddcb7f5f       		#size:4
 BIT 3, [IX + 0x7F]       		;0xfdcb7f58       		#size:4
 BIT 3, [IX + 0x7F]       		;0xfdcb7f59       		#size:4
@@ -161,6 +160,7 @@ BIT 3, [IX + 0x7F]       		;0xfdcb7f5c       		#size:4
 BIT 3, [IX + 0x7F]       		;0xfdcb7f5d       		#size:4
 BIT 3, [IX + 0x7F]       		;0xfdcb7f5e       		#size:4
 BIT 3, [IX + 0x7F]       		;0xfdcb7f5f       		#size:4
+BIT 3, [IX + 0x7F]       		;0xddcb7f5e       		#size:4
 BIT 3, A                 		;0xcb5f        		#size:2
 BIT 3, B                 		;0xcb58        		#size:2
 BIT 3, C                 		;0xcb59        		#size:2
@@ -175,7 +175,6 @@ BIT 4, [IX + 0x7F]       		;0xddcb7f62       		#size:4
 BIT 4, [IX + 0x7F]       		;0xddcb7f63       		#size:4
 BIT 4, [IX + 0x7F]       		;0xddcb7f64       		#size:4
 BIT 4, [IX + 0x7F]       		;0xddcb7f65       		#size:4
-BIT 4, [IX + 0x7F]       		;0xddcb7f66       		#size:4
 BIT 4, [IX + 0x7F]       		;0xddcb7f67       		#size:4
 BIT 4, [IX + 0x7F]       		;0xfdcb7f60       		#size:4
 BIT 4, [IX + 0x7F]       		;0xfdcb7f61       		#size:4
@@ -185,6 +184,7 @@ BIT 4, [IX + 0x7F]       		;0xfdcb7f64       		#size:4
 BIT 4, [IX + 0x7F]       		;0xfdcb7f65       		#size:4
 BIT 4, [IX + 0x7F]       		;0xfdcb7f66       		#size:4
 BIT 4, [IX + 0x7F]       		;0xfdcb7f67       		#size:4
+BIT 4, [IX + 0x7F]       		;0xddcb7f66       		#size:4
 BIT 4, A                 		;0xcb67        		#size:2
 BIT 4, B                 		;0xcb60        		#size:2
 BIT 4, C                 		;0xcb61        		#size:2
@@ -199,7 +199,6 @@ BIT 5, [IX + 0x7F]       		;0xddcb7f6a       		#size:4
 BIT 5, [IX + 0x7F]       		;0xddcb7f6b       		#size:4
 BIT 5, [IX + 0x7F]       		;0xddcb7f6c       		#size:4
 BIT 5, [IX + 0x7F]       		;0xddcb7f6d       		#size:4
-BIT 5, [IX + 0x7F]       		;0xddcb7f6e       		#size:4
 BIT 5, [IX + 0x7F]       		;0xddcb7f6f       		#size:4
 BIT 5, [IX + 0x7F]       		;0xfdcb7f68       		#size:4
 BIT 5, [IX + 0x7F]       		;0xfdcb7f69       		#size:4
@@ -209,6 +208,7 @@ BIT 5, [IX + 0x7F]       		;0xfdcb7f6c       		#size:4
 BIT 5, [IX + 0x7F]       		;0xfdcb7f6d       		#size:4
 BIT 5, [IX + 0x7F]       		;0xfdcb7f6e       		#size:4
 BIT 5, [IX + 0x7F]       		;0xfdcb7f6f       		#size:4
+BIT 5, [IX + 0x7F]       		;0xddcb7f6e       		#size:4
 BIT 5, A                 		;0xcb6f        		#size:2
 BIT 5, B                 		;0xcb68        		#size:2
 BIT 5, C                 		;0xcb69        		#size:2
@@ -223,7 +223,6 @@ BIT 6, [IX + 0x7F]       		;0xddcb7f72       		#size:4
 BIT 6, [IX + 0x7F]       		;0xddcb7f73       		#size:4
 BIT 6, [IX + 0x7F]       		;0xddcb7f74       		#size:4
 BIT 6, [IX + 0x7F]       		;0xddcb7f75       		#size:4
-BIT 6, [IX + 0x7F]       		;0xddcb7f76       		#size:4
 BIT 6, [IX + 0x7F]       		;0xddcb7f77       		#size:4
 BIT 6, [IX + 0x7F]       		;0xfdcb7f70       		#size:4
 BIT 6, [IX + 0x7F]       		;0xfdcb7f71       		#size:4
@@ -233,6 +232,7 @@ BIT 6, [IX + 0x7F]       		;0xfdcb7f74       		#size:4
 BIT 6, [IX + 0x7F]       		;0xfdcb7f75       		#size:4
 BIT 6, [IX + 0x7F]       		;0xfdcb7f76       		#size:4
 BIT 6, [IX + 0x7F]       		;0xfdcb7f77       		#size:4
+BIT 6, [IX + 0x7F]       		;0xddcb7f76       		#size:4
 BIT 6, A                 		;0xcb77        		#size:2
 BIT 6, B                 		;0xcb70        		#size:2
 BIT 6, C                 		;0xcb71        		#size:2
@@ -247,7 +247,6 @@ BIT 7, [IX + 0x7F]       		;0xddcb7f7a       		#size:4
 BIT 7, [IX + 0x7F]       		;0xddcb7f7b       		#size:4
 BIT 7, [IX + 0x7F]       		;0xddcb7f7c       		#size:4
 BIT 7, [IX + 0x7F]       		;0xddcb7f7d       		#size:4
-BIT 7, [IX + 0x7F]       		;0xddcb7f7e       		#size:4
 BIT 7, [IX + 0x7F]       		;0xddcb7f7f       		#size:4
 BIT 7, [IX + 0x7F]       		;0xfdcb7f78       		#size:4
 BIT 7, [IX + 0x7F]       		;0xfdcb7f79       		#size:4
@@ -257,6 +256,7 @@ BIT 7, [IX + 0x7F]       		;0xfdcb7f7c       		#size:4
 BIT 7, [IX + 0x7F]       		;0xfdcb7f7d       		#size:4
 BIT 7, [IX + 0x7F]       		;0xfdcb7f7e       		#size:4
 BIT 7, [IX + 0x7F]       		;0xfdcb7f7f       		#size:4
+BIT 7, [IX + 0x7F]       		;0xddcb7f7e       		#size:4
 BIT 7, A                 		;0xcb7f        		#size:2
 BIT 7, B                 		;0xcb78        		#size:2
 BIT 7, C                 		;0xcb79        		#size:2
@@ -276,8 +276,8 @@ CALL Z, 0xaaaa           		;0xccaaaa      		#size:3
 CCF                      		;0x3f          		#size:1
 CP 0xaa                  		;0xfeaa        		#size:2
 CP [HL]                  		;0xbe          		#size:1
-CP [IX + 0x7F]       		;0xddbe7f       		#size:3
 CP [IX + 0x7F]       		;0xfdbe7f       		#size:3
+CP [IX + 0x7F]       		;0xddbe7f       		#size:3
 CP A                     		;0xbf          		#size:1
 CP B                     		;0xb8          		#size:1
 CP C                     		;0xb9          		#size:1
@@ -296,8 +296,8 @@ CPIR                     		;0xedb1        		#size:2
 CPL                      		;0x2f          		#size:1
 DAA                      		;0x27          		#size:1
 DEC [HL]                 		;0x35          		#size:1
-DEC [IX + 0x7F]       		;0xdd357f       		#size:3
 DEC [IX + 0x7F]       		;0xfd357f       		#size:3
+DEC [IX + 0x7F]       		;0xdd357f       		#size:3
 DEC A                    		;0x3d          		#size:1
 DEC B                    		;0x05          		#size:1
 DEC BC                   		;0x0b          		#size:1
@@ -316,7 +316,7 @@ DEC XL                   		;0xdd2d        		#size:2
 DEC YH                   		;0xfd25        		#size:2
 DEC YL                   		;0xfd2d        		#size:2
 DI                       		;0xf3          		#size:1
-DJNZ 0                		;0x10aa        		#size:2
+DJNZ 0		;0x10fe       		#size:2
 EI                       		;0xfb          		#size:1
 EX [SP], HL              		;0xe3          		#size:1
 EX [SP], IX              		;0xdde3        		#size:2
@@ -325,17 +325,16 @@ EX AF, AF'               		;0x08          		#size:1
 EX DE, HL                		;0xeb          		#size:1
 EXX                      		;0xd9          		#size:1
 HALT                     		;0x76          		#size:1
-IM 0                     		;0xed46        		#size:2
 IM 0                     		;0xed4e        		#size:2
 IM 0                     		;0xed66        		#size:2
 IM 0                     		;0xed6e        		#size:2
+IM 0                     		;0xed46        		#size:2
 IM 1                     		;0xed4e        		#size:2
-IM 1                     		;0xed56        		#size:2
 IM 1                     		;0xed6e        		#size:2
 IM 1                     		;0xed76        		#size:2
-IM 2                     		;0xed5e        		#size:2
+IM 1                     		;0xed56        		#size:2
 IM 2                     		;0xed7e        		#size:2
-IN [C], [C]              		;0xed70        		#size:2
+IM 2                     		;0xed5e        		#size:2
 IN A, [0xaa]             		;0xdbaa        		#size:2
 IN A, [C]                		;0xed78        		#size:2
 IN B, [C]                		;0xed40        		#size:2
@@ -346,8 +345,8 @@ IN F, [C]                		;0xed70        		#size:2
 IN H, [C]                		;0xed60        		#size:2
 IN L, [C]                		;0xed68        		#size:2
 INC [HL]                 		;0x34          		#size:1
-INC [IX + 0x7F]       		;0xdd347f       		#size:3
 INC [IX + 0x7F]       		;0xfd347f       		#size:3
+INC [IX + 0x7F]       		;0xdd347f       		#size:3
 INC A                    		;0x3c          		#size:1
 INC B                    		;0x04          		#size:1
 INC BC                   		;0x03          		#size:1
@@ -381,16 +380,16 @@ JP P, 0xaaaa             		;0xf2aaaa      		#size:3
 JP PE, 0xaaaa            		;0xeaaaaa      		#size:3
 JP PO, 0xaaaa            		;0xe2aaaa      		#size:3
 JP Z, 0xaaaa             		;0xcaaaaa      		#size:3
-JR 100                  		;0x18aa        		#size:2
-JR C, 100               		;0x38aa        		#size:2
-JR NC, 100              		;0x30aa        		#size:2
-JR NZ, 100              		;0x20aa        		#size:2
-JR Z, 100               		;0x28aa        		#size:2
+JR 100		;0x1862       		#size:2
+JR C, 100		;0x3862       		#size:2
+JR NC, 100		;0x3062       		#size:2
+JR NZ, 100		;0x2062       		#size:2
+JR Z, 100		;0x2862       		#size:2
 LD [0xaaaa], A           		;0x32aaaa      		#size:3
 LD [0xaaaa], BC          		;0xed43aaaa    		#size:4
 LD [0xaaaa], DE          		;0xed53aaaa    		#size:4
-LD [0xaaaa], HL          		;0x22aaaa      		#size:3
 LD [0xaaaa], HL          		;0xed63aaaa    		#size:4
+LD [0xaaaa], HL          		;0x22aaaa      		#size:3
 LD [0xaaaa], IX          		;0xdd22aaaa    		#size:4
 LD [0xaaaa], IY          		;0xfd22aaaa    		#size:4
 LD [0xaaaa], SP          		;0xed73aaaa    		#size:4
@@ -404,7 +403,7 @@ LD [HL], E               		;0x73          		#size:1
 LD [HL], H               		;0x74          		#size:1
 LD [HL], L               		;0x75          		#size:1
 LD [DE], A               		;0x12          		#size:1
-LD [IX + 0x7F], 0xaa       		;0xdd367f       		#size:3
+LD [IX + 0x7F], 0xaa		;0xdd367faa       		#size:4
 LD [IX + 0x7F], A       		;0xdd777f       		#size:3
 LD [IX + 0x7F], B       		;0xdd707f       		#size:3
 LD [IX + 0x7F], C       		;0xdd717f       		#size:3
@@ -412,7 +411,7 @@ LD [IX + 0x7F], D       		;0xdd727f       		#size:3
 LD [IX + 0x7F], E       		;0xdd737f       		#size:3
 LD [IX + 0x7F], H       		;0xdd747f       		#size:3
 LD [IX + 0x7F], L       		;0xdd757f       		#size:3
-LD [IX + 0x7F], 0xaa       		;0xfd367f       		#size:3
+LD [IY + 0x7F], 0xaa 		;0xfd367faa       		#size:4
 LD [IX + 0x7F], A       		;0xfd777f       		#size:3
 LD [IX + 0x7F], B       		;0xfd707f       		#size:3
 LD [IX + 0x7F], C       		;0xfd717f       		#size:3
@@ -425,8 +424,8 @@ LD A, [0xaaaa]           		;0x3aaaaa      		#size:3
 LD A, [BC]               		;0x0a          		#size:1
 LD A, [HL]               		;0x7e          		#size:1
 LD A, [DE]               		;0x1a          		#size:1
-LD A, [IX + 0x7F]       		;0xdd7e7f       		#size:3
 LD A, [IX + 0x7F]       		;0xfd7e7f       		#size:3
+LD A, [IX + 0x7F]       		;0xdd7e7f       		#size:3
 LD A, A                  		;0x7f          		#size:1
 LD A, B                  		;0x78          		#size:1
 LD A, C                  		;0x79          		#size:1
@@ -436,62 +435,62 @@ LD A, H                  		;0x7c          		#size:1
 LD A, I                  		;0xed57        		#size:2
 LD A, L                  		;0x7d          		#size:1
 LD A, R                  		;0xed5f        		#size:2
-LD A, RES 0, [IX + 0x7F]       		;0xddcb7f87       		#size:4
 LD A, RES 0, [IX + 0x7F]       		;0xfdcb7f87       		#size:4
-LD A, RES 1, [IX + 0x7F]       		;0xddcb7f8f       		#size:4
+LD A, RES 0, [IX + 0x7F]       		;0xddcb7f87       		#size:4
 LD A, RES 1, [IX + 0x7F]       		;0xfdcb7f8f       		#size:4
-LD A, RES 2, [IX + 0x7F]       		;0xddcb7f97       		#size:4
+LD A, RES 1, [IX + 0x7F]       		;0xddcb7f8f       		#size:4
 LD A, RES 2, [IX + 0x7F]       		;0xfdcb7f97       		#size:4
-LD A, RES 3, [IX + 0x7F]       		;0xddcb7f9f       		#size:4
+LD A, RES 2, [IX + 0x7F]       		;0xddcb7f97       		#size:4
 LD A, RES 3, [IX + 0x7F]       		;0xfdcb7f9f       		#size:4
-LD A, RES 4, [IX + 0x7F]       		;0xddcb7fa7       		#size:4
+LD A, RES 3, [IX + 0x7F]       		;0xddcb7f9f       		#size:4
 LD A, RES 4, [IX + 0x7F]       		;0xfdcb7fa7       		#size:4
-LD A, RES 5, [IX + 0x7F]       		;0xddcb7faf       		#size:4
+LD A, RES 4, [IX + 0x7F]       		;0xddcb7fa7       		#size:4
 LD A, RES 5, [IX + 0x7F]       		;0xfdcb7faf       		#size:4
-LD A, RES 6, [IX + 0x7F]       		;0xddcb7fb7       		#size:4
+LD A, RES 5, [IX + 0x7F]       		;0xddcb7faf       		#size:4
 LD A, RES 6, [IX + 0x7F]       		;0xfdcb7fb7       		#size:4
-LD A, RES 7, [IX + 0x7F]       		;0xddcb7fbf       		#size:4
+LD A, RES 6, [IX + 0x7F]       		;0xddcb7fb7       		#size:4
 LD A, RES 7, [IX + 0x7F]       		;0xfdcb7fbf       		#size:4
-LD A, RL [IX + 0x7F]       		;0xddcb7f17       		#size:4
+LD A, RES 7, [IX + 0x7F]       		;0xddcb7fbf       		#size:4
 LD A, RL [IX + 0x7F]       		;0xfdcb7f17       		#size:4
-LD A, RLC [IX + 0x7F]       		;0xddcb7f07       		#size:4
+LD A, RL [IX + 0x7F]       		;0xddcb7f17       		#size:4
 LD A, RLC [IX + 0x7F]       		;0xfdcb7f07       		#size:4
-LD A, RR [IX + 0x7F]       		;0xddcb7f1f       		#size:4
+LD A, RLC [IX + 0x7F]       		;0xddcb7f07       		#size:4
 LD A, RR [IX + 0x7F]       		;0xfdcb7f1f       		#size:4
-LD A, RRC [IX + 0x7F]       		;0xddcb7f0f       		#size:4
+LD A, RR [IX + 0x7F]       		;0xddcb7f1f       		#size:4
 LD A, RRC [IX + 0x7F]       		;0xfdcb7f0f       		#size:4
-LD A, SET 0, [IX + 0x7F]       		;0xddcb7fc7       		#size:4
+LD A, RRC [IX + 0x7F]       		;0xddcb7f0f       		#size:4
 LD A, SET 0, [IX + 0x7F]       		;0xfdcb7fc7       		#size:4
-LD A, SET 1, [IX + 0x7F]       		;0xddcb7fcf       		#size:4
+LD A, SET 0, [IX + 0x7F]       		;0xddcb7fc7       		#size:4
 LD A, SET 1, [IX + 0x7F]       		;0xfdcb7fcf       		#size:4
-LD A, SET 2, [IX + 0x7F]       		;0xddcb7fd7       		#size:4
+LD A, SET 1, [IX + 0x7F]       		;0xddcb7fcf       		#size:4
 LD A, SET 2, [IX + 0x7F]       		;0xfdcb7fd7       		#size:4
-LD A, SET 3, [IX + 0x7F]       		;0xddcb7fdf       		#size:4
+LD A, SET 2, [IX + 0x7F]       		;0xddcb7fd7       		#size:4
 LD A, SET 3, [IX + 0x7F]       		;0xfdcb7fdf       		#size:4
-LD A, SET 4, [IX + 0x7F]       		;0xddcb7fe7       		#size:4
+LD A, SET 3, [IX + 0x7F]       		;0xddcb7fdf       		#size:4
 LD A, SET 4, [IX + 0x7F]       		;0xfdcb7fe7       		#size:4
-LD A, SET 5, [IX + 0x7F]       		;0xddcb7fef       		#size:4
+LD A, SET 4, [IX + 0x7F]       		;0xddcb7fe7       		#size:4
 LD A, SET 5, [IX + 0x7F]       		;0xfdcb7fef       		#size:4
-LD A, SET 6, [IX + 0x7F]       		;0xddcb7ff7       		#size:4
+LD A, SET 5, [IX + 0x7F]       		;0xddcb7fef       		#size:4
 LD A, SET 6, [IX + 0x7F]       		;0xfdcb7ff7       		#size:4
-LD A, SET 7, [IX + 0x7F]       		;0xddcb7fff       		#size:4
+LD A, SET 6, [IX + 0x7F]       		;0xddcb7ff7       		#size:4
 LD A, SET 7, [IX + 0x7F]       		;0xfdcb7fff       		#size:4
-LD A, SLA [IX + 0x7F]       		;0xddcb7f27       		#size:4
+LD A, SET 7, [IX + 0x7F]       		;0xddcb7fff       		#size:4
 LD A, SLA [IX + 0x7F]       		;0xfdcb7f27       		#size:4
-LD A, SLL [IX + 0x7F]       		;0xddcb7f37       		#size:4
+LD A, SLA [IX + 0x7F]       		;0xddcb7f27       		#size:4
 LD A, SLL [IX + 0x7F]       		;0xfdcb7f37       		#size:4
-LD A, SRA [IX + 0x7F]       		;0xddcb7f2f       		#size:4
+LD A, SLL [IX + 0x7F]       		;0xddcb7f37       		#size:4
 LD A, SRA [IX + 0x7F]       		;0xfdcb7f2f       		#size:4
-LD A, SRL [IX + 0x7F]       		;0xddcb7f3f       		#size:4
+LD A, SRA [IX + 0x7F]       		;0xddcb7f2f       		#size:4
 LD A, SRL [IX + 0x7F]       		;0xfdcb7f3f       		#size:4
+LD A, SRL [IX + 0x7F]       		;0xddcb7f3f       		#size:4
 LD A, XH                 		;0xdd7c        		#size:2
 LD A, XL                 		;0xdd7d        		#size:2
 LD A, YH                 		;0xfd7c        		#size:2
 LD A, YL                 		;0xfd7d        		#size:2
 LD B, 0xaa               		;0x06aa        		#size:2
 LD B, [HL]               		;0x46          		#size:1
-LD B, [IX + 0x7F]       		;0xdd467f       		#size:3
 LD B, [IX + 0x7F]       		;0xfd467f       		#size:3
+LD B, [IX + 0x7F]       		;0xdd467f       		#size:3
 LD B, A                  		;0x47          		#size:1
 LD B, B                  		;0x40          		#size:1
 LD B, C                  		;0x41          		#size:1
@@ -499,54 +498,54 @@ LD B, D                  		;0x42          		#size:1
 LD B, E                  		;0x43          		#size:1
 LD B, H                  		;0x44          		#size:1
 LD B, L                  		;0x45          		#size:1
-LD B, RES 0, [IX + 0x7F]       		;0xddcb7f80       		#size:4
 LD B, RES 0, [IX + 0x7F]       		;0xfdcb7f80       		#size:4
-LD B, RES 1, [IX + 0x7F]       		;0xddcb7f88       		#size:4
+LD B, RES 0, [IX + 0x7F]       		;0xddcb7f80       		#size:4
 LD B, RES 1, [IX + 0x7F]       		;0xfdcb7f88       		#size:4
-LD B, RES 2, [IX + 0x7F]       		;0xddcb7f90       		#size:4
+LD B, RES 1, [IX + 0x7F]       		;0xddcb7f88       		#size:4
 LD B, RES 2, [IX + 0x7F]       		;0xfdcb7f90       		#size:4
-LD B, RES 3, [IX + 0x7F]       		;0xddcb7f98       		#size:4
+LD B, RES 2, [IX + 0x7F]       		;0xddcb7f90       		#size:4
 LD B, RES 3, [IX + 0x7F]       		;0xfdcb7f98       		#size:4
-LD B, RES 4, [IX + 0x7F]       		;0xddcb7fa0       		#size:4
+LD B, RES 3, [IX + 0x7F]       		;0xddcb7f98       		#size:4
 LD B, RES 4, [IX + 0x7F]       		;0xfdcb7fa0       		#size:4
-LD B, RES 5, [IX + 0x7F]       		;0xddcb7fa8       		#size:4
+LD B, RES 4, [IX + 0x7F]       		;0xddcb7fa0       		#size:4
 LD B, RES 5, [IX + 0x7F]       		;0xfdcb7fa8       		#size:4
-LD B, RES 6, [IX + 0x7F]       		;0xddcb7fb0       		#size:4
+LD B, RES 5, [IX + 0x7F]       		;0xddcb7fa8       		#size:4
 LD B, RES 6, [IX + 0x7F]       		;0xfdcb7fb0       		#size:4
-LD B, RES 7, [IX + 0x7F]       		;0xddcb7fb8       		#size:4
+LD B, RES 6, [IX + 0x7F]       		;0xddcb7fb0       		#size:4
 LD B, RES 7, [IX + 0x7F]       		;0xfdcb7fb8       		#size:4
-LD B, RL [IX + 0x7F]       		;0xddcb7f10       		#size:4
+LD B, RES 7, [IX + 0x7F]       		;0xddcb7fb8       		#size:4
 LD B, RL [IX + 0x7F]       		;0xfdcb7f10       		#size:4
-LD B, RLC [IX + 0x7F]       		;0xddcb7f00       		#size:4
+LD B, RL [IX + 0x7F]       		;0xddcb7f10       		#size:4
 LD B, RLC [IX + 0x7F]       		;0xfdcb7f00       		#size:4
-LD B, RR [IX + 0x7F]       		;0xddcb7f18       		#size:4
+LD B, RLC [IX + 0x7F]       		;0xddcb7f00       		#size:4
 LD B, RR [IX + 0x7F]       		;0xfdcb7f18       		#size:4
-LD B, RRC [IX + 0x7F]       		;0xddcb7f08       		#size:4
+LD B, RR [IX + 0x7F]       		;0xddcb7f18       		#size:4
 LD B, RRC [IX + 0x7F]       		;0xfdcb7f08       		#size:4
-LD B, SET 0, [IX + 0x7F]       		;0xddcb7fc0       		#size:4
+LD B, RRC [IX + 0x7F]       		;0xddcb7f08       		#size:4
 LD B, SET 0, [IX + 0x7F]       		;0xfdcb7fc0       		#size:4
-LD B, SET 1, [IX + 0x7F]       		;0xddcb7fc8       		#size:4
+LD B, SET 0, [IX + 0x7F]       		;0xddcb7fc0       		#size:4
 LD B, SET 1, [IX + 0x7F]       		;0xfdcb7fc8       		#size:4
-LD B, SET 2, [IX + 0x7F]       		;0xddcb7fd0       		#size:4
+LD B, SET 1, [IX + 0x7F]       		;0xddcb7fc8       		#size:4
 LD B, SET 2, [IX + 0x7F]       		;0xfdcb7fd0       		#size:4
-LD B, SET 3, [IX + 0x7F]       		;0xddcb7fd8       		#size:4
+LD B, SET 2, [IX + 0x7F]       		;0xddcb7fd0       		#size:4
 LD B, SET 3, [IX + 0x7F]       		;0xfdcb7fd8       		#size:4
-LD B, SET 4, [IX + 0x7F]       		;0xddcb7fe0       		#size:4
+LD B, SET 3, [IX + 0x7F]       		;0xddcb7fd8       		#size:4
 LD B, SET 4, [IX + 0x7F]       		;0xfdcb7fe0       		#size:4
-LD B, SET 5, [IX + 0x7F]       		;0xddcb7fe8       		#size:4
+LD B, SET 4, [IX + 0x7F]       		;0xddcb7fe0       		#size:4
 LD B, SET 5, [IX + 0x7F]       		;0xfdcb7fe8       		#size:4
-LD B, SET 6, [IX + 0x7F]       		;0xddcb7ff0       		#size:4
+LD B, SET 5, [IX + 0x7F]       		;0xddcb7fe8       		#size:4
 LD B, SET 6, [IX + 0x7F]       		;0xfdcb7ff0       		#size:4
-LD B, SET 7, [IX + 0x7F]       		;0xddcb7ff8       		#size:4
+LD B, SET 6, [IX + 0x7F]       		;0xddcb7ff0       		#size:4
 LD B, SET 7, [IX + 0x7F]       		;0xfdcb7ff8       		#size:4
-LD B, SLA [IX + 0x7F]       		;0xddcb7f20       		#size:4
+LD B, SET 7, [IX + 0x7F]       		;0xddcb7ff8       		#size:4
 LD B, SLA [IX + 0x7F]       		;0xfdcb7f20       		#size:4
-LD B, SLL [IX + 0x7F]       		;0xddcb7f30       		#size:4
+LD B, SLA [IX + 0x7F]       		;0xddcb7f20       		#size:4
 LD B, SLL [IX + 0x7F]       		;0xfdcb7f30       		#size:4
-LD B, SRA [IX + 0x7F]       		;0xddcb7f28       		#size:4
+LD B, SLL [IX + 0x7F]       		;0xddcb7f30       		#size:4
 LD B, SRA [IX + 0x7F]       		;0xfdcb7f28       		#size:4
-LD B, SRL [IX + 0x7F]       		;0xddcb7f38       		#size:4
+LD B, SRA [IX + 0x7F]       		;0xddcb7f28       		#size:4
 LD B, SRL [IX + 0x7F]       		;0xfdcb7f38       		#size:4
+LD B, SRL [IX + 0x7F]       		;0xddcb7f38       		#size:4
 LD B, XH                 		;0xdd44        		#size:2
 LD B, XL                 		;0xdd45        		#size:2
 LD B, YH                 		;0xfd44        		#size:2
@@ -555,8 +554,8 @@ LD BC, 0xaaaa            		;0x01aaaa      		#size:3
 LD BC, [0xaaaa]          		;0xed4baaaa    		#size:4
 LD C, 0xaa               		;0x0eaa        		#size:2
 LD C, [HL]               		;0x4e          		#size:1
-LD C, [IX + 0x7F]       		;0xdd4e7f       		#size:3
 LD C, [IX + 0x7F]       		;0xfd4e7f       		#size:3
+LD C, [IX + 0x7F]       		;0xdd4e7f       		#size:3
 LD C, A                  		;0x4f          		#size:1
 LD C, B                  		;0x48          		#size:1
 LD C, C                  		;0x49          		#size:1
@@ -564,62 +563,62 @@ LD C, D                  		;0x4a          		#size:1
 LD C, E                  		;0x4b          		#size:1
 LD C, H                  		;0x4c          		#size:1
 LD C, L                  		;0x4d          		#size:1
-LD C, RES 0, [IX + 0x7F]       		;0xddcb7f81       		#size:4
 LD C, RES 0, [IX + 0x7F]       		;0xfdcb7f81       		#size:4
-LD C, RES 1, [IX + 0x7F]       		;0xddcb7f89       		#size:4
+LD C, RES 0, [IX + 0x7F]       		;0xddcb7f81       		#size:4
 LD C, RES 1, [IX + 0x7F]       		;0xfdcb7f89       		#size:4
-LD C, RES 2, [IX + 0x7F]       		;0xddcb7f91       		#size:4
+LD C, RES 1, [IX + 0x7F]       		;0xddcb7f89       		#size:4
 LD C, RES 2, [IX + 0x7F]       		;0xfdcb7f91       		#size:4
-LD C, RES 3, [IX + 0x7F]       		;0xddcb7f99       		#size:4
+LD C, RES 2, [IX + 0x7F]       		;0xddcb7f91       		#size:4
 LD C, RES 3, [IX + 0x7F]       		;0xfdcb7f99       		#size:4
-LD C, RES 4, [IX + 0x7F]       		;0xddcb7fa1       		#size:4
+LD C, RES 3, [IX + 0x7F]       		;0xddcb7f99       		#size:4
 LD C, RES 4, [IX + 0x7F]       		;0xfdcb7fa1       		#size:4
-LD C, RES 5, [IX + 0x7F]       		;0xddcb7fa9       		#size:4
+LD C, RES 4, [IX + 0x7F]       		;0xddcb7fa1       		#size:4
 LD C, RES 5, [IX + 0x7F]       		;0xfdcb7fa9       		#size:4
-LD C, RES 6, [IX + 0x7F]       		;0xddcb7fb1       		#size:4
+LD C, RES 5, [IX + 0x7F]       		;0xddcb7fa9       		#size:4
 LD C, RES 6, [IX + 0x7F]       		;0xfdcb7fb1       		#size:4
-LD C, RES 7, [IX + 0x7F]       		;0xddcb7fb9       		#size:4
+LD C, RES 6, [IX + 0x7F]       		;0xddcb7fb1       		#size:4
 LD C, RES 7, [IX + 0x7F]       		;0xfdcb7fb9       		#size:4
-LD C, RL [IX + 0x7F]       		;0xddcb7f11       		#size:4
+LD C, RES 7, [IX + 0x7F]       		;0xddcb7fb9       		#size:4
 LD C, RL [IX + 0x7F]       		;0xfdcb7f11       		#size:4
-LD C, RLC [IX + 0x7F]       		;0xddcb7f01       		#size:4
+LD C, RL [IX + 0x7F]       		;0xddcb7f11       		#size:4
 LD C, RLC [IX + 0x7F]       		;0xfdcb7f01       		#size:4
-LD C, RR [IX + 0x7F]       		;0xddcb7f19       		#size:4
+LD C, RLC [IX + 0x7F]       		;0xddcb7f01       		#size:4
 LD C, RR [IX + 0x7F]       		;0xfdcb7f19       		#size:4
-LD C, RRC [IX + 0x7F]       		;0xddcb7f09       		#size:4
+LD C, RR [IX + 0x7F]       		;0xddcb7f19       		#size:4
 LD C, RRC [IX + 0x7F]       		;0xfdcb7f09       		#size:4
-LD C, SET 0, [IX + 0x7F]       		;0xddcb7fc1       		#size:4
+LD C, RRC [IX + 0x7F]       		;0xddcb7f09       		#size:4
 LD C, SET 0, [IX + 0x7F]       		;0xfdcb7fc1       		#size:4
-LD C, SET 1, [IX + 0x7F]       		;0xddcb7fc9       		#size:4
+LD C, SET 0, [IX + 0x7F]       		;0xddcb7fc1       		#size:4
 LD C, SET 1, [IX + 0x7F]       		;0xfdcb7fc9       		#size:4
-LD C, SET 2, [IX + 0x7F]       		;0xddcb7fd1       		#size:4
+LD C, SET 1, [IX + 0x7F]       		;0xddcb7fc9       		#size:4
 LD C, SET 2, [IX + 0x7F]       		;0xfdcb7fd1       		#size:4
-LD C, SET 3, [IX + 0x7F]       		;0xddcb7fd9       		#size:4
+LD C, SET 2, [IX + 0x7F]       		;0xddcb7fd1       		#size:4
 LD C, SET 3, [IX + 0x7F]       		;0xfdcb7fd9       		#size:4
-LD C, SET 4, [IX + 0x7F]       		;0xddcb7fe1       		#size:4
+LD C, SET 3, [IX + 0x7F]       		;0xddcb7fd9       		#size:4
 LD C, SET 4, [IX + 0x7F]       		;0xfdcb7fe1       		#size:4
-LD C, SET 5, [IX + 0x7F]       		;0xddcb7fe9       		#size:4
+LD C, SET 4, [IX + 0x7F]       		;0xddcb7fe1       		#size:4
 LD C, SET 5, [IX + 0x7F]       		;0xfdcb7fe9       		#size:4
-LD C, SET 6, [IX + 0x7F]       		;0xddcb7ff1       		#size:4
+LD C, SET 5, [IX + 0x7F]       		;0xddcb7fe9       		#size:4
 LD C, SET 6, [IX + 0x7F]       		;0xfdcb7ff1       		#size:4
-LD C, SET 7, [IX + 0x7F]       		;0xddcb7ff9       		#size:4
+LD C, SET 6, [IX + 0x7F]       		;0xddcb7ff1       		#size:4
 LD C, SET 7, [IX + 0x7F]       		;0xfdcb7ff9       		#size:4
-LD C, SLA [IX + 0x7F]       		;0xddcb7f21       		#size:4
+LD C, SET 7, [IX + 0x7F]       		;0xddcb7ff9       		#size:4
 LD C, SLA [IX + 0x7F]       		;0xfdcb7f21       		#size:4
-LD C, SLL [IX + 0x7F]       		;0xddcb7f31       		#size:4
+LD C, SLA [IX + 0x7F]       		;0xddcb7f21       		#size:4
 LD C, SLL [IX + 0x7F]       		;0xfdcb7f31       		#size:4
-LD C, SRA [IX + 0x7F]       		;0xddcb7f29       		#size:4
+LD C, SLL [IX + 0x7F]       		;0xddcb7f31       		#size:4
 LD C, SRA [IX + 0x7F]       		;0xfdcb7f29       		#size:4
-LD C, SRL [IX + 0x7F]       		;0xddcb7f39       		#size:4
+LD C, SRA [IX + 0x7F]       		;0xddcb7f29       		#size:4
 LD C, SRL [IX + 0x7F]       		;0xfdcb7f39       		#size:4
+LD C, SRL [IX + 0x7F]       		;0xddcb7f39       		#size:4
 LD C, XH                 		;0xdd4c        		#size:2
 LD C, XL                 		;0xdd4d        		#size:2
 LD C, YH                 		;0xfd4c        		#size:2
 LD C, YL                 		;0xfd4d        		#size:2
 LD D, 0xaa               		;0x16aa        		#size:2
 LD D, [HL]               		;0x56          		#size:1
-LD D, [IX + 0x7F]       		;0xdd567f       		#size:3
 LD D, [IX + 0x7F]       		;0xfd567f       		#size:3
+LD D, [IX + 0x7F]       		;0xdd567f       		#size:3
 LD D, A                  		;0x57          		#size:1
 LD D, B                  		;0x50          		#size:1
 LD D, C                  		;0x51          		#size:1
@@ -627,54 +626,54 @@ LD D, D                  		;0x52          		#size:1
 LD D, E                  		;0x53          		#size:1
 LD D, H                  		;0x54          		#size:1
 LD D, L                  		;0x55          		#size:1
-LD D, RES 0, [IX + 0x7F]       		;0xddcb7f82       		#size:4
 LD D, RES 0, [IX + 0x7F]       		;0xfdcb7f82       		#size:4
-LD D, RES 1, [IX + 0x7F]       		;0xddcb7f8a       		#size:4
+LD D, RES 0, [IX + 0x7F]       		;0xddcb7f82       		#size:4
 LD D, RES 1, [IX + 0x7F]       		;0xfdcb7f8a       		#size:4
-LD D, RES 2, [IX + 0x7F]       		;0xddcb7f92       		#size:4
+LD D, RES 1, [IX + 0x7F]       		;0xddcb7f8a       		#size:4
 LD D, RES 2, [IX + 0x7F]       		;0xfdcb7f92       		#size:4
-LD D, RES 3, [IX + 0x7F]       		;0xddcb7f9a       		#size:4
+LD D, RES 2, [IX + 0x7F]       		;0xddcb7f92       		#size:4
 LD D, RES 3, [IX + 0x7F]       		;0xfdcb7f9a       		#size:4
-LD D, RES 4, [IX + 0x7F]       		;0xddcb7fa2       		#size:4
+LD D, RES 3, [IX + 0x7F]       		;0xddcb7f9a       		#size:4
 LD D, RES 4, [IX + 0x7F]       		;0xfdcb7fa2       		#size:4
+LD D, RES 4, [IX + 0x7F]       		;0xddcb7fa2       		#size:4
 LD D, RES 5, [IX + 0x7F]       		;0xddcb7f7f       		#size:4
 LD D, RES 5, [IX + 0x7F]       		;0xfdcb7f7f       		#size:4
-LD D, RES 6, [IX + 0x7F]       		;0xddcb7fb2       		#size:4
 LD D, RES 6, [IX + 0x7F]       		;0xfdcb7fb2       		#size:4
-LD D, RES 7, [IX + 0x7F]       		;0xddcb7fba       		#size:4
+LD D, RES 6, [IX + 0x7F]       		;0xddcb7fb2       		#size:4
 LD D, RES 7, [IX + 0x7F]       		;0xfdcb7fba       		#size:4
-LD D, RL [IX + 0x7F]       		;0xddcb7f12       		#size:4
+LD D, RES 7, [IX + 0x7F]       		;0xddcb7fba       		#size:4
 LD D, RL [IX + 0x7F]       		;0xfdcb7f12       		#size:4
-LD D, RLC [IX + 0x7F]       		;0xddcb7f02       		#size:4
+LD D, RL [IX + 0x7F]       		;0xddcb7f12       		#size:4
 LD D, RLC [IX + 0x7F]       		;0xfdcb7f02       		#size:4
-LD D, RR [IX + 0x7F]       		;0xddcb7f1a       		#size:4
+LD D, RLC [IX + 0x7F]       		;0xddcb7f02       		#size:4
 LD D, RR [IX + 0x7F]       		;0xfdcb7f1a       		#size:4
-LD D, RRC [IX + 0x7F]       		;0xddcb7f0a       		#size:4
+LD D, RR [IX + 0x7F]       		;0xddcb7f1a       		#size:4
 LD D, RRC [IX + 0x7F]       		;0xfdcb7f0a       		#size:4
-LD D, SET 0, [IX + 0x7F]       		;0xddcb7fc2       		#size:4
+LD D, RRC [IX + 0x7F]       		;0xddcb7f0a       		#size:4
 LD D, SET 0, [IX + 0x7F]       		;0xfdcb7fc2       		#size:4
-LD D, SET 1, [IX + 0x7F]       		;0xddcb7fca       		#size:4
+LD D, SET 0, [IX + 0x7F]       		;0xddcb7fc2       		#size:4
 LD D, SET 1, [IX + 0x7F]       		;0xfdcb7fca       		#size:4
-LD D, SET 2, [IX + 0x7F]       		;0xddcb7fd2       		#size:4
+LD D, SET 1, [IX + 0x7F]       		;0xddcb7fca       		#size:4
 LD D, SET 2, [IX + 0x7F]       		;0xfdcb7fd2       		#size:4
-LD D, SET 3, [IX + 0x7F]       		;0xddcb7fda       		#size:4
+LD D, SET 2, [IX + 0x7F]       		;0xddcb7fd2       		#size:4
 LD D, SET 3, [IX + 0x7F]       		;0xfdcb7fda       		#size:4
-LD D, SET 4, [IX + 0x7F]       		;0xddcb7fe2       		#size:4
+LD D, SET 3, [IX + 0x7F]       		;0xddcb7fda       		#size:4
 LD D, SET 4, [IX + 0x7F]       		;0xfdcb7fe2       		#size:4
-LD D, SET 5, [IX + 0x7F]       		;0xddcb7fea       		#size:4
+LD D, SET 4, [IX + 0x7F]       		;0xddcb7fe2       		#size:4
 LD D, SET 5, [IX + 0x7F]       		;0xfdcb7fea       		#size:4
-LD D, SET 6, [IX + 0x7F]       		;0xddcb7ff2       		#size:4
+LD D, SET 5, [IX + 0x7F]       		;0xddcb7fea       		#size:4
 LD D, SET 6, [IX + 0x7F]       		;0xfdcb7ff2       		#size:4
-LD D, SET 7, [IX + 0x7F]       		;0xddcb7ffa       		#size:4
+LD D, SET 6, [IX + 0x7F]       		;0xddcb7ff2       		#size:4
 LD D, SET 7, [IX + 0x7F]       		;0xfdcb7ffa       		#size:4
-LD D, SLA [IX + 0x7F]       		;0xddcb7f22       		#size:4
+LD D, SET 7, [IX + 0x7F]       		;0xddcb7ffa       		#size:4
 LD D, SLA [IX + 0x7F]       		;0xfdcb7f22       		#size:4
-LD D, SLL [IX + 0x7F]       		;0xddcb7f32       		#size:4
+LD D, SLA [IX + 0x7F]       		;0xddcb7f22       		#size:4
 LD D, SLL [IX + 0x7F]       		;0xfdcb7f32       		#size:4
-LD D, SRA [IX + 0x7F]       		;0xddcb7f2a       		#size:4
+LD D, SLL [IX + 0x7F]       		;0xddcb7f32       		#size:4
 LD D, SRA [IX + 0x7F]       		;0xfdcb7f2a       		#size:4
-LD D, SRL [IX + 0x7F]       		;0xddcb7f3a       		#size:4
+LD D, SRA [IX + 0x7F]       		;0xddcb7f2a       		#size:4
 LD D, SRL [IX + 0x7F]       		;0xfdcb7f3a       		#size:4
+LD D, SRL [IX + 0x7F]       		;0xddcb7f3a       		#size:4
 LD D, XH                 		;0xdd54        		#size:2
 LD D, XL                 		;0xdd55        		#size:2
 LD D, YH                 		;0xfd54        		#size:2
@@ -683,8 +682,8 @@ LD DE, 0xaaaa            		;0x11aaaa      		#size:3
 LD DE, [0xaaaa]          		;0xed5baaaa    		#size:4
 LD E, 0xaa               		;0x1eaa        		#size:2
 LD E, [HL]               		;0x5e          		#size:1
-LD E, [IX + 0x7F]       		;0xdd5e7f       		#size:3
 LD E, [IX + 0x7F]       		;0xfd5e7f       		#size:3
+LD E, [IX + 0x7F]       		;0xdd5e7f       		#size:3
 LD E, A                  		;0x5f          		#size:1
 LD E, B                  		;0x58          		#size:1
 LD E, C                  		;0x59          		#size:1
@@ -693,60 +692,60 @@ LD E, E                  		;0x5b          		#size:1
 LD E, H                  		;0x5c          		#size:1
 LD E, L                  		;0x5d          		#size:1
 LD E, RES 0, [IX + 0x7F]       		;0xddcb7f83       		#size:4
-LD E, RES 1, [IX + 0x7F]       		;0xddcb7f8b       		#size:4
 LD E, RES 1, [IX + 0x7F]       		;0xfdcb7f8b       		#size:4
-LD E, RES 2, [IX + 0x7F]       		;0xddcb7f93       		#size:4
+LD E, RES 1, [IX + 0x7F]       		;0xddcb7f8b       		#size:4
 LD E, RES 2, [IX + 0x7F]       		;0xfdcb7f93       		#size:4
-LD E, RES 3, [IX + 0x7F]       		;0xddcb7f9b       		#size:4
+LD E, RES 2, [IX + 0x7F]       		;0xddcb7f93       		#size:4
 LD E, RES 3, [IX + 0x7F]       		;0xfdcb7f9b       		#size:4
-LD E, RES 4, [IX + 0x7F]       		;0xddcb7fa3       		#size:4
+LD E, RES 3, [IX + 0x7F]       		;0xddcb7f9b       		#size:4
 LD E, RES 4, [IX + 0x7F]       		;0xfdcb7fa3       		#size:4
-LD E, RES 5, [IX + 0x7F]       		;0xddcb7fab       		#size:4
+LD E, RES 4, [IX + 0x7F]       		;0xddcb7fa3       		#size:4
 LD E, RES 5, [IX + 0x7F]       		;0xfdcb7fab       		#size:4
-LD E, RES 6, [IX + 0x7F]       		;0xddcb7fb3       		#size:4
+LD E, RES 5, [IX + 0x7F]       		;0xddcb7fab       		#size:4
 LD E, RES 6, [IX + 0x7F]       		;0xfdcb7fb3       		#size:4
-LD E, RES 7, [IX + 0x7F]       		;0xddcb7fbb       		#size:4
+LD E, RES 6, [IX + 0x7F]       		;0xddcb7fb3       		#size:4
 LD E, RES 7, [IX + 0x7F]       		;0xfdcb7fbb       		#size:4
-LD E, RL [IX + 0x7F]       		;0xddcb7f13       		#size:4
+LD E, RES 7, [IX + 0x7F]       		;0xddcb7fbb       		#size:4
 LD E, RL [IX + 0x7F]       		;0xfdcb7f13       		#size:4
-LD E, RLC [IX + 0x7F]       		;0xddcb7f03       		#size:4
+LD E, RL [IX + 0x7F]       		;0xddcb7f13       		#size:4
 LD E, RLC [IX + 0x7F]       		;0xfdcb7f03       		#size:4
-LD E, RR [IX + 0x7F]       		;0xddcb7f1b       		#size:4
+LD E, RLC [IX + 0x7F]       		;0xddcb7f03       		#size:4
 LD E, RR [IX + 0x7F]       		;0xfdcb7f1b       		#size:4
-LD E, RRC [IX + 0x7F]       		;0xddcb7f0b       		#size:4
+LD E, RR [IX + 0x7F]       		;0xddcb7f1b       		#size:4
 LD E, RRC [IX + 0x7F]       		;0xfdcb7f0b       		#size:4
-LD E, SET 0, [IX + 0x7F]       		;0xddcb7fc3       		#size:4
+LD E, RRC [IX + 0x7F]       		;0xddcb7f0b       		#size:4
 LD E, SET 0, [IX + 0x7F]       		;0xfdcb7fc3       		#size:4
-LD E, SET 1, [IX + 0x7F]       		;0xddcb7fcb       		#size:4
+LD E, SET 0, [IX + 0x7F]       		;0xddcb7fc3       		#size:4
 LD E, SET 1, [IX + 0x7F]       		;0xfdcb7fcb       		#size:4
-LD E, SET 2, [IX + 0x7F]       		;0xddcb7fd3       		#size:4
+LD E, SET 1, [IX + 0x7F]       		;0xddcb7fcb       		#size:4
 LD E, SET 2, [IX + 0x7F]       		;0xfdcb7fd3       		#size:4
-LD E, SET 3, [IX + 0x7F]       		;0xddcb7fdb       		#size:4
+LD E, SET 2, [IX + 0x7F]       		;0xddcb7fd3       		#size:4
 LD E, SET 3, [IX + 0x7F]       		;0xfdcb7fdb       		#size:4
-LD E, SET 4, [IX + 0x7F]       		;0xddcb7fe3       		#size:4
+LD E, SET 3, [IX + 0x7F]       		;0xddcb7fdb       		#size:4
 LD E, SET 4, [IX + 0x7F]       		;0xfdcb7fe3       		#size:4
-LD E, SET 5, [IX + 0x7F]       		;0xddcb7feb       		#size:4
+LD E, SET 4, [IX + 0x7F]       		;0xddcb7fe3       		#size:4
 LD E, SET 5, [IX + 0x7F]       		;0xfdcb7feb       		#size:4
-LD E, SET 6, [IX + 0x7F]       		;0xddcb7ff3       		#size:4
+LD E, SET 5, [IX + 0x7F]       		;0xddcb7feb       		#size:4
 LD E, SET 6, [IX + 0x7F]       		;0xfdcb7ff3       		#size:4
-LD E, SET 7, [IX + 0x7F]       		;0xddcb7ffb       		#size:4
+LD E, SET 6, [IX + 0x7F]       		;0xddcb7ff3       		#size:4
 LD E, SET 7, [IX + 0x7F]       		;0xfdcb7ffb       		#size:4
-LD E, SLA [IX + 0x7F]       		;0xddcb7f23       		#size:4
+LD E, SET 7, [IX + 0x7F]       		;0xddcb7ffb       		#size:4
 LD E, SLA [IX + 0x7F]       		;0xfdcb7f23       		#size:4
-LD E, SLL [IX + 0x7F]       		;0xddcb7f33       		#size:4
+LD E, SLA [IX + 0x7F]       		;0xddcb7f23       		#size:4
 LD E, SLL [IX + 0x7F]       		;0xfdcb7f33       		#size:4
-LD E, SRA [IX + 0x7F]       		;0xddcb7f2b       		#size:4
+LD E, SLL [IX + 0x7F]       		;0xddcb7f33       		#size:4
 LD E, SRA [IX + 0x7F]       		;0xfdcb7f2b       		#size:4
-LD E, SRL [IX + 0x7F]       		;0xddcb7f3b       		#size:4
+LD E, SRA [IX + 0x7F]       		;0xddcb7f2b       		#size:4
 LD E, SRL [IX + 0x7F]       		;0xfdcb7f3b       		#size:4
+LD E, SRL [IX + 0x7F]       		;0xddcb7f3b       		#size:4
 LD E, XH                 		;0xdd5c        		#size:2
 LD E, XL                 		;0xdd5d        		#size:2
 LD E, YH                 		;0xfd5c        		#size:2
 LD E, YL                 		;0xfd5d        		#size:2
 LD H, 0xaa               		;0x26aa        		#size:2
 LD H, [HL]               		;0x66          		#size:1
-LD H, [IX + 0x7F]       		;0xdd667f       		#size:3
 LD H, [IX + 0x7F]       		;0xfd667f       		#size:3
+LD H, [IX + 0x7F]       		;0xdd667f       		#size:3
 LD H, A                  		;0x67          		#size:1
 LD H, B                  		;0x60          		#size:1
 LD H, C                  		;0x61          		#size:1
@@ -754,57 +753,57 @@ LD H, D                  		;0x62          		#size:1
 LD H, E                  		;0x63          		#size:1
 LD H, H                  		;0x64          		#size:1
 LD H, L                  		;0x65          		#size:1
-LD H, RES 0, [IX + 0x7F]       		;0xddcb7f84       		#size:4
 LD H, RES 0, [IX + 0x7F]       		;0xfdcb7f84       		#size:4
-LD H, RES 1, [IX + 0x7F]       		;0xddcb7f8c       		#size:4
+LD H, RES 0, [IX + 0x7F]       		;0xddcb7f84       		#size:4
 LD H, RES 1, [IX + 0x7F]       		;0xfdcb7f8c       		#size:4
-LD H, RES 2, [IX + 0x7F]       		;0xddcb7f94       		#size:4
+LD H, RES 1, [IX + 0x7F]       		;0xddcb7f8c       		#size:4
 LD H, RES 2, [IX + 0x7F]       		;0xfdcb7f94       		#size:4
-LD H, RES 3, [IX + 0x7F]       		;0xddcb7f9c       		#size:4
+LD H, RES 2, [IX + 0x7F]       		;0xddcb7f94       		#size:4
 LD H, RES 3, [IX + 0x7F]       		;0xfdcb7f9c       		#size:4
-LD H, RES 4, [IX + 0x7F]       		;0xddcb7fa4       		#size:4
+LD H, RES 3, [IX + 0x7F]       		;0xddcb7f9c       		#size:4
 LD H, RES 4, [IX + 0x7F]       		;0xfdcb7fa4       		#size:4
-LD H, RES 5, [IX + 0x7F]       		;0xddcb7fac       		#size:4
+LD H, RES 4, [IX + 0x7F]       		;0xddcb7fa4       		#size:4
 LD H, RES 5, [IX + 0x7F]       		;0xfdcb7fac       		#size:4
-LD H, RES 6, [IX + 0x7F]       		;0xddcb7fb4       		#size:4
+LD H, RES 5, [IX + 0x7F]       		;0xddcb7fac       		#size:4
 LD H, RES 6, [IX + 0x7F]       		;0xfdcb7fb4       		#size:4
-LD H, RES 7, [IX + 0x7F]       		;0xddcb7fbc       		#size:4
+LD H, RES 6, [IX + 0x7F]       		;0xddcb7fb4       		#size:4
 LD H, RES 7, [IX + 0x7F]       		;0xfdcb7fbc       		#size:4
-LD H, RL [IX + 0x7F]       		;0xddcb7f14       		#size:4
+LD H, RES 7, [IX + 0x7F]       		;0xddcb7fbc       		#size:4
 LD H, RL [IX + 0x7F]       		;0xfdcb7f14       		#size:4
-LD H, RLC [IX + 0x7F]       		;0xddcb7f04       		#size:4
+LD H, RL [IX + 0x7F]       		;0xddcb7f14       		#size:4
 LD H, RLC [IX + 0x7F]       		;0xfdcb7f04       		#size:4
-LD H, RR [IX + 0x7F]       		;0xddcb7f1c       		#size:4
+LD H, RLC [IX + 0x7F]       		;0xddcb7f04       		#size:4
 LD H, RR [IX + 0x7F]       		;0xfdcb7f1c       		#size:4
-LD H, RRC [IX + 0x7F]       		;0xddcb7f0c       		#size:4
+LD H, RR [IX + 0x7F]       		;0xddcb7f1c       		#size:4
 LD H, RRC [IX + 0x7F]       		;0xfdcb7f0c       		#size:4
-LD H, SET 0, [IX + 0x7F]       		;0xddcb7fc4       		#size:4
+LD H, RRC [IX + 0x7F]       		;0xddcb7f0c       		#size:4
 LD H, SET 0, [IX + 0x7F]       		;0xfdcb7fc4       		#size:4
-LD H, SET 1, [IX + 0x7F]       		;0xddcb7fcc       		#size:4
+LD H, SET 0, [IX + 0x7F]       		;0xddcb7fc4       		#size:4
 LD H, SET 1, [IX + 0x7F]       		;0xfdcb7fcc       		#size:4
-LD H, SET 2, [IX + 0x7F]       		;0xddcb7fd4       		#size:4
+LD H, SET 1, [IX + 0x7F]       		;0xddcb7fcc       		#size:4
 LD H, SET 2, [IX + 0x7F]       		;0xfdcb7fd4       		#size:4
-LD H, SET 3, [IX + 0x7F]       		;0xddcb7fdc       		#size:4
+LD H, SET 2, [IX + 0x7F]       		;0xddcb7fd4       		#size:4
 LD H, SET 3, [IX + 0x7F]       		;0xfdcb7fdc       		#size:4
-LD H, SET 4, [IX + 0x7F]       		;0xddcb7fe4       		#size:4
+LD H, SET 3, [IX + 0x7F]       		;0xddcb7fdc       		#size:4
 LD H, SET 4, [IX + 0x7F]       		;0xfdcb7fe4       		#size:4
-LD H, SET 5, [IX + 0x7F]       		;0xddcb7fec       		#size:4
+LD H, SET 4, [IX + 0x7F]       		;0xddcb7fe4       		#size:4
 LD H, SET 5, [IX + 0x7F]       		;0xfdcb7fec       		#size:4
-LD H, SET 6, [IX + 0x7F]       		;0xddcb7ff4       		#size:4
+LD H, SET 5, [IX + 0x7F]       		;0xddcb7fec       		#size:4
 LD H, SET 6, [IX + 0x7F]       		;0xfdcb7ff4       		#size:4
-LD H, SET 7, [IX + 0x7F]       		;0xddcb7ffc       		#size:4
+LD H, SET 6, [IX + 0x7F]       		;0xddcb7ff4       		#size:4
 LD H, SET 7, [IX + 0x7F]       		;0xfdcb7ffc       		#size:4
-LD H, SLA [IX + 0x7F]       		;0xddcb7f24       		#size:4
+LD H, SET 7, [IX + 0x7F]       		;0xddcb7ffc       		#size:4
 LD H, SLA [IX + 0x7F]       		;0xfdcb7f24       		#size:4
-LD H, SLL [IX + 0x7F]       		;0xddcb7f34       		#size:4
+LD H, SLA [IX + 0x7F]       		;0xddcb7f24       		#size:4
 LD H, SLL [IX + 0x7F]       		;0xfdcb7f34       		#size:4
-LD H, SRA [IX + 0x7F]       		;0xddcb7f2c       		#size:4
+LD H, SLL [IX + 0x7F]       		;0xddcb7f34       		#size:4
 LD H, SRA [IX + 0x7F]       		;0xfdcb7f2c       		#size:4
-LD H, SRL [IX + 0x7F]       		;0xddcb7f3c       		#size:4
+LD H, SRA [IX + 0x7F]       		;0xddcb7f2c       		#size:4
 LD H, SRL [IX + 0x7F]       		;0xfdcb7f3c       		#size:4
+LD H, SRL [IX + 0x7F]       		;0xddcb7f3c       		#size:4
 LD HL, 0xaaaa            		;0x21aaaa      		#size:3
-LD HL, [0xaaaa]          		;0x2aaaaa      		#size:3
 LD HL, [0xaaaa]          		;0xed6baaaa    		#size:4
+LD HL, [0xaaaa]          		;0x2aaaaa      		#size:3
 LD I, A                  		;0xed47        		#size:2
 LD IX, 0xaaaa            		;0xdd21aaaa    		#size:4
 LD IX, [0xaaaa]          		;0xdd2aaaaa    		#size:4
@@ -812,8 +811,8 @@ LD IY, 0xaaaa            		;0xfd21aaaa    		#size:4
 LD IY, [0xaaaa]          		;0xfd2aaaaa    		#size:4
 LD L, 0xaa               		;0x2eaa        		#size:2
 LD L, [HL]               		;0x6e          		#size:1
-LD L, [IX + 0x7F]       		;0xdd6e7f       		#size:3
 LD L, [IX + 0x7F]       		;0xfd6e7f       		#size:3
+LD L, [IX + 0x7F]       		;0xdd6e7f       		#size:3
 LD L, A                  		;0x6f          		#size:1
 LD L, B                  		;0x68          		#size:1
 LD L, C                  		;0x69          		#size:1
@@ -821,54 +820,54 @@ LD L, D                  		;0x6a          		#size:1
 LD L, E                  		;0x6b          		#size:1
 LD L, H                  		;0x6c          		#size:1
 LD L, L                  		;0x6d          		#size:1
-LD L, RES 0, [IX + 0x7F]       		;0xddcb7f85       		#size:4
 LD L, RES 0, [IX + 0x7F]       		;0xfdcb7f85       		#size:4
-LD L, RES 1, [IX + 0x7F]       		;0xddcb7f8d       		#size:4
+LD L, RES 0, [IX + 0x7F]       		;0xddcb7f85       		#size:4
 LD L, RES 1, [IX + 0x7F]       		;0xfdcb7f8d       		#size:4
-LD L, RES 2, [IX + 0x7F]       		;0xddcb7f95       		#size:4
+LD L, RES 1, [IX + 0x7F]       		;0xddcb7f8d       		#size:4
 LD L, RES 2, [IX + 0x7F]       		;0xfdcb7f95       		#size:4
-LD L, RES 3, [IX + 0x7F]       		;0xddcb7f9d       		#size:4
+LD L, RES 2, [IX + 0x7F]       		;0xddcb7f95       		#size:4
 LD L, RES 3, [IX + 0x7F]       		;0xfdcb7f9d       		#size:4
-LD L, RES 4, [IX + 0x7F]       		;0xddcb7fa5       		#size:4
+LD L, RES 3, [IX + 0x7F]       		;0xddcb7f9d       		#size:4
 LD L, RES 4, [IX + 0x7F]       		;0xfdcb7fa5       		#size:4
-LD L, RES 5, [IX + 0x7F]       		;0xddcb7fad       		#size:4
+LD L, RES 4, [IX + 0x7F]       		;0xddcb7fa5       		#size:4
 LD L, RES 5, [IX + 0x7F]       		;0xfdcb7fad       		#size:4
-LD L, RES 6, [IX + 0x7F]       		;0xddcb7fb5       		#size:4
+LD L, RES 5, [IX + 0x7F]       		;0xddcb7fad       		#size:4
 LD L, RES 6, [IX + 0x7F]       		;0xfdcb7fb5       		#size:4
-LD L, RES 7, [IX + 0x7F]       		;0xddcb7fbd       		#size:4
+LD L, RES 6, [IX + 0x7F]       		;0xddcb7fb5       		#size:4
 LD L, RES 7, [IX + 0x7F]       		;0xfdcb7fbd       		#size:4
-LD L, RL [IX + 0x7F]       		;0xddcb7f15       		#size:4
+LD L, RES 7, [IX + 0x7F]       		;0xddcb7fbd       		#size:4
 LD L, RL [IX + 0x7F]       		;0xfdcb7f15       		#size:4
-LD L, RLC [IX + 0x7F]       		;0xddcb7f05       		#size:4
+LD L, RL [IX + 0x7F]       		;0xddcb7f15       		#size:4
 LD L, RLC [IX + 0x7F]       		;0xfdcb7f05       		#size:4
-LD L, RR [IX + 0x7F]       		;0xddcb7f1d       		#size:4
+LD L, RLC [IX + 0x7F]       		;0xddcb7f05       		#size:4
 LD L, RR [IX + 0x7F]       		;0xfdcb7f1d       		#size:4
-LD L, RRC [IX + 0x7F]       		;0xddcb7f0d       		#size:4
+LD L, RR [IX + 0x7F]       		;0xddcb7f1d       		#size:4
 LD L, RRC [IX + 0x7F]       		;0xfdcb7f0d       		#size:4
-LD L, SET 0, [IX + 0x7F]       		;0xddcb7fc5       		#size:4
+LD L, RRC [IX + 0x7F]       		;0xddcb7f0d       		#size:4
 LD L, SET 0, [IX + 0x7F]       		;0xfdcb7fc5       		#size:4
-LD L, SET 1, [IX + 0x7F]       		;0xddcb7fcd       		#size:4
+LD L, SET 0, [IX + 0x7F]       		;0xddcb7fc5       		#size:4
 LD L, SET 1, [IX + 0x7F]       		;0xfdcb7fcd       		#size:4
-LD L, SET 2, [IX + 0x7F]       		;0xddcb7fd5       		#size:4
+LD L, SET 1, [IX + 0x7F]       		;0xddcb7fcd       		#size:4
 LD L, SET 2, [IX + 0x7F]       		;0xfdcb7fd5       		#size:4
-LD L, SET 3, [IX + 0x7F]       		;0xddcb7fdd       		#size:4
+LD L, SET 2, [IX + 0x7F]       		;0xddcb7fd5       		#size:4
 LD L, SET 3, [IX + 0x7F]       		;0xfdcb7fdd       		#size:4
-LD L, SET 4, [IX + 0x7F]       		;0xddcb7fe5       		#size:4
+LD L, SET 3, [IX + 0x7F]       		;0xddcb7fdd       		#size:4
 LD L, SET 4, [IX + 0x7F]       		;0xfdcb7fe5       		#size:4
-LD L, SET 5, [IX + 0x7F]       		;0xddcb7fed       		#size:4
+LD L, SET 4, [IX + 0x7F]       		;0xddcb7fe5       		#size:4
 LD L, SET 5, [IX + 0x7F]       		;0xfdcb7fed       		#size:4
-LD L, SET 6, [IX + 0x7F]       		;0xddcb7ff5       		#size:4
+LD L, SET 5, [IX + 0x7F]       		;0xddcb7fed       		#size:4
 LD L, SET 6, [IX + 0x7F]       		;0xfdcb7ff5       		#size:4
-LD L, SET 7, [IX + 0x7F]       		;0xddcb7ffd       		#size:4
+LD L, SET 6, [IX + 0x7F]       		;0xddcb7ff5       		#size:4
 LD L, SET 7, [IX + 0x7F]       		;0xfdcb7ffd       		#size:4
-LD L, SLA [IX + 0x7F]       		;0xddcb7f25       		#size:4
+LD L, SET 7, [IX + 0x7F]       		;0xddcb7ffd       		#size:4
 LD L, SLA [IX + 0x7F]       		;0xfdcb7f25       		#size:4
-LD L, SLL [IX + 0x7F]       		;0xddcb7f35       		#size:4
+LD L, SLA [IX + 0x7F]       		;0xddcb7f25       		#size:4
 LD L, SLL [IX + 0x7F]       		;0xfdcb7f35       		#size:4
-LD L, SRA [IX + 0x7F]       		;0xddcb7f2d       		#size:4
+LD L, SLL [IX + 0x7F]       		;0xddcb7f35       		#size:4
 LD L, SRA [IX + 0x7F]       		;0xfdcb7f2d       		#size:4
-LD L, SRL [IX + 0x7F]       		;0xddcb7f3d       		#size:4
+LD L, SRA [IX + 0x7F]       		;0xddcb7f2d       		#size:4
 LD L, SRL [IX + 0x7F]       		;0xfdcb7f3d       		#size:4
+LD L, SRL [IX + 0x7F]       		;0xddcb7f3d       		#size:4
 LD R, A                  		;0xed4f        		#size:2
 LD SP, 0xaaaa            		;0x31aaaa      		#size:3
 LD SP, [0xaaaa]          		;0xed7baaaa    		#size:4
@@ -911,7 +910,6 @@ LDD                      		;0xeda8        		#size:2
 LDDR                     		;0xedb8        		#size:2
 LDI                      		;0xeda0        		#size:2
 LDIR                     		;0xedb0        		#size:2
-NEG                      		;0xed44        		#size:2
 NEG                      		;0xed4c        		#size:2
 NEG                      		;0xed54        		#size:2
 NEG                      		;0xed5c        		#size:2
@@ -919,11 +917,12 @@ NEG                      		;0xed64        		#size:2
 NEG                      		;0xed6c        		#size:2
 NEG                      		;0xed74        		#size:2
 NEG                      		;0xed7c        		#size:2
+NEG                      		;0xed44        		#size:2
 NOP                      		;00            		#size:1
 OR 0xaa                  		;0xf6aa        		#size:2
 OR [HL]                  		;0xb6          		#size:1
 OR [IX + 0x7F]       		;0xddb67f       		#size:3
-OR [IX + 0x7F]       		;0xfdb67f       		#size:3
+OR [IY + 0x7F] 		;0xfdb67f       		#size:3
 OR A                     		;0xb7          		#size:1
 OR B                     		;0xb0          		#size:1
 OR C                     		;0xb1          		#size:1
@@ -961,8 +960,8 @@ PUSH HL                  		;0xe5          		#size:1
 PUSH IX                  		;0xdde5        		#size:2
 PUSH IY                  		;0xfde5        		#size:2
 RES 0, [HL]              		;0xcb86        		#size:2
-RES 0, [IX + 0x7F]       		;0xddcb7f86       		#size:4
 RES 0, [IX + 0x7F]       		;0xfdcb7f86       		#size:4
+RES 0, [IX + 0x7F]       		;0xddcb7f86       		#size:4
 RES 0, A                 		;0xcb87        		#size:2
 RES 0, B                 		;0xcb80        		#size:2
 RES 0, C                 		;0xcb81        		#size:2
@@ -971,8 +970,8 @@ RES 0, E                 		;0xcb83        		#size:2
 RES 0, H                 		;0xcb84        		#size:2
 RES 0, L                 		;0xcb85        		#size:2
 RES 1, [HL]              		;0xcb8e        		#size:2
-RES 1, [IX + 0x7F]       		;0xddcb7f8e       		#size:4
 RES 1, [IX + 0x7F]       		;0xfdcb7f8e       		#size:4
+RES 1, [IX + 0x7F]       		;0xddcb7f8e       		#size:4
 RES 1, A                 		;0xcb8f        		#size:2
 RES 1, B                 		;0xcb88        		#size:2
 RES 1, C                 		;0xcb89        		#size:2
@@ -981,8 +980,8 @@ RES 1, E                 		;0xcb8b        		#size:2
 RES 1, H                 		;0xcb8c        		#size:2
 RES 1, L                 		;0xcb8d        		#size:2
 RES 2, [HL]              		;0xcb96        		#size:2
-RES 2, [IX + 0x7F]       		;0xddcb7f96       		#size:4
 RES 2, [IX + 0x7F]       		;0xfdcb7f96       		#size:4
+RES 2, [IX + 0x7F]       		;0xddcb7f96       		#size:4
 RES 2, A                 		;0xcb97        		#size:2
 RES 2, B                 		;0xcb90        		#size:2
 RES 2, C                 		;0xcb91        		#size:2
@@ -991,8 +990,8 @@ RES 2, E                 		;0xcb93        		#size:2
 RES 2, H                 		;0xcb94        		#size:2
 RES 2, L                 		;0xcb95        		#size:2
 RES 3, [HL]              		;0xcb9e        		#size:2
-RES 3, [IX + 0x7F]       		;0xddcb7f9e       		#size:4
 RES 3, [IX + 0x7F]       		;0xfdcb7f9e       		#size:4
+RES 3, [IX + 0x7F]       		;0xddcb7f9e       		#size:4
 RES 3, A                 		;0xcb9f        		#size:2
 RES 3, B                 		;0xcb98        		#size:2
 RES 3, C                 		;0xcb99        		#size:2
@@ -1001,8 +1000,8 @@ RES 3, E                 		;0xcb9b        		#size:2
 RES 3, H                 		;0xcb9c        		#size:2
 RES 3, L                 		;0xcb9d        		#size:2
 RES 4, [HL]              		;0xcba6        		#size:2
-RES 4, [IX + 0x7F]       		;0xddcb7fa6       		#size:4
 RES 4, [IX + 0x7F]       		;0xfdcb7fa6       		#size:4
+RES 4, [IX + 0x7F]       		;0xddcb7fa6       		#size:4
 RES 4, A                 		;0xcba7        		#size:2
 RES 4, B                 		;0xcba0        		#size:2
 RES 4, C                 		;0xcba1        		#size:2
@@ -1011,8 +1010,8 @@ RES 4, E                 		;0xcba3        		#size:2
 RES 4, H                 		;0xcba4        		#size:2
 RES 4, L                 		;0xcba5        		#size:2
 RES 5, [HL]              		;0xcbae        		#size:2
-RES 5, [IX + 0x7F]       		;0xddcb7fae       		#size:4
 RES 5, [IX + 0x7F]       		;0xfdcb7fae       		#size:4
+RES 5, [IX + 0x7F]       		;0xddcb7fae       		#size:4
 RES 5, A                 		;0xcbaf        		#size:2
 RES 5, B                 		;0xcba8        		#size:2
 RES 5, C                 		;0xcba9        		#size:2
@@ -1021,8 +1020,8 @@ RES 5, E                 		;0xcbab        		#size:2
 RES 5, H                 		;0xcbac        		#size:2
 RES 5, L                 		;0xcbad        		#size:2
 RES 6, [HL]              		;0xcbb6        		#size:2
-RES 6, [IX + 0x7F]       		;0xddcb7fb6       		#size:4
 RES 6, [IX + 0x7F]       		;0xfdcb7fb6       		#size:4
+RES 6, [IX + 0x7F]       		;0xddcb7fb6       		#size:4
 RES 6, A                 		;0xcbb7        		#size:2
 RES 6, B                 		;0xcbb0        		#size:2
 RES 6, C                 		;0xcbb1        		#size:2
@@ -1031,8 +1030,8 @@ RES 6, E                 		;0xcbb3        		#size:2
 RES 6, H                 		;0xcbb4        		#size:2
 RES 6, L                 		;0xcbb5        		#size:2
 RES 7, [HL]              		;0xcbbe        		#size:2
-RES 7, [IX + 0x7F]       		;0xddcb7fbe       		#size:4
 RES 7, [IX + 0x7F]       		;0xfdcb7fbe       		#size:4
+RES 7, [IX + 0x7F]       		;0xddcb7fbe       		#size:4
 RES 7, A                 		;0xcbbf        		#size:2
 RES 7, B                 		;0xcbb8        		#size:2
 RES 7, C                 		;0xcbb9        		#size:2
@@ -1050,16 +1049,16 @@ RET PE                   		;0xe8          		#size:1
 RET PO                   		;0xe0          		#size:1
 RET Z                    		;0xc8          		#size:1
 RETI                     		;0xed4d        		#size:2
-RETN                     		;0xed45        		#size:2
 RETN                     		;0xed55        		#size:2
 RETN                     		;0xed5d        		#size:2
 RETN                     		;0xed65        		#size:2
 RETN                     		;0xed6d        		#size:2
 RETN                     		;0xed75        		#size:2
 RETN                     		;0xed7d        		#size:2
+RETN                     		;0xed45        		#size:2
 RL [HL]                  		;0xcb16        		#size:2
-RL [IX + 0x7F]       		;0xddcb7f16       		#size:4
 RL [IX + 0x7F]       		;0xfdcb7f16       		#size:4
+RL [IX + 0x7F]       		;0xddcb7f16       		#size:4
 RL A                     		;0xcb17        		#size:2
 RL B                     		;0xcb10        		#size:2
 RL C                     		;0xcb11        		#size:2
@@ -1069,8 +1068,8 @@ RL H                     		;0xcb14        		#size:2
 RL L                     		;0xcb15        		#size:2
 RLA                      		;0x17          		#size:1
 RLC [HL]                 		;0xcb06        		#size:2
-RLC [IX + 0x7F]       		;0xddcb7f06       		#size:4
 RLC [IX + 0x7F]       		;0xfdcb7f06       		#size:4
+RLC [IX + 0x7F]       		;0xddcb7f06       		#size:4
 RLC A                    		;0xcb07        		#size:2
 RLC B                    		;0xcb00        		#size:2
 RLC C                    		;0xcb01        		#size:2
@@ -1081,8 +1080,8 @@ RLC L                    		;0xcb05        		#size:2
 RLCA                     		;0x07          		#size:1
 RLD                      		;0xed6f        		#size:2
 RR [HL]                  		;0xcb1e        		#size:2
-RR [IX + 0x7F]       		;0xddcb7f1e       		#size:4
 RR [IX + 0x7F]       		;0xfdcb7f1e       		#size:4
+RR [IX + 0x7F]       		;0xddcb7f1e       		#size:4
 RR A                     		;0xcb1f        		#size:2
 RR B                     		;0xcb18        		#size:2
 RR C                     		;0xcb19        		#size:2
@@ -1092,8 +1091,8 @@ RR H                     		;0xcb1c        		#size:2
 RR L                     		;0xcb1d        		#size:2
 RRA                      		;0x1f          		#size:1
 RRC [HL]                 		;0xcb0e        		#size:2
-RRC [IX + 0x7F]       		;0xddcb7f0e       		#size:4
 RRC [IX + 0x7F]       		;0xfdcb7f0e       		#size:4
+RRC [IX + 0x7F]       		;0xddcb7f0e       		#size:4
 RRC A                    		;0xcb0f        		#size:2
 RRC B                    		;0xcb08        		#size:2
 RRC C                    		;0xcb09        		#size:2
@@ -1104,17 +1103,17 @@ RRC L                    		;0xcb0d        		#size:2
 RRCA                     		;0x0f          		#size:1
 RRD                      		;0xed67        		#size:2
 RST 0                    		;0xc7          		#size:1
-RST 10                   		;0xd7          		#size:1
-RST 18                   		;0xdf          		#size:1
-RST 20                   		;0xe7          		#size:1
-RST 28                   		;0xef          		#size:1
-RST 30                   		;0xf7          		#size:1
-RST 38                   		;0xff          		#size:1
+RST 0x10 		;0xd7       		#size:1
+RST 0x18 		;0xdf       		#size:1
+RST 0x20 		;0xe7       		#size:1
+RST 0x28 		;0xef       		#size:1
+RST 0x30 		;0xf7       		#size:1
+RST 0x38 		;0xff       		#size:1
 RST 8                    		;0xcf          		#size:1
 SBC A, 0xaa              		;0xdeaa        		#size:2
 SBC A, [HL]              		;0x9e          		#size:1
 SBC A, [IX + 0x7F]       		;0xdd9e7f       		#size:3
-SBC A, [IX + 0x7F]       		;0xfd9e7f       		#size:3
+SBC A, [IY + 0x7F] 		;0xfd9e7f       		#size:3
 SBC A, A                 		;0x9f          		#size:1
 SBC A, B                 		;0x98          		#size:1
 SBC A, C                 		;0x99          		#size:1
@@ -1132,8 +1131,8 @@ SBC HL, HL               		;0xed62        		#size:2
 SBC HL, SP               		;0xed72        		#size:2
 SCF                      		;0x37          		#size:1
 SET 0, [HL]              		;0xcbc6        		#size:2
-SET 0, [IX + 0x7F]       		;0xddcb7fc6       		#size:4
 SET 0, [IX + 0x7F]       		;0xfdcb7fc6       		#size:4
+SET 0, [IX + 0x7F]       		;0xddcb7fc6       		#size:4
 SET 0, A                 		;0xcbc7        		#size:2
 SET 0, B                 		;0xcbc0        		#size:2
 SET 0, C                 		;0xcbc1        		#size:2
@@ -1142,8 +1141,8 @@ SET 0, E                 		;0xcbc3        		#size:2
 SET 0, H                 		;0xcbc4        		#size:2
 SET 0, L                 		;0xcbc5        		#size:2
 SET 1, [HL]              		;0xcbce        		#size:2
-SET 1, [IX + 0x7F]       		;0xddcb7fce       		#size:4
 SET 1, [IX + 0x7F]       		;0xfdcb7fce       		#size:4
+SET 1, [IX + 0x7F]       		;0xddcb7fce       		#size:4
 SET 1, A                 		;0xcbcf        		#size:2
 SET 1, B                 		;0xcbc8        		#size:2
 SET 1, C                 		;0xcbc9        		#size:2
@@ -1152,8 +1151,8 @@ SET 1, E                 		;0xcbcb        		#size:2
 SET 1, H                 		;0xcbcc        		#size:2
 SET 1, L                 		;0xcbcd        		#size:2
 SET 2, [HL]              		;0xcbd6        		#size:2
-SET 2, [IX + 0x7F]       		;0xddcb7fd6       		#size:4
 SET 2, [IX + 0x7F]       		;0xfdcb7fd6       		#size:4
+SET 2, [IX + 0x7F]       		;0xddcb7fd6       		#size:4
 SET 2, A                 		;0xcbd7        		#size:2
 SET 2, B                 		;0xcbd0        		#size:2
 SET 2, C                 		;0xcbd1        		#size:2
@@ -1162,8 +1161,8 @@ SET 2, E                 		;0xcbd3        		#size:2
 SET 2, H                 		;0xcbd4        		#size:2
 SET 2, L                 		;0xcbd5        		#size:2
 SET 3, [HL]              		;0xcbde        		#size:2
-SET 3, [IX + 0x7F]       		;0xddcb7fde       		#size:4
 SET 3, [IX + 0x7F]       		;0xfdcb7fde       		#size:4
+SET 3, [IX + 0x7F]       		;0xddcb7fde       		#size:4
 SET 3, A                 		;0xcbdf        		#size:2
 SET 3, B                 		;0xcbd8        		#size:2
 SET 3, C                 		;0xcbd9        		#size:2
@@ -1172,8 +1171,8 @@ SET 3, E                 		;0xcbdb        		#size:2
 SET 3, H                 		;0xcbdc        		#size:2
 SET 3, L                 		;0xcbdd        		#size:2
 SET 4, [HL]              		;0xcbe6        		#size:2
-SET 4, [IX + 0x7F]       		;0xddcb7fe6       		#size:4
 SET 4, [IX + 0x7F]       		;0xfdcb7fe6       		#size:4
+SET 4, [IX + 0x7F]       		;0xddcb7fe6       		#size:4
 SET 4, A                 		;0xcbe7        		#size:2
 SET 4, B                 		;0xcbe0        		#size:2
 SET 4, C                 		;0xcbe1        		#size:2
@@ -1182,8 +1181,8 @@ SET 4, E                 		;0xcbe3        		#size:2
 SET 4, H                 		;0xcbe4        		#size:2
 SET 4, L                 		;0xcbe5        		#size:2
 SET 5, [HL]              		;0xcbee        		#size:2
-SET 5, [IX + 0x7F]       		;0xddcb7fee       		#size:4
 SET 5, [IX + 0x7F]       		;0xfdcb7fee       		#size:4
+SET 5, [IX + 0x7F]       		;0xddcb7fee       		#size:4
 SET 5, A                 		;0xcbef        		#size:2
 SET 5, B                 		;0xcbe8        		#size:2
 SET 5, C                 		;0xcbe9        		#size:2
@@ -1192,8 +1191,8 @@ SET 5, E                 		;0xcbeb        		#size:2
 SET 5, H                 		;0xcbec        		#size:2
 SET 5, L                 		;0xcbed        		#size:2
 SET 6, [HL]              		;0xcbf6        		#size:2
-SET 6, [IX + 0x7F]       		;0xddcb7ff6       		#size:4
 SET 6, [IX + 0x7F]       		;0xfdcb7ff6       		#size:4
+SET 6, [IX + 0x7F]       		;0xddcb7ff6       		#size:4
 SET 6, A                 		;0xcbf7        		#size:2
 SET 6, B                 		;0xcbf0        		#size:2
 SET 6, C                 		;0xcbf1        		#size:2
@@ -1202,8 +1201,8 @@ SET 6, E                 		;0xcbf3        		#size:2
 SET 6, H                 		;0xcbf4        		#size:2
 SET 6, L                 		;0xcbf5        		#size:2
 SET 7, [HL]              		;0xcbfe        		#size:2
-SET 7, [IX + 0x7F]       		;0xddcb7ffe       		#size:4
 SET 7, [IX + 0x7F]       		;0xfdcb7ffe       		#size:4
+SET 7, [IX + 0x7F]       		;0xddcb7ffe       		#size:4
 SET 7, A                 		;0xcbff        		#size:2
 SET 7, B                 		;0xcbf8        		#size:2
 SET 7, C                 		;0xcbf9        		#size:2
@@ -1212,8 +1211,8 @@ SET 7, E                 		;0xcbfb        		#size:2
 SET 7, H                 		;0xcbfc        		#size:2
 SET 7, L                 		;0xcbfd        		#size:2
 SLA [HL]                 		;0xcb26        		#size:2
-SLA [IX + 0x7F]       		;0xddcb7f26       		#size:4
 SLA [IX + 0x7F]       		;0xfdcb7f26       		#size:4
+SLA [IX + 0x7F]       		;0xddcb7f26       		#size:4
 SLA A                    		;0xcb27        		#size:2
 SLA B                    		;0xcb20        		#size:2
 SLA C                    		;0xcb21        		#size:2
@@ -1222,8 +1221,8 @@ SLA E                    		;0xcb23        		#size:2
 SLA H                    		;0xcb24        		#size:2
 SLA L                    		;0xcb25        		#size:2
 SLL [HL]                 		;0xcb36        		#size:2
-SLL [IX + 0x7F]       		;0xddcb7f36       		#size:4
 SLL [IX + 0x7F]       		;0xfdcb7f36       		#size:4
+SLL [IX + 0x7F]       		;0xddcb7f36       		#size:4
 SLL A                    		;0xcb37        		#size:2
 SLL B                    		;0xcb30        		#size:2
 SLL C                    		;0xcb31        		#size:2
@@ -1232,8 +1231,8 @@ SLL E                    		;0xcb33        		#size:2
 SLL H                    		;0xcb34        		#size:2
 SLL L                    		;0xcb35        		#size:2
 SRA [HL]                 		;0xcb2e        		#size:2
-SRA [IX + 0x7F]       		;0xddcb7f2e       		#size:4
 SRA [IX + 0x7F]       		;0xfdcb7f2e       		#size:4
+SRA [IX + 0x7F]       		;0xddcb7f2e       		#size:4
 SRA A                    		;0xcb2f        		#size:2
 SRA B                    		;0xcb28        		#size:2
 SRA C                    		;0xcb29        		#size:2
@@ -1242,8 +1241,8 @@ SRA E                    		;0xcb2b        		#size:2
 SRA H                    		;0xcb2c        		#size:2
 SRA L                    		;0xcb2d        		#size:2
 SRL [HL]                 		;0xcb3e        		#size:2
-SRL [IX + 0x7F]       		;0xddcb7f3e       		#size:4
 SRL [IX + 0x7F]       		;0xfdcb7f3e       		#size:4
+SRL [IX + 0x7F]       		;0xddcb7f3e       		#size:4
 SRL A                    		;0xcb3f        		#size:2
 SRL B                    		;0xcb38        		#size:2
 SRL C                    		;0xcb39        		#size:2
@@ -1254,7 +1253,7 @@ SRL L                    		;0xcb3d        		#size:2
 SUB 0xaa                 		;0xd6aa        		#size:2
 SUB [HL]                 		;0x96          		#size:1
 SUB [IX + 0x7F]       		;0xdd967f       		#size:3
-SUB [IX + 0x7F]       		;0xfd967f       		#size:3
+SUB [IY + 0x7F] 		;0xfd967f       		#size:3
 SUB A                    		;0x97          		#size:1
 SUB B                    		;0x90          		#size:1
 SUB C                    		;0x91          		#size:1
@@ -1269,7 +1268,7 @@ SUB YL                   		;0xfd95        		#size:2
 XOR 0xaa                 		;0xeeaa        		#size:2
 XOR [HL]                 		;0xae          		#size:1
 XOR [IX + 0x7F]       		;0xddae7f       		#size:3
-XOR [IX + 0x7F]       		;0xfdae7f       		#size:3
+XOR [IY + 0x7F] 		;0xfdae7f       		#size:3
 XOR A                    		;0xaf          		#size:1
 XOR B                    		;0xa8          		#size:1
 XOR C                    		;0xa9          		#size:1

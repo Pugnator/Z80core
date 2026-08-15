@@ -1,4 +1,14 @@
 %{
+/**
+ * @file   z80.y
+ * @brief  Z80 instruction grammar
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ * Copyright (C) 2016-2026 Lavrentiy Ivanov and the Z80core contributors
+ *
+ * This file is part of Z80core, released under the terms of the GNU General
+ * Public License version 2. See LICENSE.md for the full text.
+ */
 #define _GNU_SOURCE
 #include <common.h>
 int current_line = 1;
@@ -20,8 +30,15 @@ int current_line = 1;
 
 %start input
 
-%left '-' '+' '*' '/' '&' '%'
-%right UMINUS
+/* conventional precedence, lowest first */
+%left '|'
+%left '^'
+%left '&'
+%left SHL SHR
+%left '-' '+'
+%left '*' '/' '%'
+%precedence UMINUS
+%precedence '~'
 
 %type  <var> expr IXidx IYidx opbrk clbrk
 %type  <str> instr defb defw seqb seqw org text equ seqt expt PDREG PREG
@@ -32,9 +49,10 @@ int current_line = 1;
 %token <str> INC IND INDR INI INIR JP JR LD LDD LDDR LDI LDIR NOP OR OTDR OTIR OUT OUTD OUTI POP PUSH
 %token <str> RES RET RETN RL RLA RLC RLCA RR RRA RRC RRCA RST SBC SCF SET SLA SLL SRA SRL SUB XOR NEG
 %token <str> RETI RLD RRD END_OF_FILE
-%token <str> DEFINE DEFB DEFW STRING QSTRING
+%token <str> DEFB DEFW STRING QSTRING
 
-%token <var> BIT8 WORD DWORD QWORD DQWORD ASMPC ASMORG TEXT EQU ORG DIRECTIVE
+%token <var> BIT8 WORD DWORD QWORD DQWORD ASMPC ASMORG TEXT EQU ORG
+%token SHL SHR
 %%
 
 input:    lines
@@ -55,7 +73,6 @@ line:     stmt NL
 directive:  defb
         | defw
         | text
-        | DEFINE
 ;
 
 stmt:     instr
@@ -73,10 +90,10 @@ defw:     DEFW { DATA_PC = PC;}
 		  seqw { PC = DATA_PC;}
 ;
 
-equ:      LABEL EQU expr { tgt_label = false; $$[0] = '\0'; add_label( $1, $3 ); }
+equ:      LABEL EQU { label_unresolved = false; } expr { $$[0] = '\0'; add_label( $1, label_unresolved ? INTMAX_MIN : $4 ); label_unresolved = false; }
 ;
 
-org:      ORG expr {$$[0] = '\0'; CURRENT_ORG = PC = $2; if( CURRENT_ORG < PROG_START ) PROG_START = CURRENT_ORG; }
+org:      ORG expr {$$[0] = '\0'; set_origin($2); }
 ;
 
 text:     TEXT { DATA_PC = PC; }
@@ -92,6 +109,7 @@ expt:	  expr { defb ($1); }
 seqb:     expr {defb ($1);}
 		| QSTRING { deft($1); }
         | seqb ',' expr {defb ($3);}
+        | seqb ',' QSTRING { deft($3); }
 		
 seqw:      expr {$$[0] = '\0'; defw ($1);}
         | seqw ',' expr {$$[0] = '\0';defw ($3);}
@@ -103,14 +121,19 @@ expr:     WORD                                 { $$ = $1;}
         | DQWORD                               { $$ = $1;}
         | ASMPC                                { $$ = PC;}
         | ASMORG                               { $$ = CURRENT_ORG;}
-        | STRING                               { tgt_label = true; $$ = get_label_address($1); }
+        | STRING                               { $$ = get_label_address($1); }
         | expr '-' expr                        { $$ = $1-$3;}
         | expr '+' expr                        { $$ = $1+$3;}
         | expr '*' expr                        { $$ = $1*$3;}
-        | expr '/' expr                        { $$ = $1/$3;}
-        | expr '%' expr                        { $$ = $1%$3;}
+        | expr '/' expr                        { $$ = divide_expr($1, $3);}
+        | expr '%' expr                        { $$ = modulo_expr($1, $3);}
         | expr '&' expr                        { $$ = $1 & $3;}
+        | expr '|' expr                        { $$ = $1 | $3;}
+        | expr '^' expr                        { $$ = $1 ^ $3;}
+        | expr SHL expr                        { $$ = shift_expr($1, $3, true);}
+        | expr SHR expr                        { $$ = shift_expr($1, $3, false);}
         | '-' expr %prec UMINUS                { $$ = -$2;}
+        | '~' expr                             { $$ = ~$2;}
 ;
 
 opbrk:    '('                                  { $$=0;}
@@ -319,8 +342,8 @@ instr:    NOP                                  { TEMPLATE($$, "%s", $1); NO_ARGS
         | LD PDREG ',' expr                         { TEMPLATE($$, "%s %s, %%#.2x", $1,$2); HANDLE($$,$4,1); }
         | LD IXidx ',' REG               { TEMPLATE($$, "%s [IX + %%#.2x], %s", $1,$4); HANDLE($$,$2,1); }
         | LD IYidx ',' REG               { TEMPLATE($$, "%s [IY + %%#.2x], %s", $1,$4); HANDLE($$,$2,1); }
-        | LD IXidx ',' expr              { TEMPLATE($$, "%s [IX + %%#.2x], %%#.2x", $1); HANDLE($$,(uint16_t)$4<<8|$2,1); }
-        | LD IYidx ',' expr              { TEMPLATE($$, "%s [IY + %%#.2x], %%#.2x", $1); HANDLE($$,(uint16_t)$4<<8|$2,1); }
+        | LD IXidx ',' expr              { UNSIGN8($4); TEMPLATE($$, "%s [IX + %%#.2x], %%#.2x", $1); HANDLE($$,((uint16_t)$4<<8)|(uint8_t)$2,1); }
+        | LD IYidx ',' expr              { UNSIGN8($4); TEMPLATE($$, "%s [IY + %%#.2x], %%#.2x", $1); HANDLE($$,((uint16_t)$4<<8)|(uint8_t)$2,1); }
         | LD REG ',' RES expr ',' IXidx  { TEMPLATE($$, "%s %s, %s %jd, [IX + %%#.2x]", $1,$2,$4,$5); HANDLE($$,$7,1); }
         | LD REG ',' RES expr ',' IYidx  { TEMPLATE($$, "%s %s, %s %jd, [IY + %%#.2x]", $1,$2,$4,$5); HANDLE($$,$7,1); }
         | LD REG ',' SET expr ',' IXidx  { TEMPLATE($$, "%s %s, %s %jd, [IX + %%#.2x]", $1,$2,$4,$5); HANDLE($$,$7,1); }
@@ -345,10 +368,10 @@ instr:    NOP                                  { TEMPLATE($$, "%s", $1); NO_ARGS
 
         /* RES */
         /*###################################################################################################################*/
-        | RES BIT8 ',' IXidx             { TEMPLATE($$, "%s %jd, [IX + %%#.2x]", $1, $2); HANDLE($$,$4,1); }
-        | RES BIT8 ',' IYidx             { TEMPLATE($$, "%s %jd, [IY + %%#.2x]", $1, $2); HANDLE($$,$4,1); }
-        | RES BIT8 ',' REG                         { TEMPLATE($$, "%s %jd, %s", $1, $2, $4); HANDLE($$,0,0); }
-        | RES BIT8 ',' PDREG                        { TEMPLATE($$, "%s %jd, %s", $1, $2, $4); HANDLE($$,0,0); }
+        | RES expr ',' IXidx             { TEMPLATE($$, "%s %jd, [IX + %%#.2x]", $1, $2); HANDLE($$,$4,1); }
+        | RES expr ',' IYidx             { TEMPLATE($$, "%s %jd, [IY + %%#.2x]", $1, $2); HANDLE($$,$4,1); }
+        | RES expr ',' REG                         { TEMPLATE($$, "%s %jd, %s", $1, $2, $4); HANDLE($$,0,0); }
+        | RES expr ',' PDREG                        { TEMPLATE($$, "%s %jd, %s", $1, $2, $4); HANDLE($$,0,0); }
         /*###################################################################################################################*/
 
 
@@ -357,7 +380,7 @@ instr:    NOP                                  { TEMPLATE($$, "%s", $1); NO_ARGS
         | OR REG                          { TEMPLATE($$, "%s %s", $1, $2); HANDLE($$,0,0); }
         | OR PDREG                         { TEMPLATE($$, "%s %s", $1, $2); HANDLE($$,0,0); }
         | OR expr                         { UNSIGN8($2); TEMPLATE($$, "%s %%#.2x", $1); HANDLE($$,$2,1); }
-        | OR IXidx              { TEMPLATE($$, "%s [IY + %%#.2x]", $1); HANDLE($$,$2,1); }
+        | OR IXidx              { TEMPLATE($$, "%s [IX + %%#.2x]", $1); HANDLE($$,$2,1); }
         | OR IYidx              { TEMPLATE($$, "%s [IY + %%#.2x]", $1); HANDLE($$,$2,1); }
         /*###################################################################################################################*/
 
@@ -393,7 +416,7 @@ instr:    NOP                                  { TEMPLATE($$, "%s", $1); NO_ARGS
         /*###################################################################################################################*/
         | RL REG                          { TEMPLATE($$, "%s %s", $1, $2); HANDLE($$,0,0); }
         | RL PDREG                          { TEMPLATE($$, "%s %s", $1, $2); HANDLE($$,0,0); }
-        | RL IXidx              { TEMPLATE($$, "%s [IY + %%#.2x]", $1); HANDLE($$,$2,1); }
+        | RL IXidx              { TEMPLATE($$, "%s [IX + %%#.2x]", $1); HANDLE($$,$2,1); }
         | RL IYidx              { TEMPLATE($$, "%s [IY + %%#.2x]", $1); HANDLE($$,$2,1); }
         /*###################################################################################################################*/
 
@@ -401,7 +424,7 @@ instr:    NOP                                  { TEMPLATE($$, "%s", $1); NO_ARGS
         /*###################################################################################################################*/
         | RLC REG                          { TEMPLATE($$, "%s %s", $1, $2); HANDLE($$,0,0); }
         | RLC PDREG                          { TEMPLATE($$, "%s %s", $1, $2); HANDLE($$,0,0); }
-        | RLC IXidx              { TEMPLATE($$, "%s [IY + %%#.2x]", $1); HANDLE($$,$2,1); }
+        | RLC IXidx              { TEMPLATE($$, "%s [IX + %%#.2x]", $1); HANDLE($$,$2,1); }
         | RLC IYidx              { TEMPLATE($$, "%s [IY + %%#.2x]", $1); HANDLE($$,$2,1); }
         /*###################################################################################################################*/
 
@@ -409,7 +432,7 @@ instr:    NOP                                  { TEMPLATE($$, "%s", $1); NO_ARGS
         /*###################################################################################################################*/
         | RR REG                          { TEMPLATE($$, "%s %s", $1, $2); HANDLE($$,0,0); }
         | RR PDREG                          { TEMPLATE($$, "%s %s", $1, $2); HANDLE($$,0,0); }
-        | RR IXidx              { TEMPLATE($$, "%s [IY + %%#.2x]", $1); HANDLE($$,$2,1); }
+        | RR IXidx              { TEMPLATE($$, "%s [IX + %%#.2x]", $1); HANDLE($$,$2,1); }
         | RR IYidx              { TEMPLATE($$, "%s [IY + %%#.2x]", $1); HANDLE($$,$2,1); }
         /*###################################################################################################################*/
 
@@ -417,7 +440,7 @@ instr:    NOP                                  { TEMPLATE($$, "%s", $1); NO_ARGS
         /*###################################################################################################################*/
         | RRC REG                          { TEMPLATE($$, "%s %s", $1, $2); HANDLE($$,0,0); }
         | RRC PDREG                          { TEMPLATE($$, "%s %s", $1, $2); HANDLE($$,0,0); }
-        | RRC IXidx              { TEMPLATE($$, "%s [IY + %%#.2x]", $1); HANDLE($$,$2,1); }
+        | RRC IXidx              { TEMPLATE($$, "%s [IX + %%#.2x]", $1); HANDLE($$,$2,1); }
         | RRC IYidx              { TEMPLATE($$, "%s [IY + %%#.2x]", $1); HANDLE($$,$2,1); }
         /*###################################################################################################################*/
 
@@ -432,23 +455,23 @@ instr:    NOP                                  { TEMPLATE($$, "%s", $1); NO_ARGS
         | SBC DREG ',' DREG                          { TEMPLATE($$, "%s %s, %s", $1, $2,$4); HANDLE($$,0,0); }
         | SBC REG ',' PDREG                         { TEMPLATE($$, "%s %s, %s", $1, $2,$4); HANDLE($$,0,0); }
         | SBC REG ',' expr                         { TEMPLATE($$, "%s %s, %%#.2x", $1, $2); HANDLE($$,$4,1); }
-        | SBC REG ',' IXidx              { TEMPLATE($$, "%s %s, [IY + %%#.2x]", $1,$2); HANDLE($$,$4,1); }
+        | SBC REG ',' IXidx              { TEMPLATE($$, "%s %s, [IX + %%#.2x]", $1,$2); HANDLE($$,$4,1); }
         | SBC REG ',' IYidx              { TEMPLATE($$, "%s %s, [IY + %%#.2x]", $1,$2); HANDLE($$,$4,1); }
         /*###################################################################################################################*/
 
         /* SET */
         /*###################################################################################################################*/
-        | SET BIT8 ',' IXidx                    { TEMPLATE($$, "%s %jd, [IX + %%#.2x]", $1, $2); HANDLE($$,$4,1); }
-        | SET BIT8 ',' IYidx                    { TEMPLATE($$, "%s %jd, [IY + %%#.2x]", $1, $2); HANDLE($$,$4,1); }
-        | SET BIT8 ',' REG                    { TEMPLATE($$, "%s %jd, %s", $1, $2, $4); HANDLE($$,0,0); }
-        | SET BIT8 ',' PDREG                    { TEMPLATE($$, "%s %jd, %s", $1, $2, $4); HANDLE($$,0,0); }
+        | SET expr ',' IXidx                    { TEMPLATE($$, "%s %jd, [IX + %%#.2x]", $1, $2); HANDLE($$,$4,1); }
+        | SET expr ',' IYidx                    { TEMPLATE($$, "%s %jd, [IY + %%#.2x]", $1, $2); HANDLE($$,$4,1); }
+        | SET expr ',' REG                    { TEMPLATE($$, "%s %jd, %s", $1, $2, $4); HANDLE($$,0,0); }
+        | SET expr ',' PDREG                    { TEMPLATE($$, "%s %jd, %s", $1, $2, $4); HANDLE($$,0,0); }
         /*###################################################################################################################*/
 
         /* SLA */
         /*###################################################################################################################*/
         | SLA REG                          { TEMPLATE($$, "%s %s", $1, $2); HANDLE($$,0,0); }
         | SLA PDREG                          { TEMPLATE($$, "%s %s", $1, $2); HANDLE($$,0,0); }
-        | SLA IXidx              { TEMPLATE($$, "%s [IY + %%#.2x]", $1); HANDLE($$,$2,1); }
+        | SLA IXidx              { TEMPLATE($$, "%s [IX + %%#.2x]", $1); HANDLE($$,$2,1); }
         | SLA IYidx              { TEMPLATE($$, "%s [IY + %%#.2x]", $1); HANDLE($$,$2,1); }
         /*###################################################################################################################*/
 
@@ -456,7 +479,7 @@ instr:    NOP                                  { TEMPLATE($$, "%s", $1); NO_ARGS
         /*###################################################################################################################*/
         | SLL REG                          { TEMPLATE($$, "%s %s", $1, $2); HANDLE($$,0,0); }
         | SLL PDREG                          { TEMPLATE($$, "%s %s", $1, $2); HANDLE($$,0,0); }
-        | SLL IXidx              { TEMPLATE($$, "%s [IY + %%#.2x]", $1); HANDLE($$,$2,1); }
+        | SLL IXidx              { TEMPLATE($$, "%s [IX + %%#.2x]", $1); HANDLE($$,$2,1); }
         | SLL IYidx              { TEMPLATE($$, "%s [IY + %%#.2x]", $1); HANDLE($$,$2,1); }
         /*###################################################################################################################*/
 
@@ -464,7 +487,7 @@ instr:    NOP                                  { TEMPLATE($$, "%s", $1); NO_ARGS
         /*###################################################################################################################*/
         | SRA REG                          { TEMPLATE($$, "%s %s", $1, $2); HANDLE($$,0,0); }
         | SRA PDREG                          { TEMPLATE($$, "%s %s", $1, $2); HANDLE($$,0,0); }
-        | SRA IXidx              { TEMPLATE($$, "%s [IY + %%#.2x]", $1); HANDLE($$,$2,1); }
+        | SRA IXidx              { TEMPLATE($$, "%s [IX + %%#.2x]", $1); HANDLE($$,$2,1); }
         | SRA IYidx              { TEMPLATE($$, "%s [IY + %%#.2x]", $1); HANDLE($$,$2,1); }
         /*###################################################################################################################*/
 
@@ -472,7 +495,7 @@ instr:    NOP                                  { TEMPLATE($$, "%s", $1); NO_ARGS
         /*###################################################################################################################*/
         | SRL REG                          { TEMPLATE($$, "%s %s", $1, $2); HANDLE($$,0,0); }
         | SRL PDREG                          { TEMPLATE($$, "%s %s", $1, $2); HANDLE($$,0,0); }
-        | SRL IXidx              { TEMPLATE($$, "%s [IY + %%#.2x]", $1); HANDLE($$,$2,1); }
+        | SRL IXidx              { TEMPLATE($$, "%s [IX + %%#.2x]", $1); HANDLE($$,$2,1); }
         | SRL IYidx              { TEMPLATE($$, "%s [IY + %%#.2x]", $1); HANDLE($$,$2,1); }
         /*###################################################################################################################*/
 
@@ -481,7 +504,7 @@ instr:    NOP                                  { TEMPLATE($$, "%s", $1); NO_ARGS
         | SUB expr                          { TEMPLATE($$, "%s %%#.2x", $1); HANDLE($$,$2,1); }
         | SUB PDREG                          { TEMPLATE($$, "%s %s", $1, $2); HANDLE($$,0,0); }
         | SUB REG                          { TEMPLATE($$, "%s %s", $1, $2); HANDLE($$,0,0); }
-        | SUB IXidx              { TEMPLATE($$, "%s [IY + %%#.2x]", $1); HANDLE($$,$2,1); }
+        | SUB IXidx              { TEMPLATE($$, "%s [IX + %%#.2x]", $1); HANDLE($$,$2,1); }
         | SUB IYidx              { TEMPLATE($$, "%s [IY + %%#.2x]", $1); HANDLE($$,$2,1); }
         /*###################################################################################################################*/
 
@@ -490,7 +513,7 @@ instr:    NOP                                  { TEMPLATE($$, "%s", $1); NO_ARGS
         | XOR expr                          { TEMPLATE($$, "%s %%#.2x", $1); HANDLE($$,$2,1); }
         | XOR PDREG                          { TEMPLATE($$, "%s %s", $1, $2); HANDLE($$,0,0); }
         | XOR REG                          { TEMPLATE($$, "%s %s", $1, $2); HANDLE($$,0,0); }
-        | XOR IXidx              { TEMPLATE($$, "%s [IY + %%#.2x]", $1); HANDLE($$,$2,1); }
+        | XOR IXidx              { TEMPLATE($$, "%s [IX + %%#.2x]", $1); HANDLE($$,$2,1); }
         | XOR IYidx              { TEMPLATE($$, "%s [IY + %%#.2x]", $1); HANDLE($$,$2,1); }
         /*###################################################################################################################*/
 ;

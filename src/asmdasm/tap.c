@@ -1,3 +1,14 @@
+/**
+ * @file   tap.c
+ * @brief  ZX Spectrum .tap image writer
+ *
+ * SPDX-License-Identifier: GPL-2.0-only
+ * Copyright (C) 2016-2026 Lavrentiy Ivanov and the Z80core contributors
+ *
+ * This file is part of Z80core, released under the terms of the GNU General
+ * Public License version 2. See LICENSE.md for the full text.
+ */
+
 #include <stdio.h>
 #include <tap.h>
 
@@ -209,18 +220,24 @@ int tap_create(struct t_tap_info *p_tap, FILE *out)
     l += DATA_HDR_OFFSET;
 
     /* write all headers to file */
-    if (fwrite(p, 1, l, out) != l)
+    if (fwrite(p, 1, l, out) != (size_t)l)
+    {
         return -1;
+    }
 
     /* write actual rom data */
     if (p_tap->rom)
     {
         if (fwrite(p_tap->rom, 1, p_tap->rom_size, out) != p_tap->rom_size)
+        {
             return -1;
+        }
     }
     /* write xor8 checksum */
     if (fwrite(&xor8, 1, 1, out) != 1)
+    {
         return -1;
+    }
     fflush(out);
     /* return actual tap file size */
     return l + p_tap->rom_size + 1;

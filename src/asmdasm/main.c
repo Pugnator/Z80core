@@ -1,10 +1,12 @@
 /**
- *
  * @file   main.c
- * @date   16.03.2018
- * @license This project is released under the GPL 2 license.
- * @brief main file
+ * @brief  Command line entry point
  *
+ * SPDX-License-Identifier: GPL-2.0-only
+ * Copyright (C) 2016-2026 Lavrentiy Ivanov and the Z80core contributors
+ *
+ * This file is part of Z80core, released under the terms of the GNU General
+ * Public License version 2. See LICENSE.md for the full text.
  */
 
 #include <stdarg.h>
@@ -18,15 +20,15 @@ int verbose = 0;
 
 void usage(void)
 {
-    const char *help =
-        "USAGE:\r\n"
-        "[-s | --source] source filename\r\n"
-        "[-o | --output] output filename\r\n"
-        "[-t | --test]\r\n"
-        "[-d | --disassemble] filename of the binary to disassemble\r\n"
-        "[-x | --xformat] output file format\r\n"
-        "[-v | --verbose] verbose output\r\n"
-        "[-r | --report] print completion summary";
+    const char *help = "USAGE:\r\n"
+                       "[-s | --source] source filename\r\n"
+                       "[-o | --output] output filename\r\n"
+                       "[-t | --test]\r\n"
+                       "[-d | --disassemble] disassemble the source file instead of assembling\r\n"
+                       "[-x | --format] output file format: bin (default), tap, ihex\r\n"
+                       "[-v | --verbose] verbose output\r\n"
+                       "[-r | --report] print completion summary\r\n"
+                       "[-h | --help] print this help";
     puts(help);
 }
 
@@ -54,6 +56,7 @@ bool assembly_listing(char *filename, char *output_filename, char *output_format
     if (read != sz)
     {
         puts("Failed to read input file");
+        free(source_listing);
         return false;
     }
     /* make null terminated string */
@@ -84,16 +87,15 @@ int main(int argc, char **argv)
 #if defined(__GNUC__) || defined(__MINGW32__)
     int option_index = 0;
     int test = 0;
-    struct option long_options[] =
-        {
-            {"verbose", no_argument, &verbose, 1},
-            {"report", no_argument, &report, 1},
-            {"disassemble", no_argument, &dasm, 0},
-            {"source", required_argument, 0, 's'},
-            {"output", required_argument, 0, 'o'},
-            {"format", required_argument, 0, 'x'},
-            {"test", required_argument, &test, 't'},
-            {NULL, 0, 0, 0}};
+    struct option long_options[] = {{"verbose", no_argument, &verbose, 1},
+                                    {"report", no_argument, &report, 1},
+                                    {"disassemble", no_argument, &dasm, 1},
+                                    {"source", required_argument, 0, 's'},
+                                    {"output", required_argument, 0, 'o'},
+                                    {"format", required_argument, 0, 'x'},
+                                    {"test", no_argument, &test, 1},
+                                    {"help", no_argument, 0, 'h'},
+                                    {NULL, 0, 0, 0}};
     while ((opt = getopt_long(argc, argv, "x:hs:o:tdvr", long_options, &option_index)) != -1)
 #else
     while ((opt = _getopt(argc, argv, "x:hs:o:tdvr")) != -1)
@@ -103,6 +105,18 @@ int main(int argc, char **argv)
         {
         case 'x':
             output_fmt = optarg;
+            if (output_fmt && 0 == strcmp(output_fmt, "format"))
+            {
+                if (optind < argc)
+                {
+                    output_fmt = argv[optind++];
+                }
+                else
+                {
+                    puts("Missing argument for -xformat option");
+                    return 1;
+                }
+            }
             break;
         case 'v':
             verbose = 1;
@@ -142,21 +156,33 @@ int main(int argc, char **argv)
         */
     }
 
-    if (dasm && source)
+    if (!source)
     {
-        disassembly_listing(source);
+        puts("No source file given");
+        usage();
+        return EXIT_FAILURE;
     }
 
-    if (!source || !target)
+    if (dasm)
     {
-        return 1;
+        return disassembly_listing(source) ? EXIT_SUCCESS : EXIT_FAILURE;
     }
-    int result = assembly_listing(source, target, output_fmt);
-    bool success = (0 == result);
-    if (success && report && PASS2 == run_pass && assembled_bytes > 0)
+
+    if (!target)
+    {
+        puts("No output file given");
+        usage();
+        return EXIT_FAILURE;
+    }
+
+    if (!assembly_listing(source, target, output_fmt))
+    {
+        return EXIT_FAILURE;
+    }
+    if (report)
     {
         printf("Assembled %zu bytes to %s (%s)\n", assembled_bytes, target, output_fmt);
     }
 
-    return result;
+    return EXIT_SUCCESS;
 }

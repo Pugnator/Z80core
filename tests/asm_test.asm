@@ -64,7 +64,7 @@ BIT 0, E                 		;0xcb43        		#size:2
 BIT 0, H                 		;0xcb44        		#size:2
 BIT 0, L                 		;0xcb45        		#size:2
 BIT 0, [HL]              		;0xcb46        		#size:2
-BIT 0, [IX + 0x7F]       		;0xddcb7f41       		#size:4
+BIT 0, [IX + 0x7F]		;0xddcb7f46       		#size:4
 BIT 1, A                 		;0xcb4f        		#size:2
 BIT 1, B                 		;0xcb48        		#size:2
 BIT 1, C                 		;0xcb49        		#size:2
@@ -73,7 +73,7 @@ BIT 1, E                 		;0xcb4b        		#size:2
 BIT 1, H                 		;0xcb4c        		#size:2
 BIT 1, L                 		;0xcb4d        		#size:2
 BIT 1, [HL]              		;0xcb4e        		#size:2
-BIT 1, [IX + 0x7F]       		;0xddcb7f48       		#size:4
+BIT 1, [IX + 0x7F]		;0xddcb7f4e       		#size:4
 BIT 2, A                 		;0xcb57        		#size:2
 BIT 2, B                 		;0xcb50        		#size:2
 BIT 2, C                 		;0xcb51        		#size:2
@@ -82,7 +82,7 @@ BIT 2, E                 		;0xcb53        		#size:2
 BIT 2, H                 		;0xcb54        		#size:2
 BIT 2, L                 		;0xcb55        		#size:2
 BIT 2, [HL]              		;0xcb56        		#size:2
-BIT 2, [IX + 0x7F]       		;0xddcb7f55       		#size:4
+BIT 2, [IX + 0x7F]		;0xddcb7f56       		#size:4
 BIT 3, A                 		;0xcb5f        		#size:2
 BIT 3, B                 		;0xcb58        		#size:2
 BIT 3, C                 		;0xcb59        		#size:2
@@ -91,7 +91,7 @@ BIT 3, E                 		;0xcb5b        		#size:2
 BIT 3, H                 		;0xcb5c        		#size:2
 BIT 3, L                 		;0xcb5d        		#size:2
 BIT 3, [HL]              		;0xcb5e        		#size:2
-BIT 3, [IX + 0x7F]       		;0xddcb7f5f       		#size:4
+BIT 3, [IX + 0x7F]		;0xddcb7f5e       		#size:4
 BIT 4, A                 		;0xcb67        		#size:2
 BIT 4, B                 		;0xcb60        		#size:2
 BIT 4, C                 		;0xcb61        		#size:2
@@ -100,7 +100,7 @@ BIT 4, E                 		;0xcb63        		#size:2
 BIT 4, H                 		;0xcb64        		#size:2
 BIT 4, L                 		;0xcb65        		#size:2
 BIT 4, [HL]              		;0xcb66        		#size:2
-BIT 4, [IX + 0x7F]       		;0xddcb7f65       		#size:4
+BIT 4, [IX + 0x7F]		;0xddcb7f66       		#size:4
 BIT 5, A                 		;0xcb6f        		#size:2
 BIT 5, B                 		;0xcb68        		#size:2
 BIT 5, C                 		;0xcb69        		#size:2
@@ -109,7 +109,7 @@ BIT 5, E                 		;0xcb6b        		#size:2
 BIT 5, H                 		;0xcb6c        		#size:2
 BIT 5, L                 		;0xcb6d        		#size:2
 BIT 5, [HL]              		;0xcb6e        		#size:2
-BIT 5, [IX + 0x7F]       		;0xddcb7f6b       		#size:4
+BIT 5, [IX + 0x7F]		;0xddcb7f6e       		#size:4
 BIT 6, A                 		;0xcb77        		#size:2
 BIT 6, B                 		;0xcb70        		#size:2
 BIT 6, C                 		;0xcb71        		#size:2
@@ -118,7 +118,7 @@ BIT 6, E                 		;0xcb73        		#size:2
 BIT 6, H                 		;0xcb74        		#size:2
 BIT 6, L                 		;0xcb75        		#size:2
 BIT 6, [HL]              		;0xcb76        		#size:2
-BIT 6, [IX + 0x7F]       		;0xddcb7f70       		#size:4
+BIT 6, [IX + 0x7F]		;0xddcb7f76       		#size:4
 BIT 7, A                 		;0xcb7f        		#size:2
 BIT 7, B                 		;0xcb78        		#size:2
 BIT 7, C                 		;0xcb79        		#size:2
@@ -127,7 +127,7 @@ BIT 7, E                 		;0xcb7b        		#size:2
 BIT 7, H                 		;0xcb7c        		#size:2
 BIT 7, L                 		;0xcb7d        		#size:2
 BIT 7, [HL]              		;0xcb7e        		#size:2
-BIT 7, [IX + 0x7F]       		;0xddcb7f7d       		#size:4
+BIT 7, [IX + 0x7F]		;0xddcb7f7e       		#size:4
 CALL 0xaaaa              		;0xcdaaaa      		#size:3
 CALL C, 0xaaaa           		;0xdcaaaa      		#size:3
 CALL M, 0xaaaa           		;0xfcaaaa      		#size:3
@@ -178,7 +178,7 @@ DEC YL                   		;0xfd2d        		#size:2
 DEC [HL]                 		;0x35          		#size:1
 DEC [IX + 0x7F]       		;0xdd357f       		#size:3
 DI                       		;0xf3          		#size:1
-DJNZ 0                		;0x100        		#size:2
+DJNZ 0		;0x10fe       		#size:2
 EI                       		;0xfb          		#size:1
 EX AF, AF'               		;0x08          		#size:1
 EX DE, HL                		;0xeb          		#size:1
@@ -187,8 +187,8 @@ EX [SP], IX              		;0xdde3        		#size:2
 EX [SP], IY              		;0xfde3        		#size:2
 EXX                      		;0xd9          		#size:1
 HALT                     		;0x76          		#size:1
-IM 0                     		;0xed66        		#size:2
-IM 1                     		;0xed76        		#size:2
+IM 0		;0xed46       		#size:2
+IM 1		;0xed56       		#size:2
 IM 2                     		;0xed5e        		#size:2
 IN A, [0xaa]             		;0xdbaa        		#size:2
 IN A, [C]                		;0xed78        		#size:2
@@ -199,7 +199,6 @@ IN E, [C]                		;0xed58        		#size:2
 IN F, [C]                		;0xed70        		#size:2
 IN H, [C]                		;0xed60        		#size:2
 IN L, [C]                		;0xed68        		#size:2
-IN [C], [C]              		;0xed70        		#size:2
 INC A                    		;0x3c          		#size:1
 INC B                    		;0x04          		#size:1
 INC BC                   		;0x03          		#size:1
@@ -235,11 +234,11 @@ JP Z, 0xaaaa             		;0xcaaaaa      		#size:3
 JP [HL]                  		;0xe9          		#size:1
 JP [IX]                  		;0xdde9        		#size:2
 JP [IY]                  		;0xfde9        		#size:2
-JR 7f                  		;0x187f        		#size:2
-JR C, 7f               		;0x387f        		#size:2
-JR NC, 7f              		;0x307f        		#size:2
-JR NZ, 7f              		;0x207f        		#size:2
-JR Z, 7f               		;0x287f        		#size:2
+JR 0x7f 		;0x187d       		#size:2
+JR C, 0x7f 		;0x387d       		#size:2
+JR NC, 0x7f 		;0x307d       		#size:2
+JR NZ, 0x7f 		;0x207d       		#size:2
+JR Z, 0x7f 		;0x287d       		#size:2
 LD A, 0xaa               		;0x3eaa        		#size:2
 LD A, A                  		;0x7f          		#size:1
 LD A, B                  		;0x78          		#size:1
@@ -474,7 +473,7 @@ LD H, SRL [IX + 0x7F]       		;0xddcb7f3c       		#size:4
 LD H, [HL]               		;0x66          		#size:1
 LD H, [IX + 0x7F]       		;0xdd667f       		#size:3
 LD HL, 0xaaaa            		;0x21aaaa      		#size:3
-LD HL, [0xaaaa]          		;0xed6baaaa    		#size:4
+LD HL, [0xaaaa]          		;0x2aaaaa      		#size:3
 LD I, A                  		;0xed47        		#size:2
 LD IX, 0xaaaa            		;0xdd21aaaa    		#size:4
 LD IX, [0xaaaa]          		;0xdd2aaaaa    		#size:4
@@ -555,7 +554,7 @@ LD YL, YL                		;0xfd6d        		#size:2
 LD [0xaaaa], A           		;0x32aaaa      		#size:3
 LD [0xaaaa], BC          		;0xed43aaaa    		#size:4
 LD [0xaaaa], DE          		;0xed53aaaa    		#size:4
-LD [0xaaaa], HL          		;0xed63aaaa    		#size:4
+LD [0xaaaa], HL          		;0x22aaaa      		#size:3
 LD [0xaaaa], IX          		;0xdd22aaaa    		#size:4
 LD [0xaaaa], IY          		;0xfd22aaaa    		#size:4
 LD [0xaaaa], SP          		;0xed73aaaa    		#size:4
@@ -569,7 +568,8 @@ LD [HL], D               		;0x72          		#size:1
 LD [HL], E               		;0x73          		#size:1
 LD [HL], H               		;0x74          		#size:1
 LD [HL], L               		;0x75          		#size:1
-LD [IX + 0x7F], 0xaa       		;0xdd367f       		#size:3
+LD [IX + 0x7F], 0xaa		;0xdd367faa       		#size:4
+LD [IY + 0x7F], 0xaa 		;0xfd367faa       		#size:4
 LD [IX + 0x7F], A       		;0xdd777f       		#size:3
 LD [IX + 0x7F], B       		;0xdd707f       		#size:3
 LD [IX + 0x7F], C       		;0xdd717f       		#size:3
@@ -581,7 +581,7 @@ LDD                      		;0xeda8        		#size:2
 LDDR                     		;0xedb8        		#size:2
 LDI                      		;0xeda0        		#size:2
 LDIR                     		;0xedb0        		#size:2
-NEG                      		;0xed7c        		#size:2
+NEG		;0xed44       		#size:2
 NOP                      		;00            		#size:1
 OR 0xaa                  		;0xf6aa        		#size:2
 OR A                     		;0xb7          		#size:1
@@ -596,7 +596,8 @@ OR XL                    		;0xddb5        		#size:2
 OR YH                    		;0xfdb4        		#size:2
 OR YL                    		;0xfdb5        		#size:2
 OR [HL]                  		;0xb6          		#size:1
-OR [IX + 0x7F]       		;0xfdb67f       		#size:3
+OR [IX + 0x7F]		;0xddb67f       		#size:3
+OR [IY + 0x7F] 		;0xfdb67f       		#size:3
 OTDR                     		;0xedbb        		#size:2
 OTIR                     		;0xedb3        		#size:2
 OUT [0xaa], A            		;0xd3aa        		#size:2
@@ -748,12 +749,12 @@ RRC [IX + 0x7F]       		;0xddcb7f0e       		#size:4
 RRCA                     		;0x0f          		#size:1
 RRD                      		;0xed67        		#size:2
 RST 0                    		;0xc7          		#size:1
-RST 10                   		;0xd7          		#size:1
-RST 18                   		;0xdf          		#size:1
-RST 20                   		;0xe7          		#size:1
-RST 28                   		;0xef          		#size:1
-RST 30                   		;0xf7          		#size:1
-RST 38                   		;0xff          		#size:1
+RST 0x10 		;0xd7       		#size:1
+RST 0x18 		;0xdf       		#size:1
+RST 0x20 		;0xe7       		#size:1
+RST 0x28 		;0xef       		#size:1
+RST 0x30 		;0xf7       		#size:1
+RST 0x38 		;0xff       		#size:1
 RST 8                    		;0xcf          		#size:1
 SBC A, 0xaa              		;0xdeaa        		#size:2
 SBC A, A                 		;0x9f          		#size:1
@@ -768,7 +769,8 @@ SBC A, XL                		;0xdd9d        		#size:2
 SBC A, YH                		;0xfd9c        		#size:2
 SBC A, YL                		;0xfd9d        		#size:2
 SBC A, [HL]              		;0x9e          		#size:1
-SBC A, [IX + 0x7F]       		;0xfd9e7f       		#size:3
+SBC A, [IX + 0x7F]		;0xdd9e7f       		#size:3
+SBC A, [IY + 0x7F] 		;0xfd9e7f       		#size:3
 SBC HL, BC               		;0xed42        		#size:2
 SBC HL, DE               		;0xed52        		#size:2
 SBC HL, HL               		;0xed62        		#size:2
@@ -895,7 +897,8 @@ SUB XL                   		;0xdd95        		#size:2
 SUB YH                   		;0xfd94        		#size:2
 SUB YL                   		;0xfd95        		#size:2
 SUB [HL]                 		;0x96          		#size:1
-SUB [IX + 0x7F]       		;0xfd967f       		#size:3
+SUB [IX + 0x7F]		;0xdd967f       		#size:3
+SUB [IY + 0x7F] 		;0xfd967f       		#size:3
 XOR 0xaa                 		;0xeeaa        		#size:2
 XOR A                    		;0xaf          		#size:1
 XOR B                    		;0xa8          		#size:1
@@ -909,4 +912,5 @@ XOR XL                   		;0xddad        		#size:2
 XOR YH                   		;0xfdac        		#size:2
 XOR YL                   		;0xfdad        		#size:2
 XOR [HL]                 		;0xae          		#size:1
-XOR [IX + 0x7F]       		;0xfdae7f       		#size:3
+XOR [IX + 0x7F]		;0xddae7f       		#size:3
+XOR [IY + 0x7F] 		;0xfdae7f       		#size:3

@@ -1,0 +1,90 @@
+name: CI
+
+# Build and test every pull request aimed at master, and master itself.
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  linux:
+    name: Build and test (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bison flex ninja-build
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Configure
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  windows:
+    name: Build and test (Windows)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          # python comes from msys2 as well, so every step in this job uses
+          # the same environment
+          install: >-
+            bison
+            flex
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-python
+
+      - name: Configure
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  format:
+    name: Code style
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      # Pinned: clang-format's output changes between releases, and an
+      # unpinned one would fail on formatting that is correct for the version
+      # the tree was formatted with.
+      - name: Install clang-format
+        run: pip install clang-format==21.1.0
+
+      - name: Check formatting of hand-written sources
+        run: |
+          # The parser and scanner are generated into the build tree and
+          # uthash.h is vendored; see docs/CODE-STYLE.md for what is in scope.
+          files=$(git ls-files '*.c' '*.cc' '*.h' '*.hpp' | grep -v 'uthash.h')
+          echo "$files"
+          clang-format --dry-run --Werror $files

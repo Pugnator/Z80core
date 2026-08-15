@@ -1,6 +1,5 @@
 #include "../include/resources.h"
-AppIcon ICON "../external/logo.ico"
-id ICON "../external/logo.ico"
+AppIcon ICON "../logo.ico"
 
 // Executable version information.
 1 VERSIONINFO
@@ -25,7 +24,7 @@ BEGIN
             VALUE "FileDescription", "Z80 emulator"
             VALUE "FileVersion", STRFILEVER
             VALUE "InternalName", "Z80 (Dis)Assembler"
-            VALUE "LegalCopyright", "©2018 Lavrentiy Ivanov"
+            VALUE "LegalCopyright", "ï¿½2018 Lavrentiy Ivanov"
             VALUE "OriginalFilename", "zasm.exe"
             VALUE "ProductName", "Z80 (Dis)Assembler"
             VALUE "ProductVersion", STRPRODUCTVER
