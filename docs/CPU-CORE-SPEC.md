@@ -2,11 +2,12 @@
 
 Status: **draft for review**. Nothing is implemented yet.
 
-This describes `z80core`, a self-contained, externally clocked, clock-precise
-Z80 CPU model written in Lua. It is the CPU and nothing else: no memory, no
-devices, no video, no sound, no scheduler. A host drives its clock, reads its
-pins, and answers its bus requests. Put a memory map and a GPU kernel beside it
-and you have a virtual machine; on its own it is a chip.
+This describes `z80core`, a self-contained, externally clocked, edge-precise
+Z80 CPU model written in Lua, living in `src/emucore/lua/`. It is the CPU and
+nothing else: no memory, no devices, no video, no sound, no scheduler. A host
+drives its clock one edge at a time, reads its pins, and answers its bus
+requests. Put a memory map and a GPU kernel beside it and you have a virtual
+machine; on its own it is a chip.
 
 ---
 
@@ -20,7 +21,7 @@ and you have a virtual machine; on its own it is a chip.
 - Bus and control pins, driven and sampled with correct timing.
 - Interrupt (`INT`), non-maskable interrupt (`NMI`), `RESET`, `WAIT`,
   `BUSRQ`/`BUSAK`, `HALT`, `RFSH`.
-- Cycle-exact behaviour at T-state granularity, including the internal
+- Cycle-exact behaviour at clock-edge granularity, including the internal
   (no-bus-activity) cycles of every instruction.
 - Snapshot and restore of the entire state.
 
@@ -63,15 +64,25 @@ Consequence: "runs virtually everywhere" means "everywhere the chosen Lua
 runtime runs". Shipping a C library therefore means shipping the interpreter
 inside it — see [section 11](#11-packaging).
 
-### D2 — Pin-level, one call per T-state
+### D2 — Pin-level, one call per clock **edge**
 
-`tick()` advances the CPU by exactly one T-state. The host observes and drives
-pins between ticks. This mirrors the real part, makes `WAIT` states and machine
-specific contention a host concern rather than a core concern, and is the
-interface a VM wants when a GPU kernel shares the same clock.
+`tick()` advances the CPU by exactly one clock edge: half a T-state. The host
+observes and drives pins between ticks. This mirrors the real part, makes
+`WAIT` states and machine-specific contention a host concern rather than a core
+concern, and is the interface a VM wants when a GPU kernel shares the same
+clock.
 
-Consequence: this is the slowest possible interface, one cross-boundary
-interaction per clock. Section 10 makes the cost budget explicit.
+Edges rather than whole T-states because that is where the chip actually acts.
+`/MREQ` and `/RD` fall half a cycle after the address is valid; `/WAIT` is
+sampled on a falling edge; an I/O cycle differs from a memory cycle precisely
+by asserting `/IORQ` half a cycle later. A T-state-granular model has to
+approximate all of that, and anything sharing the bus at sub-cycle resolution
+would see the approximation.
+
+Consequence: this is the most demanding interface possible — two cross-boundary
+interactions per clock cycle, so 7 million per second at 3.5 MHz. Section 10
+makes the cost budget explicit, and Phase 1 measures it before the instruction
+set is written.
 
 ### D3 — Everything, undocumented included
 
@@ -150,13 +161,23 @@ a CPU.
 ### 4.2 The tick
 
 ```lua
-cpu:tick()      -- advance exactly one T-state
+cpu:tick()      -- advance exactly one clock edge (half a T-state)
 ```
 
-`tick()` reads the input pins, advances the machine by one T-state, and updates
-the output pins. It never calls into the host, never allocates, and never
-yields. Everything the host needs to know is in the pins afterwards; everything
-the core needs to know the host puts in the pins beforehand.
+`tick()` reads the input pins, advances the machine to the next clock edge, and
+updates the output pins. It never calls into the host, never allocates, and
+never yields. Everything the host needs to know is in the pins afterwards;
+everything the core needs to know the host puts in the pins beforehand.
+
+Two ticks make one T-state. `pins.CLK` carries the level the core has just
+moved to — `1` after a rising edge, `0` after a falling edge — so a host that
+cares about edges can tell them apart, and one that does not can simply tick
+twice.
+
+The core owns the clock's phase rather than taking a level from the host. A
+host-driven level would allow illegal sequences (the same level twice, edges
+skipped) and would cost a comparison on the hottest path in the system, to
+express something the core already knows.
 
 A host loop looks like this:
 
@@ -165,20 +186,25 @@ while running do
   -- 1. present inputs
   cpu.pins.INT = irq_line
 
-  -- 2. advance one clock
+  -- 2. advance one clock edge
   cpu:tick()
 
   -- 3. answer the bus
   local p = cpu.pins
   if p.MREQ and p.RD then
-    p.D = memory[p.A]
+    p.D = memory[p.A]         -- must be valid before the sampling edge
   elseif p.MREQ and p.WR then
-    memory[p.A] = p.D
+    memory[p.A] = p.D         -- latch while WR is asserted
   elseif p.IORQ and not p.M1 then
     ...
   end
 end
 ```
+
+A host that models nothing sub-cycle can read and write on any edge where the
+strobe is asserted, because the core holds its bus signals for the whole of
+their defined window. A host that does care — a ULA, a GPU kernel sharing the
+bus — has every edge available to it.
 
 ### 4.3 Events
 
@@ -223,32 +249,47 @@ both to keep it that way.
 ### 5.1 State machine, not an interpreter loop
 
 The core holds a **step cursor**. Each instruction is a list of steps, one per
-T-state. `tick()` executes the step at the cursor and advances it. There is no
-"execute instruction" function, because an instruction never executes at a
-single moment: it is spread across its T-states, and the bus activity is what
-the outside world sees.
+clock edge. `tick()` executes the step at the cursor and advances it. There is
+no "execute instruction" function, because an instruction never executes at a
+single moment: it is spread across its edges, and the bus activity is what the
+outside world sees.
 
 ```
-step list for LD A,(HL)   -- 7 T-states: M1 of 4, memory read of 3
-  1  M1 T1: A <- PC, MREQ+RD+M1 asserted
-  2  M1 T2: sample WAIT; sample D at the end
-  3  M1 T3: latch opcode, R refresh begins, A <- I:R, RFSH
-  4  M1 T4: decode, RFSH ends
-  5  MR T1: A <- HL, MREQ+RD
-  6  MR T2: sample WAIT
-  7  MR T3: A_reg <- D
+step list for LD A,(HL)   -- 7 T-states = 14 edges: M1 of 4, memory read of 3
+
+     edge      action
+  1  T1 rise   A <- PC; M1 asserted
+  2  T1 fall   MREQ, RD asserted
+  3  T2 rise   -
+  4  T2 fall   sample WAIT; if asserted, hold here
+  5  T3 rise   latch opcode from D; MREQ, RD, M1 released
+  6  T3 fall   A <- I:R; RFSH asserted; R incremented
+  7  T4 rise   decode
+  8  T4 fall   RFSH released
+  9  T1 rise   A <- HL
+ 10  T1 fall   MREQ, RD asserted
+ 11  T2 rise   -
+ 12  T2 fall   sample WAIT; if asserted, hold here
+ 13  T3 rise   A_reg <- D
+ 14  T3 fall   MREQ, RD released
 ```
 
 Step lists are built once, at load time, from the instruction table
 (section 5.4). At run time the core indexes an array and calls a function; it
 never parses, allocates, or branches on a description.
 
+Edges where nothing happens still cost a step. That is deliberate: a uniform
+one-step-per-edge cursor keeps the hot path branch-free and monomorphic, which
+matters more than skipping a handful of no-op calls (section 10.3). An
+optimisation that collapses idle edges is possible later, but only with the
+conformance suite already green, so it can be proven not to change behaviour.
+
 ### 5.2 WAIT
 
-`WAIT` is sampled at the defined point of the cycles that can be stretched
-(M1 T2, and T2 of memory and I/O cycles). If asserted, the cursor does not
-advance: the core repeats a wait T-state, holding its pins, until `WAIT` is
-released.
+`WAIT` is sampled on the **falling edge of T2** in M1 and memory cycles, and on
+the falling edge of the automatically inserted wait state in I/O cycles. If it
+is asserted, the cursor does not advance: the core repeats a wait T-state,
+holding every pin as it stands, and samples again on the next falling edge.
 
 This is the whole contention mechanism. The core knows nothing about the ZX
 Spectrum's ULA or any other machine's timing; a host that wants contention
@@ -256,21 +297,67 @@ asserts `WAIT`, and the timing that results is correct by construction.
 
 ### 5.3 Bus cycle timing
 
-The canonical cycles, with the point at which each side acts:
+Each cycle is defined as a sequence of edge actions. `↑` is a rising edge, `↓`
+falling.
 
-| Cycle | T-states | Core drives | Host must respond |
-| --- | --- | --- | --- |
-| M1 (opcode fetch) | 4 | `A`=PC, `M1`+`MREQ`+`RD` in T1; `RFSH`+`A`=I:R in T3 | put opcode on `D` by end of T2 |
-| Memory read | 3 | `A`, `MREQ`+`RD` in T1 | put data on `D` by end of T2 |
-| Memory write | 3 | `A`, `D`, `MREQ` in T1, `WR` in T2 | latch `D` on `WR` |
-| I/O read | 4 | `A`, `IORQ`+`RD` in T2 | put data on `D` by end of T3 |
-| I/O write | 4 | `A`, `D`, `IORQ`+`WR` in T2 | latch `D` |
-| Interrupt acknowledge | 6 | `M1`+`IORQ` | put vector/opcode on `D` |
-| Internal | 1..n | nothing asserted | nothing |
+**M1, opcode fetch — 4 T-states**
 
-I/O cycles are one T-state longer than memory cycles: the Z80 inserts a wait
-state automatically, which is why `IN`/`OUT` take 11 or 12 T-states rather
-than 10.
+| Edge | Core | Host |
+| --- | --- | --- |
+| T1 ↑ | `A` ← PC, `M1` asserted | |
+| T1 ↓ | `MREQ`, `RD` asserted | |
+| T2 ↓ | samples `WAIT` | assert `WAIT` here to stretch |
+| T3 ↑ | samples `D`, releases `MREQ`/`RD`/`M1` | opcode must be valid on `D` |
+| T3 ↓ | `A` ← `I:R`, `RFSH` asserted, `R` incremented | |
+| T4 ↓ | `RFSH` released | |
+
+**Memory read — 3 T-states**
+
+| Edge | Core | Host |
+| --- | --- | --- |
+| T1 ↑ | `A` ← address | |
+| T1 ↓ | `MREQ`, `RD` asserted | |
+| T2 ↓ | samples `WAIT` | assert `WAIT` here to stretch |
+| T3 ↑ | samples `D` | data must be valid on `D` |
+| T3 ↓ | `MREQ`, `RD` released | |
+
+**Memory write — 3 T-states**
+
+| Edge | Core | Host |
+| --- | --- | --- |
+| T1 ↑ | `A` ← address | |
+| T1 ↓ | `MREQ` asserted | |
+| T2 ↑ | `D` ← data | |
+| T2 ↓ | `WR` asserted; samples `WAIT` | latch `D` any time `WR` is asserted |
+| T3 ↓ | `WR`, `MREQ` released | |
+
+**I/O read and write — 4 T-states**
+
+An I/O cycle differs from a memory cycle in two ways, and both are visible only
+at edge resolution: `IORQ` is asserted half a cycle later — on the **rising**
+edge of T2, not the falling edge of T1 — and the CPU inserts one wait state
+automatically, which is why `IN`/`OUT` cost 11 or 12 T-states rather than 10.
+
+| Edge | Core | Host |
+| --- | --- | --- |
+| T1 ↑ | `A` ← port address (and `D` ← data, for a write) | |
+| T2 ↑ | `IORQ` + (`RD` or `WR`) asserted | |
+| Tw ↓ | samples `WAIT` | assert `WAIT` here to stretch |
+| T3 ↑ | samples `D` (read) | data must be valid on `D` |
+| T3 ↓ | `IORQ`, `RD`/`WR` released | |
+
+**Interrupt acknowledge — 6 T-states.** An M1 cycle with `M1` and `IORQ`
+asserted together, extended by two T-states so a daisy chain has time to
+settle. The host places the vector or instruction on `D`.
+
+**Internal cycles.** One or more T-states with no bus signal asserted. They are
+real: they are why `INC BC` costs 6 T-states rather than 4, and they must appear
+in the step list at the right position, not be added as a lump at the end.
+
+The Zilog *Z80 CPU User Manual* timing diagrams are the reference for the table
+above, and the conformance suites in section 9 are the arbiter for anything
+they leave ambiguous. Phase 2 verifies each cycle against both before any
+instruction depends on it.
 
 ### 5.4 The instruction table
 
@@ -408,16 +495,26 @@ justify that claim, which is why they are the gate.
 
 ### 10.1 Target
 
-Real time for a 3.5 MHz Z80: **3.5 million ticks per second sustained**, with
-headroom for the host's per-tick work. A useful internal goal is 10× that in
-isolation, so that a full machine still fits in real time.
+Real time for a 3.5 MHz Z80. With edge ticks that is **7 million `tick()` calls
+per second sustained**, plus whatever the host does on each of them. A useful
+internal goal is 10× in isolation, so a full machine — memory, ULA, a GPU
+kernel on the same clock — still fits inside real time.
 
 ### 10.2 Budget
 
-At 3.5 MHz on a 3.5 GHz core there are ~1000 CPU cycles per T-state for
-everything: core, host memory access, and device emulation. That is a great
-deal of room, and it is entirely possible to spend it all on interpreter
-overhead. Hence the rules below.
+On a 3.5 GHz core, 7 M ticks/s leaves **about 500 CPU cycles per tick** for
+everything: the core's step, the host's bus handling, and every device on the
+clock. That is a comfortable budget for a step function that indexes an array
+and writes a few struct fields, and no budget at all for per-tick allocation,
+hashing, or dispatch through metamethods. Hence the rules below.
+
+The edge decision (D2) is what halved this budget. It buys timing fidelity that
+a T-state model cannot express, and it is the single largest performance risk
+in the project — which is why Phase 1 measures a skeleton core before the
+instruction set exists. If 7 M ticks/s is not reachable, the options are known
+in advance and are all worse: collapse idle edges, drop to T-state ticks with
+an edge-resolved variant for the cycles that need it, or move the hot loop into
+the C shim.
 
 ### 10.3 Rules for the hot path
 
@@ -447,7 +544,10 @@ written against it.
 
 ### 11.2 As a C library
 
-Since the Lua core is the product, the C library embeds a Lua runtime:
+Since the Lua core is the product, the C library embeds a Lua runtime, and that
+runtime is **LuaJIT**: the real-time target in section 10 is not reachable
+without it, so shipping anything else would ship a core that misses its own
+requirement.
 
 ```c
 z80_t   *cpu = z80_new();
@@ -475,8 +575,8 @@ is green.
 
 | Phase | Deliverable | Exit criteria |
 | --- | --- | --- |
-| **1. Skeleton and harness** | Pin bundle, both representations, step engine, tick loop, `NOP` and `HALT` only, benchmark, snapshot | `tick()` runs; benchmark reports ticks/s; both representations agree; ticks/s target met on the skeleton |
-| **2. Bus cycles** | M1, memory read/write, I/O read/write, `WAIT`, `RFSH`, `BUSRQ`/`BUSAK` | A host can fetch and execute `NOP`s from its own memory; `WAIT` stretches cycles correctly; internal timing tests pass |
+| **1. Skeleton and harness** | Pin bundle, both representations, edge-stepped engine, `NOP` and `HALT` only, benchmark, snapshot | `tick()` runs; benchmark reports ticks/s; both representations agree; **7 M ticks/s met on the skeleton** |
+| **2. Bus cycles** | M1, memory read/write, I/O read/write, `WAIT`, `RFSH`, `BUSRQ`/`BUSAK`, each verified edge by edge | A host can fetch and execute `NOP`s from its own memory; every edge in 5.3 asserted by test; `WAIT` stretches correctly |
 | **3. Documented instruction set** | Table plus steps for all documented opcodes, all prefixes | FUSE passes for documented opcodes; ZEXDOC passes |
 | **4. Undocumented set and quirks** | Undocumented opcodes, `WZ`, `Q`, `XF`/`YF`, block-instruction flags | ZEXALL and z80test pass; FUSE passes in full |
 | **5. Interrupts and reset** | `INT` modes 0/1/2, `NMI`, `EI` delay, `HALT` wake, `RESET` timing | Interrupt tests pass; FUSE and SingleStepTests pass in full |
@@ -489,20 +589,24 @@ That is why the benchmark and the equivalence test come first.
 
 ---
 
-## 13. Open questions
+## 13. Decided, and still open
 
-1. **Half-cycle ticks.** The real chip acts on both clock edges: `WAIT` is
-   sampled on a falling edge, some outputs change on rising. This spec models a
-   full T-state per tick and defines the sampling point inside it. That is
-   enough for every test suite in section 9 and for machine contention. If you
-   later want to model bus timing at edge resolution (rare outside hardware
-   co-simulation), it would mean doubling the tick rate and revisiting
-   section 5.3.
-2. **Which Lua does the C library ship?** LuaJIT for speed, stock 5.4 for
-   reach, or both as build options. This can be deferred to phase 6, but not
-   past it.
-3. **SingleStepTests in CI.** The full set is gigabytes. Nightly job, a fixed
-   sample per commit, or an external checkout?
-4. **Where does the core live?** A `lua/` directory in this repository beside
-   `zasm`, or its own repository with this one as a consumer? The shared
-   instruction-set knowledge (section 5.4) argues for keeping them together.
+Settled after the first review of this spec:
+
+- **Edges, not T-states.** The core ticks per clock edge (D2, section 5.3).
+  This is the decision the rest of the timing model hangs on.
+- **The C library ships LuaJIT** (section 11.2).
+- **The core lives in `src/emucore/lua/`**, beside the existing C++ pin sketch
+  rather than in a repository of its own. `zasm` and the core have to agree on
+  which encodings exist (section 5.4), and a test asserts it — that is hard to
+  keep true across repositories and trivial to keep true inside one.
+
+Still open:
+
+1. **SingleStepTests in CI.** The full set is gigabytes. Nightly job, a fixed
+   sample per commit, or an external checkout? Deferred; needed by Phase 5.
+2. **What happens to the existing C++ sketch.** `src/emucore/cpu.hpp` and
+   `cpu.cc` model the pins and M-states in C++ and are not built today. The pin
+   layout there is a good starting point for the C ABI in Phase 6, so the
+   proposal is to keep it as reference until then and let the shim replace it,
+   rather than deleting work that is about to be useful.
