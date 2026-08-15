@@ -26,6 +26,12 @@ bool label_unresolved = false;
 /* semantic errors reported via error_print(); nonzero fails the assembly */
 static int semantic_errors = 0;
 
+/* highest address written + 1, i.e. the size of the emitted image */
+static uint32_t prog_end = 0;
+/* set once output has reached the top of the address space */
+static bool address_overflow = false;
+static bool overflow_reported = false;
+
 enum
 {
     ERROR_RELJM_RANGE = 0,
@@ -34,6 +40,87 @@ enum
 
 const char *error_texts[] = {"Relative jump is out of range: %jd [must be between -128:127]\n",
                              "Mnemonic was not found: \"%s\"\n", NULL};
+
+/**
+@brief Write one byte at *cursor and advance it.
+
+Refuses to wrap past 0xFFFF: the old code let PC roll over to 0, which both
+wrote out of bounds (prog[] was one byte short of the address space) and
+silently truncated the output image.
+
+@return true if the byte was stored
+*/
+static bool emit_byte(uint16_t *cursor, uint8_t byte)
+{
+    if (address_overflow)
+    {
+        if (!overflow_reported)
+        {
+            overflow_reported = true;
+            error_print("Program does not fit into the 64K address space\n");
+        }
+        return false;
+    }
+
+    prog[*cursor] = byte;
+    if (*cursor + 1u > prog_end)
+    {
+        prog_end = *cursor + 1u;
+    }
+
+    if (PROG_SIZE - 1 == *cursor)
+    {
+        /* a byte at 0xFFFF is legal; only the one after it has nowhere to go */
+        address_overflow = true;
+    }
+    else
+    {
+        ++(*cursor);
+    }
+    return true;
+}
+
+/**
+@brief Handle the ORG directive: set the assembly address.
+*/
+void set_origin(intmax_t address)
+{
+    if (address < 0 || address > 0xFFFF)
+    {
+        error_print("Origin %jd is outside the 64K address space\n", address);
+        return;
+    }
+
+    CURRENT_ORG = PC = (uint16_t)address;
+    if (CURRENT_ORG < PROG_START)
+    {
+        PROG_START = CURRENT_ORG;
+    }
+    /* output may continue below the top again */
+    address_overflow = false;
+}
+
+/**
+@brief Report an operand that does not fit the field the instruction encodes it in.
+
+Accepts both the signed and the unsigned reading of the field, so -1 and 0xFF
+are equally valid for a byte operand.
+
+This only diagnoses: the caller emits the same number of bytes either way. An
+expression containing a label that pass 1 has not seen yet evaluates to a
+placeholder that may well be out of range, and dropping those bytes would move
+every later label (the assembly fails on the pass-2 report instead).
+*/
+static void diagnose_operand_range(intmax_t data, size_t size, const char *mnemo)
+{
+    intmax_t low = (1 == size) ? -128 : -32768;
+    intmax_t high = (1 == size) ? 0xFF : 0xFFFF;
+
+    if (data < low || data > high)
+    {
+        error_print("Value %jd does not fit in %zu byte(s): \"%s\"\n", data, size, mnemo);
+    }
+}
 
 /* use binary search algorithm, be sure that opcode table sorted by mnemo field */
 const opcode_table *find_opcode(char *instruction)
@@ -93,6 +180,13 @@ void debug_print(const char *format, ...)
 
 void error_print(const char *format, ...)
 {
+    /* Pass 1 works with an incomplete label table, so anything it considers
+       wrong is re-checked (and reported) on pass 2. Reporting only there also
+       keeps every diagnostic from being printed twice. */
+    if (PASS2 != run_pass)
+    {
+        return;
+    }
     ++semantic_errors;
     char *string;
     va_list args;
@@ -178,18 +272,27 @@ int handle_instruction(char *instruction, intmax_t data, size_t size)
         error_print(error_texts[ERROR_RELJM_RANGE], data);
         return ASM_ERROR;
     }
+    /* DD36/FD36 pack a displacement and an immediate into one 16-bit value */
+    bool wide_operand = (2 == size) || check_double_argumented(new_opc->opcode);
+    if (size && !new_opc->reljmp)
+    {
+        diagnose_operand_range(data, wide_operand ? 2 : 1, new_opc->mnemo);
+    }
+
+    uint16_t start = PC;
+
     /* Basic one-byte opcodes */
     if (is_single(new_opc->opcode))
     {
-        prog[PC++] = new_opc->opcode & 0xFF;
+        emit_byte(&PC, new_opc->opcode & 0xFF);
     }
     /* Single prefixed */
     else if (is_prefixed(new_opc->opcode))
     {
-        prog[PC++] = new_opc->opcode >> 8;
-        prog[PC++] = new_opc->opcode & 0xFF;
+        emit_byte(&PC, new_opc->opcode >> 8);
+        emit_byte(&PC, new_opc->opcode & 0xFF);
     }
-    /* Double prefixed */
+    /* Double prefixed: prefix, prefix, displacement, opcode */
     else
     {
         if (PASS2 == run_pass && verbose)
@@ -198,49 +301,53 @@ int handle_instruction(char *instruction, intmax_t data, size_t size)
             printf(new_opc->mnemo, data);
             puts("");
         }
-        prog[PC++] = new_opc->opcode >> 16;
-        prog[PC++] = new_opc->opcode >> 8;
-        prog[PC++] = data & 0xFF;
-        prog[PC++] = new_opc->opcode & 0xFF;
-        return 1;
+        emit_byte(&PC, new_opc->opcode >> 16);
+        emit_byte(&PC, new_opc->opcode >> 8);
+        emit_byte(&PC, data & 0xFF);
+        emit_byte(&PC, new_opc->opcode & 0xFF);
+        return ASM_OK;
     }
 
     if (!size)
     {
         if (PASS2 == run_pass && verbose)
         {
-            printf("%#.4x: ", PC - 1);
+            printf("%#.4x: ", start);
             printf("%s\n", new_opc->mnemo);
         }
         return ASM_OK;
     }
     if (PASS2 == run_pass && verbose)
     {
-        printf("%#.4x: ", PC - 1);
+        printf("%#.4x: ", start);
         printf(new_opc->mnemo, (uint16_t)data);
         puts("");
     }
-    prog[PC++] = (uint8_t)data & 0xFF;
-    if (2 == size || check_double_argumented(new_opc->opcode))
+    emit_byte(&PC, data & 0xFF);
+    if (wide_operand)
     {
-        prog[PC++] = (uint8_t)(data >> 8) & 0xFF;
+        emit_byte(&PC, (data >> 8) & 0xFF);
     }
     return ASM_OK;
 }
 
 /**
- * [Define word(s)]
- * @param data [description]
- */
-void defw(uint16_t data)
+@brief Define word(s): emit a 16-bit little-endian constant
+*/
+void defw(intmax_t data)
 {
-    prog[DATA_PC++] = data & 0xFF;
-    prog[DATA_PC++] = (data >> 8) & 0xFF;
+    diagnose_operand_range(data, 2, "defw");
+    emit_byte(&DATA_PC, data & 0xFF);
+    emit_byte(&DATA_PC, (data >> 8) & 0xFF);
 }
 
-void defb(uint16_t data)
+/**
+@brief Define byte(s): emit an 8-bit constant
+*/
+void defb(intmax_t data)
 {
-    prog[DATA_PC++] = data & 0xFF;
+    diagnose_operand_range(data, 1, "defb");
+    emit_byte(&DATA_PC, data & 0xFF);
 }
 
 static uint8_t hex2val(char a)
@@ -341,7 +448,7 @@ void deft(char *text)
             escape = 0;
             ch = process_backslash(&text[i], &i);
         }
-        prog[DATA_PC++] = ch;
+        emit_byte(&DATA_PC, (uint8_t)ch);
     }
 }
 
@@ -377,20 +484,22 @@ void add_label(char *label, intmax_t address)
 
     user_label *found = find_label(label);
 
-    if (PASS1 != run_pass)
+    if (found)
     {
-        /* Definitions are re-encountered on pass 2; only EQUs that could not
-           be computed on pass 1 (forward references) need resolving now. */
-        if (found && INTMAX_MIN == found->address && INTMAX_MIN != address)
+        /* Every definition is seen once per pass, so a name encountered twice
+           within the same pass is a genuine redefinition. */
+        if (found->pass_defined == (unsigned)run_pass)
+        {
+            error_print("Label \"%s\" is already defined\n", label);
+            return;
+        }
+        found->pass_defined = (unsigned)run_pass;
+        /* pass 2 knows every label, so an EQU that could not be evaluated on
+           pass 1 can be resolved now */
+        if (INTMAX_MIN != address)
         {
             found->address = address;
         }
-        return;
-    }
-
-    if (found)
-    {
-        error_print("Label \"%s\" is already defined\n", label);
         return;
     }
 
@@ -402,6 +511,7 @@ void add_label(char *label, intmax_t address)
     }
 
     new->address = address;
+    new->pass_defined = (unsigned)run_pass;
     new->label = strdup(label);
     if (!new->label)
     {
@@ -538,6 +648,9 @@ int process_source(char *source, char *fmt, FILE *out)
        are not diagnosed until pass 2 knows every label. */
     run_pass = PASS1;
     PC = 0;
+    prog_end = 0;
+    address_overflow = false;
+    overflow_reported = false;
     asm_load_buffer(source);
     if (0 != asmparse())
     {
@@ -546,6 +659,9 @@ int process_source(char *source, char *fmt, FILE *out)
 
     run_pass = PASS2;
     PC = 0;
+    prog_end = 0;
+    address_overflow = false;
+    overflow_reported = false;
     asm_load_buffer(source);
     if (0 != asmparse() || semantic_errors)
     {
@@ -556,11 +672,13 @@ int process_source(char *source, char *fmt, FILE *out)
     {
         PROG_START = 0x0000;
     }
-    size_t payload = (PC >= PROG_START) ? (size_t)(PC - PROG_START) : (size_t)PC;
+    /* prog_end is the highest address written + 1, so it survives a program
+       that ends exactly at 0xFFFF (where PC can no longer advance) */
+    size_t payload = (prog_end > PROG_START) ? (size_t)(prog_end - PROG_START) : 0;
     if (!strcmp(fmt, "bin"))
     {
-        fwrite(prog, 1, PC, out);
-        assembled_bytes = PC;
+        fwrite(prog, 1, prog_end, out);
+        assembled_bytes = prog_end;
     }
     else if (!strcmp(fmt, "tap"))
     {
@@ -568,19 +686,24 @@ int process_source(char *source, char *fmt, FILE *out)
 
         tap.prog_start = PROG_START;
         tap.entry_point = PROG_START;
-        tap.rom_size = PC - PROG_START;
+        tap.rom_size = payload;
         tap.rom = &prog[tap.prog_start];
         (void)tap_create(&tap, out);
         assembled_bytes = payload;
     }
     else if (!strcmp(fmt, "ihex"))
     {
-        (void)save_array_to_ihex(out, PROG_START, &prog[PROG_START], PC - PROG_START);
+        if (0 != save_array_to_ihex(out, PROG_START, &prog[PROG_START], payload))
+        {
+            puts("Failed to write Intel HEX output");
+            return ASM_ERROR;
+        }
         assembled_bytes = payload;
     }
     else
     {
-        assembled_bytes = payload;
+        printf("Unknown output format \"%s\"\n", fmt);
+        return ASM_ERROR;
     }
     return ASM_OK;
 }

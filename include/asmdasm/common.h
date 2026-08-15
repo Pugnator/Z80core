@@ -44,7 +44,8 @@ int vasprintf(char **, const char *, va_list);
     }
 
 #define MAX_SOURCE_SIZE 1000000L
-#define PROG_SIZE 0xFFFF
+/* the Z80 address space: valid addresses are 0x0000..0xFFFF inclusive */
+#define PROG_SIZE 0x10000
 #define fn_apply(type, fn, ...)                                                                                        \
     {                                                                                                                  \
         void *stopper_for_apply = (int[]){0};                                                                          \
@@ -74,6 +75,8 @@ typedef struct user_label
 {
     char *label;
     intmax_t address;
+    /* pass this definition was last seen on, to catch redefinitions */
+    unsigned pass_defined;
     UT_hash_handle hh;
 } user_label;
 
@@ -150,10 +153,11 @@ void asmerror(const char *s);
 void print_labels(user_label *print);
 void asm_load_buffer(const char *input);
 int handle_instruction(char *instruction, intmax_t data, size_t size);
-void defw(uint16_t data);
-void defb(uint16_t data);
+void defw(intmax_t data);
+void defb(intmax_t data);
 void deft(char *text);
 void add_label(char *label, intmax_t address);
+void set_origin(intmax_t address);
 intmax_t get_label_address(char *label);
 int load_file(char *filename, char **buffer);
 void hex_print(const void *pv, size_t len);

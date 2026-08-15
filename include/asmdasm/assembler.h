@@ -24,7 +24,7 @@ bool is_single(uint32_t opcode);
 bool is_prefixed(uint32_t opcode);
 bool is_double_prefixed(uint32_t opcode);
 int handle_instruction(char *instruction, intmax_t data, size_t size);
-void defw(uint16_t data);
+void defw(intmax_t data);
 void deft(char *text);
 void add_label(char *label, intmax_t address);
 intmax_t get_label_address(char *label);

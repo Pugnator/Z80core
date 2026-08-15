@@ -229,7 +229,12 @@ num               {dec}|{hex}|{oct}|{bcd}|{bin}|{char}
 
 "$"                 {return ASMPC;}
 "$$"                {return ASMORG;}
-"\n"                {return NL;}
+"\n"                {
+                        /* yylineno has already advanced past this newline: report
+                           semantic errors against the line that just ended */
+                        current_line = asmlineno - 1;
+                        return NL;
+                      }
 
 ".byte"|"defb"|"db"              {return DEFB;}
 ".word"|"defw"|"dw"              {return DEFW;}
@@ -259,7 +264,8 @@ void asmerror(const char *error_txt)
 void asm_load_buffer (const char *input)
 {
     asmnerrs =0;
-    asmlineno=0;
+    /* flex counts from 1; starting at 0 reported every syntax error one line early */
+    asmlineno=1;
     asm_delete_buffer( YY_CURRENT_BUFFER );
     asm_scan_string(input);
 }

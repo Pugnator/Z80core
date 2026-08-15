@@ -51,9 +51,16 @@ endif()
 
 enable_testing()
 
-add_test(NAME selftest_monitor48k
-         COMMAND zasm -s ${CMAKE_CURRENT_SOURCE_DIR}/tests/monitor48k/monitor48k.asm
-                 -o monitor48k.bin -x bin)
+# monitor48k.asm is a listing of the real 16K ZX Spectrum ROM, so the assembled
+# image must match monitor48k.rom byte for byte. This is the strongest
+# regression test in the tree: it catches any layout or encoding change.
+add_test(NAME rom_monitor48k
+         COMMAND ${CMAKE_COMMAND}
+                 -DZASM=$<TARGET_FILE:zasm>
+                 -DSOURCE=${CMAKE_CURRENT_SOURCE_DIR}/tests/monitor48k/monitor48k.asm
+                 -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/monitor48k.bin
+                 -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/tests/monitor48k/monitor48k.rom
+                 -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/rom_compare.cmake)
 add_test(NAME selftest_fallingblocks
          COMMAND zasm -s ${CMAKE_CURRENT_SOURCE_DIR}/tests/fallingblocks/fallingblocks.asm
                  -o fallingblocks.tap -x tap)

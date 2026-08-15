@@ -50,7 +50,7 @@ int save_array_to_ihex(FILE *ihex, int base, uint8_t b[], int size)
         }
     }
     /* write EOF marker */
-    len = sprintf(buf, ":%.2X%.4X%.2X%.2X", 0, 0, IHEX_EOF, (0 - IHEX_EOF) & 0xFF);
+    len = sprintf(buf, ":%.2X%.4X%.2X%.2X\r\n", 0, 0, IHEX_EOF, (0 - IHEX_EOF) & 0xFF);
     if (fwrite(buf, 1, len, ihex) != len)
     {
         return -1;

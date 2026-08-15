@@ -76,7 +76,7 @@ defw:     DEFW { DATA_PC = PC;}
 equ:      LABEL EQU { label_unresolved = false; } expr { $$[0] = '\0'; add_label( $1, label_unresolved ? INTMAX_MIN : $4 ); label_unresolved = false; }
 ;
 
-org:      ORG expr {$$[0] = '\0'; CURRENT_ORG = PC = $2; if( CURRENT_ORG < PROG_START ) PROG_START = CURRENT_ORG; }
+org:      ORG expr {$$[0] = '\0'; set_origin($2); }
 ;
 
 text:     TEXT { DATA_PC = PC; }
