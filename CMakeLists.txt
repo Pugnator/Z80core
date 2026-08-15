@@ -44,6 +44,15 @@ endif()
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_compile_options(zasm PRIVATE -Wall -ffunction-sections -fdata-sections)
     target_link_options(zasm PRIVATE -Wl,--gc-sections)
+
+    # Each grammar rule renders its instruction into a fixed 64-byte buffer with
+    # snprintf. The compiler cannot see that the %s arguments are register and
+    # mnemonic names a few characters long, so it warns on all ~190 rules and
+    # buries anything worth reading. A truncation could not corrupt the output
+    # silently either: the shortened text would fail the opcode lookup and be
+    # reported as an unknown mnemonic.
+    set_source_files_properties(${BISON_z80_parser_OUTPUTS}
+                                PROPERTIES COMPILE_OPTIONS -Wno-format-truncation)
 endif()
 
 # The emulator core is not built yet; enable once src/emucore grows up.
