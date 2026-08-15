@@ -3,11 +3,31 @@
 Status: **draft for review**. Nothing is implemented yet.
 
 This describes `z80core`, a self-contained, externally clocked, edge-precise
-Z80 CPU model written in Lua, living in `src/emucore/lua/`. It is the CPU and
-nothing else: no memory, no devices, no video, no sound, no scheduler. A host
-drives its clock one edge at a time, reads its pins, and answers its bus
-requests. Put a memory map and a GPU kernel beside it and you have a virtual
-machine; on its own it is a chip.
+Z80 CPU model written in **C**, shipped as a DLL, with Lua for tooling and for
+the host that drives it. It is the CPU and nothing else: no memory, no devices,
+no video, no sound, no scheduler. A host drives its clock one edge at a time,
+reads its pins, and answers its bus requests. Put a memory map and a GPU kernel
+beside it and you have a virtual machine; on its own it is a chip.
+
+## 0. The stack
+
+```
+  Proteus 8                          simulation, schematic, the clock net
+      |  VSM SDK (C++)
+  openvsm.dll                        existing project: VSM model + Lua 5.4.6
+      |  Lua model API (device_pins, pin:onchange, VDM)
+  z80_device.lua                     wires pins to the core, owns VSM interaction
+      |  require("z80core")
+  z80core.dll                        THIS SPEC: the CPU, in C, plus a Lua binding
+```
+
+Each layer has one job. `openvsm` already solves VSM integration and is not
+touched. The device script owns everything machine-specific: which pins, what
+memory answers, how the board behaves. The core owns the Z80 and knows nothing
+about any of it.
+
+The same `z80core.dll` links directly into a C host with no Lua involved, which
+is what makes it reusable beyond Proteus.
 
 ---
 
@@ -52,7 +72,7 @@ Proteus did drive turn out to be good for any host:
 
 - **The host supplies the clock level** (4.2). Useful to anything that can
   gate, halt or single-step a clock, which includes every debugger.
-- **`tick()` reports which pins changed** (4.5). Useful to any event-driven
+- **`tick()` reports which pins changed** (4.3). Useful to any event-driven
   host, and merely harmless to one that ignores it.
 
 So Proteus sharpened the interface rather than narrowing it. What VSM gives us,
@@ -62,13 +82,14 @@ and what it demands:
 | --- | --- |
 | The simulator is event-driven; models are woken when pins change | The core must be a pure state machine with no internal clock, which is what D2 already requires |
 | `CLK` is a real net driven by the schematic — it can be slowed, gated, or stopped, and the user can single-step it | The core must follow the **actual clock level** rather than assume alternating edges (section 4.2) |
-| Outputs are *scheduled* at an absolute simulation time, with propagation delay | The shim needs to know **which pins changed on this edge**, not diff all of them (section 4.5) |
-| Models are C++ DLLs against the VSM SDK interfaces | The C shim of section 11.2 has a concrete first consumer, not a hypothetical one |
-| `ICPUMODEL` offers register and disassembly views in the debugger | The debug API of section 8 feeds it, and `zasm` already disassembles (section 11.3) |
+| Outputs are *scheduled* at an absolute simulation time, with propagation delay | The device script needs to know **which pins changed on this edge**, not diff all of them (section 4.3) |
+| Models are C++ DLLs against the VSM SDK | Already solved: `openvsm` is that DLL, and the core reaches Proteus through a Lua device script rather than a VSM model of its own (section 11.2) |
+| The VDM bridge offers register and disassembly views in the debugger | The debug API of section 8 supplies the state and `zasm` supplies the disassembly (section 11.3) |
 | Simulation is not real time and never claims to be | The performance target is *usable simulation speed*, not a hard deadline (section 10.1) |
 
 Everything the model needs beyond the CPU — memory, ROM contents, peripherals —
-is on the schematic, where it belongs. The core stays a chip.
+is on the schematic or in the device script, where it belongs. The core stays a
+chip.
 
 ### 1.4 What "done" means
 
@@ -83,15 +104,33 @@ with no exemptions, and sustains the throughput target in
 These were settled before writing this spec; they are recorded with their
 consequences so the reasoning survives.
 
-### D1 — The Lua core is the product
+### D1 — The core is C; Lua is for tooling and hosts
 
-There is one implementation, in Lua. A C host embeds it. There is no second
-engine to keep in sync and no generated C to review, so behaviour cannot drift
-between implementations.
+One implementation, in C, shipped as a DLL. Lua drives it, inspects it and
+tests it, but never executes an instruction.
 
-Consequence: "runs virtually everywhere" means "everywhere the chosen Lua
-runtime runs". Shipping a C library therefore means shipping the interpreter
-inside it — see [section 11](#11-packaging).
+Three reasons, in the order they matter:
+
+1. **Precision.** `uint8_t A` and `uint16_t PC` wrap correctly because the type
+   says so. In Lua every result is a 64-bit integer that must be masked by hand
+   on every operation, and the one place someone forgets is a silent wrong
+   value that surfaces only if a test happens to cover it. Across 1270
+   encodings, having the language enforce register width is worth more than any
+   convenience it costs.
+2. **No boundary in the hot path.** Ticking per clock edge means the step runs
+   millions of times a second. A Lua core would cross the C boundary on every
+   one of them; a C core crosses nothing.
+3. **It inherits a working project.** `zasm` is C, with CMake, ctest, seven
+   conformance tests and CI on two platforms. The core reuses all of it —
+   including the disassembler, for the debug view.
+
+What Lua keeps, because it is genuinely better there: the device script that
+owns VSM interaction, peripherals and boards, scripted inspection of a running
+core, and test harnesses.
+
+Consequence: maintainability has to come from **the instruction table being
+data** (section 5.4) rather than from a high-level language. A wall of
+hand-written C would forfeit exactly what this decision is supposed to protect.
 
 ### D2 — Pin-level, one call per clock **edge**
 
@@ -120,25 +159,21 @@ oddities, exact interrupt acceptance timing. `zasm` already assembles the
 undocumented set; a core that cannot run what the assembler emits would be a
 strange pairing.
 
-### D4 — LuaJIT on the PC, fast enough to be pleasant
+### D4 — Lua 5.4, and only 5.4, wherever Lua appears
 
-The core targets LuaJIT on a desktop, inside a Proteus VSM model. The number to
-design against is 7 million `tick()` calls per second — real time for a 3.5 MHz
-Z80 — with the nuance in [section 10.1](#101-target): simulation speed is a
-quality bar, not a deadline, and correctness is never traded for it.
+The device script, the binding and the tooling target **Lua 5.4** — the version
+`openvsm` embeds (5.4.6). No LuaJIT anywhere.
 
-This decision is bounded by where the core actually runs. It runs on the PC.
-LuaJIT cannot execute on Cortex-M — its ARM backend emits A32 instructions and
-Cortex-M is Thumb-2 only — so a microcontroller build is not a stretch goal of
-this design but a different engine driven by the same instruction table, to be
-entered deliberately if it is ever wanted.
+This closes a question that was open while the core was going to be Lua.
+LuaJIT is Lua 5.1 semantics with no native bitwise operators, so `x & 0xFF` is
+a syntax error there while being idiomatic in 5.4; supporting both would have
+meant routing every mask and shift through a shim. Targeting 5.4 alone means
+native bitwise operators and real integers, which is the pleasant end of that
+trade — and with the core in C, none of it is on a hot path anyway.
 
-Consequence, and the one place D1 and D4 pull against each other: the fast path
-wants LuaJIT's FFI (flat C structs, no hashing, no boxing), and FFI is not
-portable Lua. Section 4.4 keeps both representations behind identical
-semantics — but the FFI path should be adopted only if Phase 1 measurement
-shows plain flat arrays cannot reach the target, since one representation is
-worth more than a speculative optimisation.
+A microcontroller build remains explicitly out of scope. It is now merely a
+port of a C library rather than an impossibility, but it is a separate project
+with its own decisions, not a stretch goal of this one.
 
 ---
 
@@ -184,68 +219,60 @@ Notes:
 
 ## 4. Interface
 
-### 4.1 Construction
+The C API is the interface. The Lua binding is a thin wrapper over it, so
+anything true of one is true of the other.
 
-```lua
-local z80 = require("z80core")
+### 4.1 The C API
 
-local cpu = z80.new()          -- state after power-on, see 7.1
+```c
+#include "z80core.h"
+
+typedef struct {
+    uint16_t A;         /* address bus            */
+    uint8_t  D;         /* data bus, bidirectional */
+    uint32_t ctrl;      /* control pins, Z80_M1 | Z80_MREQ | ... */
+} z80_pins_t;
+
+z80_t   *z80_new(void);
+void     z80_free(z80_t *cpu);
+void     z80_reset(z80_t *cpu);
+
+/* advance to the next clock edge; clk is the new level, 0 or 1.
+   returns the mask of output pins driven to a new value (4.3) */
+uint32_t z80_tick(z80_t *cpu, z80_pins_t *pins, int clk);
 ```
 
-The constructor takes no host callbacks, no memory, no configuration. A CPU is
-a CPU.
+The constructor takes no callbacks, no memory and no configuration. A CPU is a
+CPU. The host owns `z80_pins_t`: it writes the inputs, calls `z80_tick`, then
+reads the outputs.
 
 ### 4.2 The tick
 
-```lua
-cpu:tick()      -- advance exactly one clock edge (half a T-state)
-```
+`z80_tick()` reads the input pins, advances the machine to the next clock edge,
+and updates the output pins. It never calls back into the host and never
+allocates. Everything the host needs is in the pins afterwards; everything the
+core needs the host puts there beforehand.
 
-`tick()` reads the input pins, advances the machine to the next clock edge, and
-updates the output pins. It never calls into the host, never allocates, and
-never yields. Everything the host needs to know is in the pins afterwards;
-everything the core needs to know the host puts in the pins beforehand.
+Two ticks make one T-state, and the host passes the **new clock level** rather
+than the core owning the phase. Calling with the level the core is already at
+is a no-op, not an error: a clock that is stopped, gated or stepped by hand
+simply does not advance the CPU, which is what the hardware does.
 
-Two ticks make one T-state. The host passes the **new clock level**, and the
-core advances on the transition:
+That matters because `CLK` is a real net on a Proteus schematic. It can be
+halted, single-stepped, run at 1 Hz for debugging, or driven by something other
+than a clean oscillator, and a core that assumed alternating edges would
+silently desynchronise from the net it is wired to. One comparison per tick is
+a small price for following the actual clock.
 
-```lua
-cpu:tick(1)     -- rising edge
-cpu:tick(0)     -- falling edge
-```
+A host answers the bus between ticks:
 
-Calling `tick()` with the level the core is already at is a no-op, not an
-error: a clock that is stopped, gated or stepped by hand simply does not
-advance the CPU, which is exactly what the hardware does.
+```c
+uint32_t changed = z80_tick(cpu, &pins, clk);
 
-An earlier draft had the core own the clock phase and alternate edges by
-itself, on the grounds that a host-driven level costs a comparison on the
-hottest path. Proteus settles it the other way: `CLK` is a real net on the
-schematic. It can be halted, single-stepped, run at 1 Hz for debugging, or
-driven by something other than a clean oscillator, and a core that assumed
-alternating edges would silently desynchronise from the net it is wired to. One
-comparison per tick is a small price for following the actual clock.
-
-A host loop looks like this:
-
-```lua
-while running do
-  -- 1. present inputs
-  cpu.pins.INT = irq_line
-
-  -- 2. advance one clock edge
-  cpu:tick()
-
-  -- 3. answer the bus
-  local p = cpu.pins
-  if p.MREQ and p.RD then
-    p.D = memory[p.A]         -- must be valid before the sampling edge
-  elseif p.MREQ and p.WR then
-    memory[p.A] = p.D         -- latch while WR is asserted
-  elseif p.IORQ and not p.M1 then
-    ...
-  end
-end
+if (pins.ctrl & Z80_MREQ) {
+    if (pins.ctrl & Z80_RD)  pins.D = memory[pins.A];   /* valid before the sampling edge */
+    if (pins.ctrl & Z80_WR)  memory[pins.A] = pins.D;   /* latch while WR is asserted */
+}
 ```
 
 A host that models nothing sub-cycle can read and write on any edge where the
@@ -253,67 +280,63 @@ strobe is asserted, because the core holds its bus signals for the whole of
 their defined window. A host that does care — a ULA, a GPU kernel sharing the
 bus — has every edge available to it.
 
-### 4.3 Events
+### 4.3 What changed on this edge
 
-"Event-driven" here means the core is a state machine that moves only when
-clocked, and everything it communicates is a pin state change. On top of that,
-the core can emit *notifications* for hosts and debuggers that would otherwise
-have to reconstruct them by watching pins:
+`z80_tick()` returns a bitmask of the output pins it drove to a new value, and
+`0` when it drove none.
+
+This exists because of how a VSM model publishes outputs. Proteus does not want
+"here is the state of every pin"; it wants "this pin takes this value at this
+time", scheduled with the propagation delay for that signal — `MREQ` falling
+has a different delay from the address bus becoming valid. Without the mask the
+device script would have to diff thirty pins on every edge to recover
+information the core already had.
+
+Most edges change nothing, so the common case is a compare against zero:
 
 ```lua
-cpu:on("m1",        function(pc, opcode) ... end)   -- instruction fetch
-cpu:on("interrupt", function(mode, vector) ... end) -- INT/NMI accepted
-cpu:on("halt",      function(pc) ... end)
-cpu:on("reset",     function() ... end)
+local changed = cpu:tick(clk)
+if changed ~= 0 then
+  publish(changed)          -- schedule only what moved, each with its own delay
+end
 ```
+
+The core reports *what* changed. It never expresses *when* in analog time:
+propagation delays belong to the device script, being a property of the part
+being modelled — and of its temperature and supply voltage — not of the
+instruction set.
+
+### 4.4 The Lua binding
+
+`z80core.dll` is also a Lua 5.4 C module, so a device script loads it directly:
+
+```lua
+local z80 = require("z80core")
+
+local cpu = z80.new()
+local changed = cpu:tick(clk)     -- returns the mask of 4.3
+cpu.pins.D = memory[cpu.pins.A]   -- pins as a userdata with named fields
+```
+
+The binding exposes exactly the C API plus the debug surface of section 8. It
+does not reimplement anything, and it is not on any critical correctness path:
+if the binding and the C API ever disagree, the C API is right.
+
+### 4.5 Events
+
+"Event-driven" here means the core is a state machine that moves only when
+clocked, and everything it communicates is a pin change. On top of that it can
+emit *notifications* that a host would otherwise reconstruct by watching pins:
+instruction fetch, interrupt accepted, halt, reset.
 
 Rules that keep this honest:
 
 1. Notifications are **derived**, never authoritative. A host that ignores them
    entirely sees identical behaviour.
-2. With no listener registered, the hot path must not test for one per tick;
-   dispatch is switched at registration time (section 10.3).
-3. Handlers must not mutate CPU state. The debugging API in section 8 is the
-   supported way to do that.
-
-### 4.4 Two representations, one semantics
-
-| | LuaJIT path | Portable path |
-| --- | --- | --- |
-| State and pins | FFI `struct`, fixed-width integer fields | plain Lua tables, integer values |
-| Selection | automatic at load, when `jit` and `ffi` are present | fallback |
-| Observable behaviour | identical | identical |
-| Test suite | the same one runs against both | the same one runs against both |
-
-`cpu.pins.A` reads the same in both; only the storage differs. Any behavioural
-difference between the two paths is a bug, and CI runs the conformance suite on
-both to keep it that way.
-
-### 4.5 What changed on this edge
-
-After `tick()`, `cpu.changed` is a bitmask of the output pins the core drove to
-a new value on that edge, and `0` when it drove none.
-
-This exists because of how a VSM model has to publish its outputs. Proteus does
-not want "here is the state of every pin"; it wants "this pin takes this value
-at this time", scheduled with the propagation delay for that signal — `MREQ`
-falling has a different delay from the address bus becoming valid. Without a
-mask the shim would have to diff thirty pins on every edge, at 7 M edges per
-second, to recover information the core already had.
-
-Most edges change nothing, so the common case is a single compare against zero:
-
-```lua
-cpu:tick(clk)
-if cpu.changed ~= 0 then
-  publish(cpu.pins, cpu.changed)   -- schedule only what moved, each with its own delay
-end
-```
-
-The core exposes *what* changed. It never expresses *when* in analog time —
-propagation delays belong to the model wrapping it, since they are a property
-of the part being modelled (and its temperature, and its supply voltage), not
-of the instruction set.
+2. With no listener registered the hot path must not test for one per tick;
+   dispatch is switched when a listener is registered (section 10.3).
+3. Handlers must not mutate CPU state. Section 8 is the supported way to do
+   that.
 
 ---
 
@@ -347,9 +370,14 @@ step list for LD A,(HL)   -- 7 T-states = 14 edges: M1 of 4, memory read of 3
  14  T3 fall   MREQ, RD released
 ```
 
-Step lists are built once, at load time, from the instruction table
-(section 5.4). At run time the core indexes an array and calls a function; it
-never parses, allocates, or branches on a description.
+Step lists are built once, at construction, from the instruction table
+(section 5.4) — a static array of step functions per encoding. At run time the
+core indexes that array and calls through it; it never parses, allocates, or
+branches on a description.
+
+This is what keeps a C core maintainable (D1). The table is the readable
+artifact and the engine is small and generic; nobody hand-writes 1270 switch
+cases, and adding an instruction means adding a row.
 
 Edges where nothing happens still cost a step. That is deliberate: a uniform
 one-step-per-edge cursor keeps the hot path branch-free and monomorphic, which
@@ -518,30 +546,44 @@ Both are invisible to `LD` but observable through flags:
 
 ### 7.3 Snapshot
 
-```lua
-local snap = cpu:save()     -- plain Lua table, serialisable, version tagged
-cpu:load(snap)              -- exact restore, mid-instruction included
+```c
+size_t z80_save(const z80_t *cpu, void *buffer, size_t size);  /* versioned blob */
+bool   z80_load(z80_t *cpu, const void *buffer, size_t size);
 ```
 
-A snapshot captures the step cursor too, so a VM can be saved between any two
-T-states, not merely between instructions. Round-tripping a snapshot must be
-bit-exact, and a test asserts that saving, restoring and continuing produces
-the identical trace.
+```lua
+local snap = cpu:save()     -- string, serialisable, version tagged
+cpu:load(snap)
+```
+
+A snapshot captures the step cursor and the clock phase, so a machine can be
+saved between any two **edges**, not merely between instructions. Round-tripping
+must be bit-exact, and a test asserts that saving, restoring and continuing
+produces an identical trace.
 
 ---
 
 ## 8. Debug API
 
-Separate from the hot path, and permitted to be slow:
+Separate from the hot path, and permitted to be slow.
+
+```c
+uint16_t z80_get(const z80_t *cpu, z80_reg_t which);
+void     z80_set(z80_t *cpu, z80_reg_t which, uint16_t value);
+void     z80_state(const z80_t *cpu, z80_state_t *out);   /* whole register file */
+```
 
 ```lua
 cpu:get("HL")        cpu:set("HL", 0x8000)
-cpu:registers()      -- snapshot of the register file as a table
-cpu:disasm_state()   -- current opcode, prefix, M-cycle, T-state within it
+cpu:registers()      -- the register file as a table
+cpu:position()       -- current opcode, prefix, M-cycle, edge within it
 ```
 
-Hosts get read/write access to everything, including `WZ` and `Q`, because a
-debugger that cannot see the whole machine is a debugger that lies.
+Read and write access to everything, including `WZ` and `Q`, because a debugger
+that cannot see the whole machine is a debugger that lies. This is what feeds
+`openvsm`'s VDM bridge, and with `zasm` supplying disassembly it is enough for
+a register and source view inside Proteus without either project growing a
+second disassembler.
 
 ---
 
@@ -556,7 +598,7 @@ each is wired into `ctest` beside the existing assembler tests.
 | **ZEXDOC / ZEXALL** | Documented, then undocumented, instruction and flag behaviour, by CRC over millions of cases. | The classic bar. Needs a tiny CP/M stub in the *test harness*, never in the core. |
 | **z80test** (Patrik Rak) | Flags and `MEMPTR` in more depth than ZEXALL, including `SCF`/`CCF` and block instructions. | Catches `WZ`/`Q` errors ZEXALL misses. |
 | **TomHarte / SingleStepTests** | 10k randomised cases per opcode, each with cycle-by-cycle bus activity. | Exhaustive breadth; good as a nightly job rather than a per-commit one, given its size. |
-| **Internal** | Snapshot round-trip, `WAIT` stretching, `BUSRQ`, reset timing, EI/prefix interrupt rules, LuaJIT vs portable path equivalence. | The behaviours the public suites do not reach. |
+| **Internal** | Snapshot round-trip, `WAIT` stretching, `BUSRQ`, reset timing, EI/prefix interrupt rules, C API and Lua binding agreement. | The behaviours the public suites do not reach. |
 
 A note on honesty: ZEXALL passing is frequently reported as "cycle accurate".
 It is not — it says nothing about timing. FUSE and SingleStepTests are what
@@ -591,122 +633,115 @@ anything against a number we invented.
 
 ### 10.2 Budget
 
-On a 3.5 GHz core, 7 M ticks/s leaves **about 500 CPU cycles per tick** for
+On a 3.5 GHz machine, 7 M ticks/s leaves **about 500 CPU cycles per tick** for
 everything: the core's step, the host's bus handling, and every device on the
-clock. That is a comfortable budget for a step function that indexes an array
-and writes a few struct fields, and no budget at all for per-tick allocation,
-hashing, or dispatch through metamethods. Hence the rules below.
+clock. For a C step that reads a table entry and writes a few struct fields
+that is an enormous budget — the core should use a small fraction of it.
 
-The edge decision (D2) is what halved this budget. It buys timing fidelity that
-a T-state model cannot express, and it is the single largest performance risk
-in the project — which is why Phase 1 measures a skeleton core before the
-instruction set exists. If 7 M ticks/s is not reachable, the options are known
-in advance and are all worse: collapse idle edges, drop to T-state ticks with
-an edge-resolved variant for the cycles that need it, or move the hot loop into
-the C shim.
+Choosing C (D1) moved the performance risk off the core almost entirely. What
+remains is the boundary: at 7 M edges per second, the Lua device script is
+called by `openvsm` and calls into `z80core` on every edge, and those crossings
+cost far more than the step itself. Two consequences:
+
+- The device script's per-edge work is the thing to keep lean, not the core's.
+- The mask of section 4.3 exists precisely so the script can decide in one
+  compare whether an edge needs any further work at all.
+
+The edge decision (D2) doubled the number of crossings. If it proves too
+expensive in practice, the fallbacks are known and unchanged: collapse idle
+edges, or fall back to T-state ticks with an edge-resolved path only for the
+cycles that need it. Phase 0 measures this before anything depends on it.
 
 ### 10.3 Rules for the hot path
 
-1. No allocation per tick. Ever. Step lists, pin storage and state are created
-   once.
-2. No closure creation per tick; step functions are created at load time.
-3. No string keys in the tick path on the LuaJIT path — FFI struct fields only.
-4. No varargs, no `pcall`, no metamethod dispatch inside `tick()`.
-5. Event dispatch is chosen when a listener is registered, not tested per tick.
-6. One monomorphic call shape for step functions, so the JIT can inline.
+1. No allocation per tick, in either language. Step tables and state are built
+   once, at construction.
+2. No callbacks from the core into the host during a tick. The pins are the
+   entire interface.
+3. Event dispatch is chosen when a listener is registered, not tested per tick.
+4. A single, uniform step signature so the compiler can keep the dispatch
+   cheap.
+5. In the device script: no table allocation, no string formatting, no
+   `pcall` per edge. Everything the script needs is preallocated in
+   `device_init()`.
 
 ### 10.4 Measurement
 
 Two benchmarks, and both exist before the instruction set does:
 
-1. **Through the whole stack** (Phase 0): Proteus → VSM DLL → LuaJIT → `tick()`,
-   with a stub model. This gives the simulator's ceiling and the real cost of a
-   round trip across the boundary. Everything else is tuning against a guess
-   until this number exists.
-2. **The core alone** (Phase 1): ticks/second for a skeleton CPU, reported in
-   CI, on **both 32- and 64-bit LuaJIT** — both are shipped configurations, so
-   both are measured. The 32-bit figure is the one to compare against Phase 0's
-   ceiling, since that is where Proteus runs.
+1. **Through the whole stack** (Phase 0): Proteus to `openvsm` to the device
+   script to `z80core`, with a stub core. This gives the simulator's ceiling
+   and the real cost of a round trip across both boundaries. Everything else is
+   tuning against a guess until this number exists.
+2. **The core alone** (Phase 1): ticks/second for a skeleton CPU with no host,
+   reported in CI, on x86 and x86-64. This isolates the core's own cost from
+   the boundary's.
 
-The order matters. Measuring the core in isolation first would have told us the
-design was fine and taught us nothing about whether the deployment path works
-at all.
+The interesting figure is the ratio between them. If the stack costs 100x what
+the core costs, optimising the core is wasted effort and the device script is
+where the work belongs.
 
 ---
 
 ## 11. Packaging
 
-### 11.1 As a Lua module
+### 11.1 z80core.dll
 
-`require("z80core")`, pure Lua, no build step, works with LuaJIT or stock Lua
-5.4 (section 4.4).
+One artifact, two ways to use it:
 
-### 11.2 As a C library
+- **A Lua 5.4 C module.** It exports `luaopen_z80core`, so a device script
+  loads it with `require("z80core")` (4.4). This is how Proteus reaches it.
+- **A plain C library.** Link it, include `z80core.h`, call `z80_tick` (4.1).
+  No Lua involved, and no Lua required to build this configuration.
 
-Since the Lua core is the product, the C library embeds a Lua runtime, and that
-runtime is **LuaJIT**: the real-time target in section 10 is not reachable
-without it, so shipping anything else would ship a core that misses its own
-requirement.
+Built for **x86 and x86-64**. 32-bit exists because Proteus is a 32-bit
+application, not because the core needs it; a C host on either width is equally
+supported. The pin layout uses fixed-width fields only — never a pointer or a
+`long` — so the two builds cannot disagree about it, and a test asserts they do
+not.
 
-```c
-z80_t   *cpu = z80_new();
-z80_pins_t pins = {0};
-for (;;) {
-    z80_tick(cpu, &pins);
-    if (pins.mreq && pins.rd) pins.d = mem[pins.a];
-}
+### 11.2 How it reaches Proteus
+
+```
+Proteus 8  ->  openvsm.dll  ->  z80_device.lua  ->  z80core.dll
 ```
 
-- **Both x86 and x86-64 are shipped configurations.** The Lua core is
-  bitness-agnostic; only packaging cares. 32-bit exists because Proteus needs
-  it (11.3), not because the core does, and a host on either width is equally
-  supported.
-- One static library per configuration: interpreter + core (as precompiled
-  bytecode) + the shim.
-- The C struct and the Lua pin table describe the same bits, and a test asserts
-  they agree **on both widths**. That is cheap to guarantee and easy to break:
-  the shared layout uses fixed-width fields only, and never a pointer or a
-  `long`, so 32- and 64-bit builds cannot disagree about it.
-- Reality check on "everywhere": LuaJIT covers x86, x86-64, ARM, ARM64, PPC and
-  MIPS — desktops and application-class ARM. It does **not** cover Cortex-M:
-  LuaJIT's ARM backend emits A32 instructions and Cortex-M is Thumb-2 only, so
-  no STM32 or similar part can host this core. A microcontroller target would
-  need a C engine driven by the same instruction table, which is a different
-  project and should be entered deliberately rather than discovered. The
-  portable Lua path (section 4.4) widens reach among *hosted* platforms only.
+`openvsm` is an existing, working project and is **not modified**. The device
+script declares the pins, registers a callback on `CLK`, calls `cpu:tick(level)`
+on each edge, publishes whatever the returned mask says changed, and answers
+memory and I/O from the schematic. Everything machine-specific lives there;
+nothing machine-specific reaches the core.
 
-### 11.3 As a Proteus VSM model
+**The linkage question, which this arrangement depends on.** `openvsm` links
+Lua 5.4.6 statically into its own DLL and opens the standard library, so
+`require` exists. For `z80core.dll` to load into that interpreter it must
+resolve the `lua_*` symbols, and the only supply is `openvsm.dll` itself, which
+does export them (`CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS` is on). That should work,
+and it is unusual enough to be worth proving before anything is built on it.
+Phase 0 does exactly that, and the fallbacks in descending order of preference
+are:
 
-The shipping artifact for the primary consumer (section 1.3) is a Windows DLL:
-VSM SDK interfaces on the outside, the C shim and LuaJIT inside.
+1. Link `z80core.dll` against the Lua symbols `openvsm.dll` exports.
+2. Build Lua as a shared `lua54.dll` that both link against — a small change to
+   `openvsm`, and the conventional arrangement for binary Lua modules.
+3. Add the core to `openvsm` as a native module, next to its existing `uart`
+   and VDM modules. Cleanest technically, but the core stops being standalone.
 
-- **Model type.** `IDSIMMODEL` is enough to make the part work on a schematic.
-  `ICPUMODEL` additionally gives register and disassembly views inside the
-  Proteus debugger, which is the interesting option here, because `zasm`
-  already disassembles Z80 — the debug view can be driven by the disassembler
-  in this same repository rather than a second one written for the purpose.
-- **Pins.** The VSM pin API deals in state changes scheduled at absolute
-  simulation times, with edge queries on inputs. The changed-pin mask of
-  section 4.5 is what feeds it.
-- **Bitness: 32-bit here specifically.** Proteus 8 is a 32-bit application, so
-  *this model* is an x86 DLL with an x86 LuaJIT inside. That is a constraint of
-  this host, not of the core, which ships for both widths (11.2). Consequences
-  worth knowing up front rather than at link time:
-  - The repository's existing toolchain (MSYS2 UCRT64) is x86-64 and cannot
-    build it. The shim needs an i686 toolchain — MSYS2 MINGW32 or 32-bit MSVC.
-  - The VSM SDK's interfaces are C++ abstract classes, and Proteus is built
-    with MSVC. Crossing that vtable boundary from a MinGW-built DLL is the kind
-    of thing that either works or fails in ways that cost a week, so **MSVC
-    32-bit is the default choice for the shim**, with MinGW as the fallback to
-    try only if MSVC proves awkward.
-  - `zasm` keeps its own toolchain. The two builds are independent; only the
-    disassembler source is shared, and only if `ICPUMODEL` is adopted.
-  - LuaJIT's x86 backend is mature and fast, so 32-bit costs nothing in
-    performance here. It does mean the figure to compare against this host's
-    ceiling is the 32-bit one; both widths are measured (10.4), but a 64-bit
-    number says nothing about what Proteus will do.
-- **Delays.** Datasheet propagation delays live in the shim, not the core
-  (section 4.5).
+### 11.3 Debug view
+
+Proteus offers register and disassembly views for CPU-like models, and
+`openvsm` already exposes that through its **VDM (Virtual Debug Monitor) Lua
+bridge** — so this is a device-script feature, not a core feature. The core
+supplies the state (section 8) and `zasm` supplies the disassembly, which is
+already in this repository and already round-trips a 16K ROM byte-exactly.
+
+### 11.4 Toolchain
+
+`openvsm` builds only with 32-bit MSVC and enforces it. `z80core` is plain C
+with a C ABI, which is far less demanding: MinGW and MSVC produce interoperable
+C DLLs, so the core does not inherit that constraint. Phase 0 settles which
+compiler actually produces a module `openvsm`'s interpreter will load, and
+whether the answer differs between the two.
 
 ---
 
@@ -717,77 +752,71 @@ is green.
 
 | Phase | Deliverable | Exit criteria |
 | --- | --- | --- |
-| **0. Walking skeleton** | 32-bit LuaJIT embedded in a minimal VSM DLL; a stub model with a handful of pins that toggles one of them from Lua; a schematic that loads it; throughput measured through the whole stack | Proteus loads the model and runs the schematic; Lua drives a pin; **we know the simulator's events/second ceiling and the cost of one round trip** |
-| **1. Core skeleton** | Pin bundle, edge-stepped engine, changed-pin mask, `NOP` and `HALT` only, snapshot, benchmark | `tick()` runs; ticks/s reported in CI for 32- and 64-bit LuaJIT; representation decision made on measurement (4.4); core cost is small next to Phase 0's ceiling |
-| **2. Bus cycles** | M1, memory read/write, I/O read/write, `WAIT`, `RFSH`, `BUSRQ`/`BUSAK`, each verified edge by edge | A host can fetch and execute `NOP`s from its own memory; every edge in 5.3 asserted by test; `WAIT` stretches correctly |
+| **0. Walking skeleton** | A stub `z80core.dll` that does nothing but count ticks, loaded by `require` from a device script, on a schematic in Proteus; throughput measured through the whole stack | Proteus runs the schematic and the stub counts edges; **the linkage question of 11.2 is answered**; we know the simulator's ceiling and the cost of a round trip |
+| **1. Core skeleton** | Pin struct, edge-stepped engine, changed mask, `NOP` and `HALT` only, snapshot, benchmark, C and Lua APIs | `z80_tick()` runs; ticks/s reported in CI for x86 and x86-64; core cost known as a fraction of Phase 0's ceiling |
+| **2. Bus cycles** | M1, memory read/write, I/O read/write, `WAIT`, `RFSH`, `BUSRQ`/`BUSAK`, each verified edge by edge | A device script fetches and executes `NOP`s from schematic memory; every edge in 5.3 asserted by test |
 | **3. Documented instruction set** | Table plus steps for all documented opcodes, all prefixes | FUSE passes for documented opcodes; ZEXDOC passes |
 | **4. Undocumented set and quirks** | Undocumented opcodes, `WZ`, `Q`, `XF`/`YF`, block-instruction flags | ZEXALL and z80test pass; FUSE passes in full |
 | **5. Interrupts and reset** | `INT` modes 0/1/2, `NMI`, `EI` delay, `HALT` wake, `RESET` timing | Interrupt tests pass; FUSE and SingleStepTests pass in full |
-| **6. Packaging** | Static library for x86 and x86-64, C API, README, examples | C example runs a program against host memory; CI builds and tests **both** configurations; the shared pin layout is asserted identical on both |
-| **7. Proteus VSM model** | Full VSM model: all pins bound, propagation delays, optional `ICPUMODEL` debug view driven by `zasm`'s disassembler | A real schematic runs in Proteus — Z80 plus ROM plus RAM executing code built by `zasm` |
+| **6. The device script** | `z80_device.lua`: pin declarations, propagation delays, memory and I/O wiring, VDM debug view via `zasm` | A real schematic runs in Proteus — Z80 plus ROM plus RAM executing code built by `zasm` |
+| **7. Release** | Installer or drop-in package, examples, documentation | Someone else can place the part on a schematic and run a program without building anything |
 
-### Why Phase 0 exists
+### Why Phase 0 exists, and what it must answer
 
-The original plan started at the core and reached Proteus last. That order puts
-every unknown at the end: whether 32-bit LuaJIT embeds cleanly in a DLL,
-whether MSVC or MinGW is the right compiler for the VSM interfaces, whether
-Proteus loads what we build, and what the simulator's own throughput is. Any of
-those could reshape the design, and finding out after 1270 encodings exist is
-the expensive way to learn it.
+The original plan reached Proteus last. That puts every unknown at the end, and
+the unknowns here are not small:
 
-Phase 0 is a walking skeleton: the thinnest possible slice through the entire
-stack, with a stub where the CPU will go. It proves the path and produces the
-one number the performance work should be aimed at. It should take days, not
-weeks — and if it takes weeks, that is itself the most valuable thing we could
-have learned this early.
+1. **Can `openvsm`'s embedded interpreter load a binary module at all?** The
+   whole architecture assumes it can (11.2). If it cannot, the answer is one of
+   the three fallbacks, and all of them are cheaper to adopt now than after the
+   instruction set exists.
+2. **Which compiler produces a module it will load?** MinGW keeps the project
+   free of MSVC; MSVC is what `openvsm` itself demands. A C ABI should make
+   either work, and "should" is not "does".
+3. **What does the round trip cost?** Two boundary crossings per edge, at up to
+   7 M edges per second. If that dominates, the tuning belongs in the device
+   script, not the core.
 
-The risk profile of the rest is unchanged: phases 3 and 4 are the bulk of the
-work but largely mechanical once 1 and 2 are right, and the design risk is
-concentrated in the tick interface, which is why the equivalence test and the
-benchmark come before the instruction set.
+Phase 0 is the thinnest slice through the whole stack, with a counter where the
+CPU will go. It should take days. If it takes weeks, that is the single most
+valuable thing this project could learn in its first month.
+
+The risk profile after that is unchanged: phases 3 and 4 are the bulk of the
+work but largely mechanical once the engine and bus cycles are right.
 
 ---
 
 ## 13. Decided, and still open
 
-Settled after the first review of this spec:
+Settled:
 
-- **Edges, not T-states.** The core ticks per clock edge (D2, section 5.3).
-  This is the decision the rest of the timing model hangs on, and the VSM
-  target confirms it: Proteus drives models from pin transitions.
-- **The host supplies the clock level**, the core does not own the phase
-  (section 4.2), because in Proteus `CLK` is a net that can be stopped or
-  stepped.
-- **The first host is a Proteus VSM model on the PC** (section 1.3), and the
-  core ships for **both x86 and x86-64** (section 11.2). 32-bit is Proteus's
-  requirement, not the core's. LuaJIT is available on both, so the runtime
-  question is closed — and running on a microcontroller is explicitly *not* a
-  goal, since LuaJIT cannot execute on Cortex-M at all (section 11.2).
-- **The C library ships LuaJIT** (section 11.2).
-- **The core lives in `src/emucore/lua/`**, beside the existing C++ pin sketch
-  rather than in a repository of its own. `zasm` and the core have to agree on
-  which encodings exist (section 5.4), and a test asserts it — that is hard to
-  keep true across repositories and trivial to keep true inside one.
+- **Edges, not T-states** (D2, 5.3), confirmed by the VSM target: Proteus drives
+  models from pin transitions.
+- **The host supplies the clock level** (4.2), because `CLK` is a net that can
+  be stopped or stepped.
+- **The core is C, shipped as `z80core.dll`; Lua is for the device script,
+  tooling and tests** (D1).
+- **Lua 5.4 only** wherever Lua appears (D4). No LuaJIT, so no dialect shim and
+  no FFI-versus-table question — that section of the spec is simply gone.
+- **`openvsm` is the VSM layer and is not modified** (11.2). The device script
+  addresses the core DLL and owns every VSM interaction.
+- **x86 and x86-64 both ship.** 32-bit is Proteus's constraint, not the core's.
+- **The core lives in `src/emucore/`**, beside `zasm`, which supplies the
+  disassembler for the debug view.
 
-Still open:
+Open:
 
-1. **SingleStepTests in CI.** The full set is gigabytes. Nightly job, a fixed
-   sample per commit, or an external checkout? Deferred; needed by Phase 5.
-2. **What happens to the existing C++ sketch.** `src/emucore/cpu.hpp` and
-   `cpu.cc` model the pins and M-states in C++ and are not built today. The pin
-   layout there is a good starting point for the C ABI in Phase 6, so the
-   proposal is to keep it as reference until then and let the shim replace it,
-   rather than deleting work that is about to be useful.
-3. **`IDSIMMODEL` or `ICPUMODEL`** for the VSM model (section 11.3). The second
-   gives a debugger view driven by `zasm`'s disassembler, at the cost of a
-   larger interface to implement. Needed by Phase 7, not before — but Phase 0
-   should stub whichever one we expect to use, so the interface is exercised
-   early rather than assumed.
-4. **MSVC or MinGW for the shim** (section 11.3). MSVC 32-bit is the default,
-   since Proteus is MSVC-built and the VSM interfaces are C++ abstract classes.
-   Phase 0 answers this by building something and seeing whether Proteus loads
-   it, which is the only answer that counts.
-5. **Where LuaJIT comes from.** Vendored as a submodule, pinned and built by
-   our CMake, or an external prerequisite? A 32-bit build is not what a
-   developer will have lying around, so pinning it is probably worth the
-   repository weight. Decide in Phase 0.
+1. **Can `openvsm`'s interpreter load a binary module, and built with what?**
+   The architecture depends on it; Phase 0 answers it; 11.2 lists the
+   fallbacks. This is the only open question that can change the shape of the
+   project.
+2. **SingleStepTests in CI.** Gigabytes. Nightly, sampled per commit, or an
+   external checkout? Needed by Phase 5.
+3. **The existing C++ sketch.** `src/emucore/cpu.hpp` and `cpu.cc` model pins
+   and M-states in C++ and are not built. The pin layout is a useful starting
+   point for `z80_pins_t`; the `vcpu` class and its `cached_ram` are superseded
+   by this design. Keep as reference until Phase 1 lands, then remove.
+4. **A Lua reference model.** The same instruction table could drive a slow Lua
+   implementation, cross-checked against the C core by the conformance suite.
+   Real value for investigation, real cost to maintain. Decide after Phase 3,
+   when the table's shape is known.
