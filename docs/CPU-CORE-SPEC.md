@@ -41,14 +41,22 @@ The core never contains, allocates, or knows about any of these:
 The existing `include/emucore/cpu.hpp` sketch holds a `cached_ram` member.
 That goes: memory is the host's, always.
 
-### 1.3 Primary consumer: a Proteus VSM model
+### 1.3 First host: a Proteus VSM model
 
-The first real host is a **Proteus VSM** model — a Windows DLL that Labcenter's
-simulator loads and drives from the schematic. This is not an afterthought
-target; it shapes several decisions here, and it is why the interface looks the
-way it does.
+The core is host-agnostic. The **first** host — the one it will be brought up
+and tested against — is a **Proteus VSM** model, a Windows DLL that Labcenter's
+simulator loads and drives from the schematic.
 
-What VSM gives us, and what it demands:
+First, not only. Nothing in the core is Proteus-specific, and the two decisions
+Proteus did drive turn out to be good for any host:
+
+- **The host supplies the clock level** (4.2). Useful to anything that can
+  gate, halt or single-step a clock, which includes every debugger.
+- **`tick()` reports which pins changed** (4.5). Useful to any event-driven
+  host, and merely harmless to one that ignores it.
+
+So Proteus sharpened the interface rather than narrowing it. What VSM gives us,
+and what it demands:
 
 | Proteus VSM | Consequence for this core |
 | --- | --- |
@@ -616,8 +624,9 @@ Two benchmarks, and both exist before the instruction set does:
    round trip across the boundary. Everything else is tuning against a guess
    until this number exists.
 2. **The core alone** (Phase 1): ticks/second for a skeleton CPU, reported in
-   CI, on a **32-bit LuaJIT build** — the configuration that ships. An x86-64
-   measurement would describe something no user will ever run.
+   CI, on **both 32- and 64-bit LuaJIT** — both are shipped configurations, so
+   both are measured. The 32-bit figure is the one to compare against Phase 0's
+   ceiling, since that is where Proteus runs.
 
 The order matters. Measuring the core in isolation first would have told us the
 design was fine and taught us nothing about whether the deployment path works
@@ -648,9 +657,16 @@ for (;;) {
 }
 ```
 
-- One static library: interpreter + core (as precompiled bytecode) + the shim.
+- **Both x86 and x86-64 are shipped configurations.** The Lua core is
+  bitness-agnostic; only packaging cares. 32-bit exists because Proteus needs
+  it (11.3), not because the core does, and a host on either width is equally
+  supported.
+- One static library per configuration: interpreter + core (as precompiled
+  bytecode) + the shim.
 - The C struct and the Lua pin table describe the same bits, and a test asserts
-  the two agree.
+  they agree **on both widths**. That is cheap to guarantee and easy to break:
+  the shared layout uses fixed-width fields only, and never a pointer or a
+  `long`, so 32- and 64-bit builds cannot disagree about it.
 - Reality check on "everywhere": LuaJIT covers x86, x86-64, ARM, ARM64, PPC and
   MIPS — desktops and application-class ARM. It does **not** cover Cortex-M:
   LuaJIT's ARM backend emits A32 instructions and Cortex-M is Thumb-2 only, so
@@ -672,8 +688,10 @@ VSM SDK interfaces on the outside, the C shim and LuaJIT inside.
 - **Pins.** The VSM pin API deals in state changes scheduled at absolute
   simulation times, with edge queries on inputs. The changed-pin mask of
   section 4.5 is what feeds it.
-- **Bitness: 32-bit, decided.** The model is an x86 DLL and LuaJIT is built for
-  x86. Consequences worth knowing up front rather than at link time:
+- **Bitness: 32-bit here specifically.** Proteus 8 is a 32-bit application, so
+  *this model* is an x86 DLL with an x86 LuaJIT inside. That is a constraint of
+  this host, not of the core, which ships for both widths (11.2). Consequences
+  worth knowing up front rather than at link time:
   - The repository's existing toolchain (MSYS2 UCRT64) is x86-64 and cannot
     build it. The shim needs an i686 toolchain — MSYS2 MINGW32 or 32-bit MSVC.
   - The VSM SDK's interfaces are C++ abstract classes, and Proteus is built
@@ -684,8 +702,9 @@ VSM SDK interfaces on the outside, the C shim and LuaJIT inside.
   - `zasm` keeps its own toolchain. The two builds are independent; only the
     disassembler source is shared, and only if `ICPUMODEL` is adopted.
   - LuaJIT's x86 backend is mature and fast, so 32-bit costs nothing in
-    performance here. It does mean benchmarks must be taken on a 32-bit build:
-    an x86-64 measurement describes a configuration that will never ship.
+    performance here. It does mean the figure to compare against this host's
+    ceiling is the 32-bit one; both widths are measured (10.4), but a 64-bit
+    number says nothing about what Proteus will do.
 - **Delays.** Datasheet propagation delays live in the shim, not the core
   (section 4.5).
 
@@ -699,12 +718,12 @@ is green.
 | Phase | Deliverable | Exit criteria |
 | --- | --- | --- |
 | **0. Walking skeleton** | 32-bit LuaJIT embedded in a minimal VSM DLL; a stub model with a handful of pins that toggles one of them from Lua; a schematic that loads it; throughput measured through the whole stack | Proteus loads the model and runs the schematic; Lua drives a pin; **we know the simulator's events/second ceiling and the cost of one round trip** |
-| **1. Core skeleton** | Pin bundle, edge-stepped engine, changed-pin mask, `NOP` and `HALT` only, snapshot, benchmark on 32-bit LuaJIT | `tick()` runs; ticks/s reported in CI; representation decision made on measurement (4.4); core cost is small next to Phase 0's ceiling |
+| **1. Core skeleton** | Pin bundle, edge-stepped engine, changed-pin mask, `NOP` and `HALT` only, snapshot, benchmark | `tick()` runs; ticks/s reported in CI for 32- and 64-bit LuaJIT; representation decision made on measurement (4.4); core cost is small next to Phase 0's ceiling |
 | **2. Bus cycles** | M1, memory read/write, I/O read/write, `WAIT`, `RFSH`, `BUSRQ`/`BUSAK`, each verified edge by edge | A host can fetch and execute `NOP`s from its own memory; every edge in 5.3 asserted by test; `WAIT` stretches correctly |
 | **3. Documented instruction set** | Table plus steps for all documented opcodes, all prefixes | FUSE passes for documented opcodes; ZEXDOC passes |
 | **4. Undocumented set and quirks** | Undocumented opcodes, `WZ`, `Q`, `XF`/`YF`, block-instruction flags | ZEXALL and z80test pass; FUSE passes in full |
 | **5. Interrupts and reset** | `INT` modes 0/1/2, `NMI`, `EI` delay, `HALT` wake, `RESET` timing | Interrupt tests pass; FUSE and SingleStepTests pass in full |
-| **6. Packaging** | 32-bit static library, C API, README, examples | C example runs a program against host memory; CI builds and tests the 32-bit configuration |
+| **6. Packaging** | Static library for x86 and x86-64, C API, README, examples | C example runs a program against host memory; CI builds and tests **both** configurations; the shared pin layout is asserted identical on both |
 | **7. Proteus VSM model** | Full VSM model: all pins bound, propagation delays, optional `ICPUMODEL` debug view driven by `zasm`'s disassembler | A real schematic runs in Proteus — Z80 plus ROM plus RAM executing code built by `zasm` |
 
 ### Why Phase 0 exists
@@ -739,10 +758,11 @@ Settled after the first review of this spec:
 - **The host supplies the clock level**, the core does not own the phase
   (section 4.2), because in Proteus `CLK` is a net that can be stopped or
   stepped.
-- **The target is a Proteus VSM model on the PC** (section 1.3). LuaJIT is
-  available there, so the runtime question is closed — and running on a
-  microcontroller is explicitly *not* a goal, since LuaJIT cannot execute on
-  Cortex-M at all (section 11.2).
+- **The first host is a Proteus VSM model on the PC** (section 1.3), and the
+  core ships for **both x86 and x86-64** (section 11.2). 32-bit is Proteus's
+  requirement, not the core's. LuaJIT is available on both, so the runtime
+  question is closed — and running on a microcontroller is explicitly *not* a
+  goal, since LuaJIT cannot execute on Cortex-M at all (section 11.2).
 - **The C library ships LuaJIT** (section 11.2).
 - **The core lives in `src/emucore/lua/`**, beside the existing C++ pin sketch
   rather than in a repository of its own. `zasm` and the core have to agree on
