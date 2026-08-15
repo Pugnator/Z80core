@@ -41,7 +41,28 @@ The core never contains, allocates, or knows about any of these:
 The existing `include/emucore/cpu.hpp` sketch holds a `cached_ram` member.
 That goes: memory is the host's, always.
 
-### 1.3 What "done" means
+### 1.3 Primary consumer: a Proteus VSM model
+
+The first real host is a **Proteus VSM** model — a Windows DLL that Labcenter's
+simulator loads and drives from the schematic. This is not an afterthought
+target; it shapes several decisions here, and it is why the interface looks the
+way it does.
+
+What VSM gives us, and what it demands:
+
+| Proteus VSM | Consequence for this core |
+| --- | --- |
+| The simulator is event-driven; models are woken when pins change | The core must be a pure state machine with no internal clock, which is what D2 already requires |
+| `CLK` is a real net driven by the schematic — it can be slowed, gated, or stopped, and the user can single-step it | The core must follow the **actual clock level** rather than assume alternating edges (section 4.2) |
+| Outputs are *scheduled* at an absolute simulation time, with propagation delay | The shim needs to know **which pins changed on this edge**, not diff all of them (section 4.5) |
+| Models are C++ DLLs against the VSM SDK interfaces | The C shim of section 11.2 has a concrete first consumer, not a hypothetical one |
+| `ICPUMODEL` offers register and disassembly views in the debugger | The debug API of section 8 feeds it, and `zasm` already disassembles (section 11.3) |
+| Simulation is not real time and never claims to be | The performance target is *usable simulation speed*, not a hard deadline (section 10.1) |
+
+Everything the model needs beyond the CPU — memory, ROM contents, peripherals —
+is on the schematic, where it belongs. The core stays a chip.
+
+### 1.4 What "done" means
 
 The core is finished when it passes every suite in [section 9](#9-conformance)
 with no exemptions, and sustains the throughput target in
@@ -91,17 +112,25 @@ oddities, exact interrupt acceptance timing. `zasm` already assembles the
 undocumented set; a core that cannot run what the assembler emits would be a
 strange pairing.
 
-### D4 — LuaJIT, real-time required
+### D4 — LuaJIT on the PC, fast enough to be pleasant
 
-The core must run a 3.5 MHz Z80 in real time on a desktop CPU. That is
-3.5 million `tick()` calls per second plus the host's work per tick.
+The core targets LuaJIT on a desktop, inside a Proteus VSM model. The number to
+design against is 7 million `tick()` calls per second — real time for a 3.5 MHz
+Z80 — with the nuance in [section 10.1](#101-target): simulation speed is a
+quality bar, not a deadline, and correctness is never traded for it.
+
+This decision is bounded by where the core actually runs. It runs on the PC.
+LuaJIT cannot execute on Cortex-M — its ARM backend emits A32 instructions and
+Cortex-M is Thumb-2 only — so a microcontroller build is not a stretch goal of
+this design but a different engine driven by the same instruction table, to be
+entered deliberately if it is ever wanted.
 
 Consequence, and the one place D1 and D4 pull against each other: the fast path
 wants LuaJIT's FFI (flat C structs, no hashing, no boxing), and FFI is not
-portable Lua. The resolution is in [section 4.4](#44-two-representations-one-semantics):
-an FFI representation and a plain-table representation, selected at load time,
-with identical observable semantics and one shared test suite. Portability is
-preserved; speed is available where it matters.
+portable Lua. Section 4.4 keeps both representations behind identical
+semantics — but the FFI path should be adopted only if Phase 1 measurement
+shows plain flat arrays cannot reach the target, since one representation is
+worth more than a speculative optimisation.
 
 ---
 
@@ -169,15 +198,25 @@ updates the output pins. It never calls into the host, never allocates, and
 never yields. Everything the host needs to know is in the pins afterwards;
 everything the core needs to know the host puts in the pins beforehand.
 
-Two ticks make one T-state. `pins.CLK` carries the level the core has just
-moved to — `1` after a rising edge, `0` after a falling edge — so a host that
-cares about edges can tell them apart, and one that does not can simply tick
-twice.
+Two ticks make one T-state. The host passes the **new clock level**, and the
+core advances on the transition:
 
-The core owns the clock's phase rather than taking a level from the host. A
-host-driven level would allow illegal sequences (the same level twice, edges
-skipped) and would cost a comparison on the hottest path in the system, to
-express something the core already knows.
+```lua
+cpu:tick(1)     -- rising edge
+cpu:tick(0)     -- falling edge
+```
+
+Calling `tick()` with the level the core is already at is a no-op, not an
+error: a clock that is stopped, gated or stepped by hand simply does not
+advance the CPU, which is exactly what the hardware does.
+
+An earlier draft had the core own the clock phase and alternate edges by
+itself, on the grounds that a host-driven level costs a comparison on the
+hottest path. Proteus settles it the other way: `CLK` is a real net on the
+schematic. It can be halted, single-stepped, run at 1 Hz for debugging, or
+driven by something other than a clean oscillator, and a core that assumed
+alternating edges would silently desynchronise from the net it is wired to. One
+comparison per tick is a small price for following the actual clock.
 
 A host loop looks like this:
 
@@ -241,6 +280,32 @@ Rules that keep this honest:
 `cpu.pins.A` reads the same in both; only the storage differs. Any behavioural
 difference between the two paths is a bug, and CI runs the conformance suite on
 both to keep it that way.
+
+### 4.5 What changed on this edge
+
+After `tick()`, `cpu.changed` is a bitmask of the output pins the core drove to
+a new value on that edge, and `0` when it drove none.
+
+This exists because of how a VSM model has to publish its outputs. Proteus does
+not want "here is the state of every pin"; it wants "this pin takes this value
+at this time", scheduled with the propagation delay for that signal — `MREQ`
+falling has a different delay from the address bus becoming valid. Without a
+mask the shim would have to diff thirty pins on every edge, at 7 M edges per
+second, to recover information the core already had.
+
+Most edges change nothing, so the common case is a single compare against zero:
+
+```lua
+cpu:tick(clk)
+if cpu.changed ~= 0 then
+  publish(cpu.pins, cpu.changed)   -- schedule only what moved, each with its own delay
+end
+```
+
+The core exposes *what* changed. It never expresses *when* in analog time —
+propagation delays belong to the model wrapping it, since they are a property
+of the part being modelled (and its temperature, and its supply voltage), not
+of the instruction set.
 
 ---
 
@@ -495,10 +560,18 @@ justify that claim, which is why they are the gate.
 
 ### 10.1 Target
 
-Real time for a 3.5 MHz Z80. With edge ticks that is **7 million `tick()` calls
-per second sustained**, plus whatever the host does on each of them. A useful
-internal goal is 10× in isolation, so a full machine — memory, ULA, a GPU
-kernel on the same clock — still fits inside real time.
+The target is **7 million `tick()` calls per second** — real time for a 3.5 MHz
+Z80 — with 10× that in isolation as the internal goal, so a full machine still
+fits.
+
+Note what kind of target this is. Proteus VSM simulation is not real time and
+does not pretend to be: a schematic with analog parts runs far slower than the
+hardware it models, and nobody is surprised. Missing this number therefore
+degrades the *experience* — a sluggish simulation, a slow single-step — rather
+than breaking the product. It stays the number to design against because
+simulation speed is the difference between a model people use and one they
+abandon, but it is a quality bar, not a deadline, and no correctness decision
+should be traded away to reach it.
 
 ### 10.2 Budget
 
@@ -561,10 +634,32 @@ for (;;) {
 - One static library: interpreter + core (as precompiled bytecode) + the shim.
 - The C struct and the Lua pin table describe the same bits, and a test asserts
   the two agree.
-- Reality check on "everywhere": LuaJIT covers x86, x86-64, ARM, ARM64,
-  PPC and MIPS, but not every platform stock Lua reaches, and some platforms
-  forbid JIT compilation. The portable path exists for those, at a speed cost.
-  This should be stated in the README rather than discovered by a user.
+- Reality check on "everywhere": LuaJIT covers x86, x86-64, ARM, ARM64, PPC and
+  MIPS — desktops and application-class ARM. It does **not** cover Cortex-M:
+  LuaJIT's ARM backend emits A32 instructions and Cortex-M is Thumb-2 only, so
+  no STM32 or similar part can host this core. A microcontroller target would
+  need a C engine driven by the same instruction table, which is a different
+  project and should be entered deliberately rather than discovered. The
+  portable Lua path (section 4.4) widens reach among *hosted* platforms only.
+
+### 11.3 As a Proteus VSM model
+
+The shipping artifact for the primary consumer (section 1.3) is a Windows DLL:
+VSM SDK interfaces on the outside, the C shim and LuaJIT inside.
+
+- **Model type.** `IDSIMMODEL` is enough to make the part work on a schematic.
+  `ICPUMODEL` additionally gives register and disassembly views inside the
+  Proteus debugger, which is the interesting option here, because `zasm`
+  already disassembles Z80 — the debug view can be driven by the disassembler
+  in this same repository rather than a second one written for the purpose.
+- **Pins.** The VSM pin API deals in state changes scheduled at absolute
+  simulation times, with edge queries on inputs. The changed-pin mask of
+  section 4.5 is what feeds it.
+- **Bitness.** Proteus 8 is a 32-bit application, so the model is a 32-bit DLL
+  and LuaJIT must be built for x86. Worth confirming against the specific
+  Proteus version before Phase 6 rather than at the end of it.
+- **Delays.** Datasheet propagation delays live in the shim, not the core
+  (section 4.5).
 
 ---
 
@@ -581,6 +676,7 @@ is green.
 | **4. Undocumented set and quirks** | Undocumented opcodes, `WZ`, `Q`, `XF`/`YF`, block-instruction flags | ZEXALL and z80test pass; FUSE passes in full |
 | **5. Interrupts and reset** | `INT` modes 0/1/2, `NMI`, `EI` delay, `HALT` wake, `RESET` timing | Interrupt tests pass; FUSE and SingleStepTests pass in full |
 | **6. Packaging** | C shim, static library, README, examples | C example runs a program against host memory; CI builds and tests it |
+| **7. Proteus VSM model** | VSM DLL, pin bindings, propagation delays, optional `ICPUMODEL` debug view | The model runs a real schematic in Proteus: Z80 plus ROM plus RAM executing code built by `zasm` |
 
 An honest note on sequencing: phases 3 and 4 are the bulk of the work, and they
 are mostly mechanical once phases 1 and 2 are right. The risk is concentrated
@@ -594,7 +690,15 @@ That is why the benchmark and the equivalence test come first.
 Settled after the first review of this spec:
 
 - **Edges, not T-states.** The core ticks per clock edge (D2, section 5.3).
-  This is the decision the rest of the timing model hangs on.
+  This is the decision the rest of the timing model hangs on, and the VSM
+  target confirms it: Proteus drives models from pin transitions.
+- **The host supplies the clock level**, the core does not own the phase
+  (section 4.2), because in Proteus `CLK` is a net that can be stopped or
+  stepped.
+- **The target is a Proteus VSM model on the PC** (section 1.3). LuaJIT is
+  available there, so the runtime question is closed — and running on a
+  microcontroller is explicitly *not* a goal, since LuaJIT cannot execute on
+  Cortex-M at all (section 11.2).
 - **The C library ships LuaJIT** (section 11.2).
 - **The core lives in `src/emucore/lua/`**, beside the existing C++ pin sketch
   rather than in a repository of its own. `zasm` and the core have to agree on
@@ -610,3 +714,8 @@ Still open:
    layout there is a good starting point for the C ABI in Phase 6, so the
    proposal is to keep it as reference until then and let the shim replace it,
    rather than deleting work that is about to be useful.
+3. **`IDSIMMODEL` or `ICPUMODEL`** for the VSM model (section 11.3). The second
+   gives a debugger view driven by `zasm`'s disassembler, at the cost of a
+   larger interface to implement. Needed by Phase 7, not before.
+4. **Proteus bitness and SDK version** (section 11.3): confirm the DLL is
+   32-bit for your Proteus install before Phase 6 builds LuaJIT for it.
