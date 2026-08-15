@@ -81,6 +81,43 @@ static bool emit_byte(uint16_t *cursor, uint8_t byte)
 }
 
 /**
+@brief Expression helpers with the checks C does not do for us.
+
+A zero divisor or an out-of-range shift count is undefined behaviour, and an
+expression referencing a label pass 1 has not seen yet legitimately evaluates
+to 0, so these cases have to be handled rather than trusted.
+*/
+intmax_t divide_expr(intmax_t left, intmax_t right)
+{
+    if (0 == right)
+    {
+        error_print("Division by zero\n");
+        return 0;
+    }
+    return left / right;
+}
+
+intmax_t modulo_expr(intmax_t left, intmax_t right)
+{
+    if (0 == right)
+    {
+        error_print("Division by zero\n");
+        return 0;
+    }
+    return left % right;
+}
+
+intmax_t shift_expr(intmax_t value, intmax_t count, bool left)
+{
+    if (count < 0 || count >= 64)
+    {
+        error_print("Shift count %jd is out of range\n", count);
+        return 0;
+    }
+    return left ? (value << count) : (value >> count);
+}
+
+/**
 @brief Handle the ORG directive: set the assembly address.
 */
 void set_origin(intmax_t address)

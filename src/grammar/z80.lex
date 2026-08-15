@@ -113,10 +113,11 @@ num               {dec}|{hex}|{oct}|{bcd}|{bin}|{char}
 						SAVE_CTX; return QSTRING;
 					  }
 
-"#"                   |
-";"                   |
-"//"                  |
+%{/* Comments run to the end of the line */%}
+
 ";".*                 {}
+"//".*                {}
+"#".*                 {}
 
 %{/* Instructions */%}
 
@@ -225,7 +226,9 @@ num               {dec}|{hex}|{oct}|{bcd}|{bin}|{char}
 %{/* C flag is substituted by C reg in order to avoid clash */%}
 
 "Z"|"S"|"M"|"N"|"NZ"|"NC"|"P"|"PO"|"PE"                      { SAVE_CTX; return FLAG;}
-"+"|"-"|"/"|"*"|"&"|"\""|"["|"("|"]"|")"|","|"%"                 {return asmtext[0];}
+"<<"                {return SHL;}
+">>"                {return SHR;}
+"+"|"-"|"/"|"*"|"&"|"|"|"^"|"~"|"\""|"["|"("|"]"|")"|","|"%"      {return asmtext[0];}
 
 "$"                 {return ASMPC;}
 "$$"                {return ASMORG;}

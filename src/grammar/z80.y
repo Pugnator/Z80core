@@ -20,8 +20,15 @@ int current_line = 1;
 
 %start input
 
-%left '-' '+' '*' '/' '&' '%'
+/* conventional precedence, lowest first */
+%left '|'
+%left '^'
+%left '&'
+%left SHL SHR
+%left '-' '+'
+%left '*' '/' '%'
 %right UMINUS
+%right '~'
 
 %type  <var> expr IXidx IYidx opbrk clbrk
 %type  <str> instr defb defw seqb seqw org text equ seqt expt PDREG PREG
@@ -35,6 +42,7 @@ int current_line = 1;
 %token <str> DEFINE DEFB DEFW STRING QSTRING
 
 %token <var> BIT8 WORD DWORD QWORD DQWORD ASMPC ASMORG TEXT EQU ORG DIRECTIVE
+%token SHL SHR
 %%
 
 input:    lines
@@ -107,10 +115,15 @@ expr:     WORD                                 { $$ = $1;}
         | expr '-' expr                        { $$ = $1-$3;}
         | expr '+' expr                        { $$ = $1+$3;}
         | expr '*' expr                        { $$ = $1*$3;}
-        | expr '/' expr                        { $$ = $1/$3;}
-        | expr '%' expr                        { $$ = $1%$3;}
+        | expr '/' expr                        { $$ = divide_expr($1, $3);}
+        | expr '%' expr                        { $$ = modulo_expr($1, $3);}
         | expr '&' expr                        { $$ = $1 & $3;}
+        | expr '|' expr                        { $$ = $1 | $3;}
+        | expr '^' expr                        { $$ = $1 ^ $3;}
+        | expr SHL expr                        { $$ = shift_expr($1, $3, true);}
+        | expr SHR expr                        { $$ = shift_expr($1, $3, false);}
         | '-' expr %prec UMINUS                { $$ = -$2;}
+        | '~' expr                             { $$ = ~$2;}
 ;
 
 opbrk:    '('                                  { $$=0;}

@@ -2011,7 +2011,7 @@ L0605:  POP     AF              ; discard address STMT-RET.
 ;   Now reduce the low byte of the Syntax table entry to give command.
 ;   Note. For ZASM use SUB $E0 as next instruction.
 
-L0609:  SUB     L1ADF + 1 % 256 ; subtract the known offset.
+L0609:  SUB     L1ADF + 1 & 0xFF ; subtract the known offset.
                                 ; ( is SUB $E0 in standard ROM )
 
         LD      ($5C74),A       ; and put back in T_ADDR as 0,1,2, or 3
@@ -8660,7 +8660,7 @@ L1C96:  BIT     7,(IY+$01)      ; test FLAGS - checking syntax only ?
 
 ; Note. For ZASM assembler replace following expression with SUB $13.
 
-L1CA5:  SUB     L1AEB-$D8 % 256 ; convert $EB to $D8 ('INK') etc.
+L1CA5:  SUB     L1AEB-$D8 & 0xFF ; convert $EB to $D8 ('INK') etc.
                                 ; ( is SUB $13 in standard ROM )
 
         CALL    L21FC           ; routine CO-TEMP-4
