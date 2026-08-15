@@ -560,18 +560,26 @@ justify that claim, which is why they are the gate.
 
 ### 10.1 Target
 
-The target is **7 million `tick()` calls per second** — real time for a 3.5 MHz
-Z80 — with 10× that in isolation as the internal goal, so a full machine still
-fits.
+The nominal figure is **7 million `tick()` calls per second** — real time for a
+3.5 MHz Z80. Treat it as a design guide, not a deadline, for two separate
+reasons.
 
-Note what kind of target this is. Proteus VSM simulation is not real time and
-does not pretend to be: a schematic with analog parts runs far slower than the
-hardware it models, and nobody is surprised. Missing this number therefore
-degrades the *experience* — a sluggish simulation, a slow single-step — rather
-than breaking the product. It stays the number to design against because
-simulation speed is the difference between a model people use and one they
-abandon, but it is a quality bar, not a deadline, and no correctness decision
-should be traded away to reach it.
+First, Proteus VSM simulation is not real time and does not pretend to be. A
+schematic with analog parts runs far slower than the hardware it models, and
+nobody is surprised. Missing the number makes the model sluggish to
+single-step; it does not make it wrong.
+
+Second, and more useful: **the simulator, not the core, will set the ceiling.**
+A 3.5 MHz clock net is 7 million digital events per second for Proteus to
+schedule before our model does any work at all, and every address, data and
+control transition we publish is another event in its queue. Realistically a
+Z80 schematic in Proteus runs orders of magnitude below real time, and that is
+normal for the tool.
+
+So the honest target is not an absolute rate. It is: **the core must not be the
+bottleneck.** Our cost per edge should be small next to what Proteus already
+spends per event. Phase 0 measures the simulator's ceiling before we tune
+anything against a number we invented.
 
 ### 10.2 Budget
 
@@ -601,10 +609,19 @@ the C shim.
 
 ### 10.4 Measurement
 
-A benchmark harness lands in Phase 1, before the instruction set is filled in,
-and reports ticks/second in CI. If the design cannot hit the target on a
-skeleton core, that is the moment to find out — not after 1270 encodings are
-written against it.
+Two benchmarks, and both exist before the instruction set does:
+
+1. **Through the whole stack** (Phase 0): Proteus → VSM DLL → LuaJIT → `tick()`,
+   with a stub model. This gives the simulator's ceiling and the real cost of a
+   round trip across the boundary. Everything else is tuning against a guess
+   until this number exists.
+2. **The core alone** (Phase 1): ticks/second for a skeleton CPU, reported in
+   CI, on a **32-bit LuaJIT build** — the configuration that ships. An x86-64
+   measurement would describe something no user will ever run.
+
+The order matters. Measuring the core in isolation first would have told us the
+design was fine and taught us nothing about whether the deployment path works
+at all.
 
 ---
 
@@ -655,9 +672,20 @@ VSM SDK interfaces on the outside, the C shim and LuaJIT inside.
 - **Pins.** The VSM pin API deals in state changes scheduled at absolute
   simulation times, with edge queries on inputs. The changed-pin mask of
   section 4.5 is what feeds it.
-- **Bitness.** Proteus 8 is a 32-bit application, so the model is a 32-bit DLL
-  and LuaJIT must be built for x86. Worth confirming against the specific
-  Proteus version before Phase 6 rather than at the end of it.
+- **Bitness: 32-bit, decided.** The model is an x86 DLL and LuaJIT is built for
+  x86. Consequences worth knowing up front rather than at link time:
+  - The repository's existing toolchain (MSYS2 UCRT64) is x86-64 and cannot
+    build it. The shim needs an i686 toolchain — MSYS2 MINGW32 or 32-bit MSVC.
+  - The VSM SDK's interfaces are C++ abstract classes, and Proteus is built
+    with MSVC. Crossing that vtable boundary from a MinGW-built DLL is the kind
+    of thing that either works or fails in ways that cost a week, so **MSVC
+    32-bit is the default choice for the shim**, with MinGW as the fallback to
+    try only if MSVC proves awkward.
+  - `zasm` keeps its own toolchain. The two builds are independent; only the
+    disassembler source is shared, and only if `ICPUMODEL` is adopted.
+  - LuaJIT's x86 backend is mature and fast, so 32-bit costs nothing in
+    performance here. It does mean benchmarks must be taken on a 32-bit build:
+    an x86-64 measurement describes a configuration that will never ship.
 - **Delays.** Datasheet propagation delays live in the shim, not the core
   (section 4.5).
 
@@ -670,18 +698,34 @@ is green.
 
 | Phase | Deliverable | Exit criteria |
 | --- | --- | --- |
-| **1. Skeleton and harness** | Pin bundle, both representations, edge-stepped engine, `NOP` and `HALT` only, benchmark, snapshot | `tick()` runs; benchmark reports ticks/s; both representations agree; **7 M ticks/s met on the skeleton** |
+| **0. Walking skeleton** | 32-bit LuaJIT embedded in a minimal VSM DLL; a stub model with a handful of pins that toggles one of them from Lua; a schematic that loads it; throughput measured through the whole stack | Proteus loads the model and runs the schematic; Lua drives a pin; **we know the simulator's events/second ceiling and the cost of one round trip** |
+| **1. Core skeleton** | Pin bundle, edge-stepped engine, changed-pin mask, `NOP` and `HALT` only, snapshot, benchmark on 32-bit LuaJIT | `tick()` runs; ticks/s reported in CI; representation decision made on measurement (4.4); core cost is small next to Phase 0's ceiling |
 | **2. Bus cycles** | M1, memory read/write, I/O read/write, `WAIT`, `RFSH`, `BUSRQ`/`BUSAK`, each verified edge by edge | A host can fetch and execute `NOP`s from its own memory; every edge in 5.3 asserted by test; `WAIT` stretches correctly |
 | **3. Documented instruction set** | Table plus steps for all documented opcodes, all prefixes | FUSE passes for documented opcodes; ZEXDOC passes |
 | **4. Undocumented set and quirks** | Undocumented opcodes, `WZ`, `Q`, `XF`/`YF`, block-instruction flags | ZEXALL and z80test pass; FUSE passes in full |
 | **5. Interrupts and reset** | `INT` modes 0/1/2, `NMI`, `EI` delay, `HALT` wake, `RESET` timing | Interrupt tests pass; FUSE and SingleStepTests pass in full |
-| **6. Packaging** | C shim, static library, README, examples | C example runs a program against host memory; CI builds and tests it |
-| **7. Proteus VSM model** | VSM DLL, pin bindings, propagation delays, optional `ICPUMODEL` debug view | The model runs a real schematic in Proteus: Z80 plus ROM plus RAM executing code built by `zasm` |
+| **6. Packaging** | 32-bit static library, C API, README, examples | C example runs a program against host memory; CI builds and tests the 32-bit configuration |
+| **7. Proteus VSM model** | Full VSM model: all pins bound, propagation delays, optional `ICPUMODEL` debug view driven by `zasm`'s disassembler | A real schematic runs in Proteus — Z80 plus ROM plus RAM executing code built by `zasm` |
 
-An honest note on sequencing: phases 3 and 4 are the bulk of the work, and they
-are mostly mechanical once phases 1 and 2 are right. The risk is concentrated
-in phase 1 — if the tick interface is wrong, everything after it is wrong.
-That is why the benchmark and the equivalence test come first.
+### Why Phase 0 exists
+
+The original plan started at the core and reached Proteus last. That order puts
+every unknown at the end: whether 32-bit LuaJIT embeds cleanly in a DLL,
+whether MSVC or MinGW is the right compiler for the VSM interfaces, whether
+Proteus loads what we build, and what the simulator's own throughput is. Any of
+those could reshape the design, and finding out after 1270 encodings exist is
+the expensive way to learn it.
+
+Phase 0 is a walking skeleton: the thinnest possible slice through the entire
+stack, with a stub where the CPU will go. It proves the path and produces the
+one number the performance work should be aimed at. It should take days, not
+weeks — and if it takes weeks, that is itself the most valuable thing we could
+have learned this early.
+
+The risk profile of the rest is unchanged: phases 3 and 4 are the bulk of the
+work but largely mechanical once 1 and 2 are right, and the design risk is
+concentrated in the tick interface, which is why the equivalence test and the
+benchmark come before the instruction set.
 
 ---
 
@@ -716,6 +760,14 @@ Still open:
    rather than deleting work that is about to be useful.
 3. **`IDSIMMODEL` or `ICPUMODEL`** for the VSM model (section 11.3). The second
    gives a debugger view driven by `zasm`'s disassembler, at the cost of a
-   larger interface to implement. Needed by Phase 7, not before.
-4. **Proteus bitness and SDK version** (section 11.3): confirm the DLL is
-   32-bit for your Proteus install before Phase 6 builds LuaJIT for it.
+   larger interface to implement. Needed by Phase 7, not before — but Phase 0
+   should stub whichever one we expect to use, so the interface is exercised
+   early rather than assumed.
+4. **MSVC or MinGW for the shim** (section 11.3). MSVC 32-bit is the default,
+   since Proteus is MSVC-built and the VSM interfaces are C++ abstract classes.
+   Phase 0 answers this by building something and seeing whether Proteus loads
+   it, which is the only answer that counts.
+5. **Where LuaJIT comes from.** Vendored as a submodule, pinned and built by
+   our CMake, or an external prerequisite? A 32-bit build is not what a
+   developer will have lying around, so pinning it is probably worth the
+   repository weight. Decide in Phase 0.
