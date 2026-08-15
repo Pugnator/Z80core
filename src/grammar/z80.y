@@ -73,7 +73,7 @@ defw:     DEFW { DATA_PC = PC;}
 		  seqw { PC = DATA_PC;}
 ;
 
-equ:      LABEL EQU expr { tgt_label = false; $$[0] = '\0'; add_label( $1, $3 ); }
+equ:      LABEL EQU { label_unresolved = false; } expr { $$[0] = '\0'; add_label( $1, label_unresolved ? INTMAX_MIN : $4 ); label_unresolved = false; }
 ;
 
 org:      ORG expr {$$[0] = '\0'; CURRENT_ORG = PC = $2; if( CURRENT_ORG < PROG_START ) PROG_START = CURRENT_ORG; }
@@ -103,7 +103,7 @@ expr:     WORD                                 { $$ = $1;}
         | DQWORD                               { $$ = $1;}
         | ASMPC                                { $$ = PC;}
         | ASMORG                               { $$ = CURRENT_ORG;}
-        | STRING                               { tgt_label = true; $$ = get_label_address($1); }
+        | STRING                               { $$ = get_label_address($1); }
         | expr '-' expr                        { $$ = $1-$3;}
         | expr '+' expr                        { $$ = $1+$3;}
         | expr '*' expr                        { $$ = $1*$3;}

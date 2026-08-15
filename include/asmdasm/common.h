@@ -68,33 +68,24 @@ enum
     ASM_OK
 };
 
+/* Labels and EQU constants. Keyed by the lowercased name; an address of
+   INTMAX_MIN marks an EQU whose value is not resolvable yet. */
 typedef struct user_label
 {
-    int id;
     char *label;
     intmax_t address;
     UT_hash_handle hh;
 } user_label;
 
-typedef struct dereffered_label
-{
-    int id;
-    char *label;
-    intmax_t address;
-    uint8_t size;
-    UT_hash_handle hh;
-} dereffered_label;
-
 extern user_label *labels;
-extern dereffered_label *dereffered;
 
 extern int verbose;
 extern int assembly;
 extern int disassembly;
 extern int current_line;
-extern char *current_label;
 extern bool abort_on_error;
-extern bool tgt_label;
+/* set by get_label_address() when an expression referenced an undefined label */
+extern bool label_unresolved;
 extern uint16_t PC;
 extern uint16_t DATA_PC;
 extern uint16_t CURRENT_ORG;
@@ -162,8 +153,7 @@ int handle_instruction(char *instruction, intmax_t data, size_t size);
 void defw(uint16_t data);
 void defb(uint16_t data);
 void deft(char *text);
-void add_label(char *label, uint16_t address);
+void add_label(char *label, intmax_t address);
 intmax_t get_label_address(char *label);
 int load_file(char *filename, char **buffer);
 void hex_print(const void *pv, size_t len);
-void code_generator();

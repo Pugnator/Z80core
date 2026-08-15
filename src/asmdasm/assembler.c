@@ -13,8 +13,6 @@
 #include <ihex.h>
 
 RUNPASS run_pass = PASS1;
-char *current_label;
-bool tgt_label = false;
 bool abort_on_error = true;
 uint16_t PC = 0;
 uint16_t DATA_PC = 0;
@@ -23,17 +21,19 @@ uint16_t PROG_START = 0xFFFF;
 uint8_t prog[PROG_SIZE] = {0};
 size_t assembled_bytes = 0;
 user_label *labels = NULL;
-dereffered_label *dereffered = NULL;
+bool label_unresolved = false;
+
+/* semantic errors reported via error_print(); nonzero fails the assembly */
+static int semantic_errors = 0;
 
 enum
 {
     ERROR_RELJM_RANGE = 0,
-    ERROR_MNEM_NOT_FOUND,
-    ERROR_LABEL_EXISTS
+    ERROR_MNEM_NOT_FOUND
 };
 
-const char *error_texts[] = {"Relative jump is out of range: %jd [must be between -126:129]\n",
-                             "Mnemonic was not found: \"%s\"\n", "Label with the same address already declared", NULL};
+const char *error_texts[] = {"Relative jump is out of range: %jd [must be between -128:127]\n",
+                             "Mnemonic was not found: \"%s\"\n", NULL};
 
 /* use binary search algorithm, be sure that opcode table sorted by mnemo field */
 const opcode_table *find_opcode(char *instruction)
@@ -93,6 +93,7 @@ void debug_print(const char *format, ...)
 
 void error_print(const char *format, ...)
 {
+    ++semantic_errors;
     char *string;
     va_list args;
     va_start(args, format);
@@ -177,11 +178,6 @@ int handle_instruction(char *instruction, intmax_t data, size_t size)
         error_print(error_texts[ERROR_RELJM_RANGE], data);
         return ASM_ERROR;
     }
-    /* If relative jump is pointed to a label */
-    if (true == tgt_label && new_opc->reljmp)
-    {
-        tgt_label = false;
-    }
     /* Basic one-byte opcodes */
     if (is_single(new_opc->opcode))
     {
@@ -207,37 +203,6 @@ int handle_instruction(char *instruction, intmax_t data, size_t size)
         prog[PC++] = data & 0xFF;
         prog[PC++] = new_opc->opcode & 0xFF;
         return 1;
-    }
-
-    if (INTMAX_MIN == data)
-    {
-        dereffered_label *new = NULL;
-        uint16_t address = PC;
-
-        // Use HASH_FIND with the correct key size
-        HASH_FIND(hh, dereffered, &address, sizeof(address), new);
-        if (new)
-        {
-            error_print(error_texts[ERROR_LABEL_EXISTS]);
-            return ASM_ERROR;
-        }
-
-        new = malloc(sizeof(*new));
-        if (!new)
-        {
-            error_print("Memory allocation failed\n");
-            return ASM_ERROR;
-        }
-
-        new->address = address;
-        new->size = size;
-        PC += size;
-        new->label = current_label;
-
-        // Use HASH_ADD with the correct key size
-        HASH_ADD(hh, dereffered, address, sizeof(address), new);
-
-        return ASM_OK;
     }
 
     if (!size)
@@ -380,33 +345,56 @@ void deft(char *text)
     }
 }
 
-/**
- * [add_label  description]
- * @param label   [description]
- * @param address [description]
- */
-void add_label(char *label, uint16_t address)
+/* labels are case-insensitive: the hash key is the lowercased name */
+static user_label *find_label(const char *name)
 {
-    if (PASS1 != run_pass)
+    char key[MAX_TOKEN_SIZE];
+    size_t len = 0;
+    while (name[len] && len < sizeof(key) - 1)
     {
-        return;
+        key[len] = (char)tolower((unsigned char)name[len]);
+        ++len;
     }
+    key[len] = '\0';
 
+    user_label *found = NULL;
+    HASH_FIND(hh, labels, key, len, found);
+    return found;
+}
+
+/**
+@brief Define a label or EQU constant.
+@param label Name, optionally with a trailing ':' (stripped in place)
+@param address Value; INTMAX_MIN if it cannot be computed yet (forward reference)
+*/
+void add_label(char *label, intmax_t address)
+{
     char *s = strchr(label, ':');
     if (s)
     {
         *s = '\0';
     }
 
-    user_label *new = NULL;
-    HASH_FIND(hh, labels, &address, sizeof(address), new);
-    if (new)
+    user_label *found = find_label(label);
+
+    if (PASS1 != run_pass)
     {
-        error_print("Label with the same address already declared\n");
+        /* Definitions are re-encountered on pass 2; only EQUs that could not
+           be computed on pass 1 (forward references) need resolving now. */
+        if (found && INTMAX_MIN == found->address && INTMAX_MIN != address)
+        {
+            found->address = address;
+        }
         return;
     }
 
-    new = malloc(sizeof(*new));
+    if (found)
+    {
+        error_print("Label \"%s\" is already defined\n", label);
+        return;
+    }
+
+    user_label *new = malloc(sizeof(*new));
     if (!new)
     {
         error_print("Memory allocation failed\n");
@@ -421,26 +409,34 @@ void add_label(char *label, uint16_t address)
         error_print("Memory allocation failed\n");
         return;
     }
+    for (s = new->label; *s; ++s)
+    {
+        *s = (char)tolower((unsigned char)*s);
+    }
 
-    HASH_ADD(hh, labels, address, sizeof(address), new);
+    HASH_ADD_KEYPTR(hh, labels, new->label, strlen(new->label), new);
 }
 
 /**
- * [get_label_address  description]
- * @param  label [description]
- * @return       [description]
- */
+@brief Look up a label or EQU constant by name (case-insensitive).
+@return The value, or 0 for a name that is not defined (yet). Such a name is a
+        legitimate forward reference on pass 1, but an error on pass 2. Either
+        way label_unresolved is set, so callers can tell the placeholder apart
+        from a genuine zero.
+*/
 intmax_t get_label_address(char *label)
 {
-    for (user_label *tmp = labels; tmp != NULL; tmp = tmp->hh.next)
+    user_label *found = find_label(label);
+    if (found && INTMAX_MIN != found->address)
     {
-        if (0 == strcasecmp(tmp->label, label))
-        {
-            return tmp->address;
-        }
+        return found->address;
     }
-    current_label = strdup(label);
-    return INTMAX_MIN;
+    label_unresolved = true;
+    if (PASS2 == run_pass)
+    {
+        error_print("Undefined label \"%s\"\n", label);
+    }
+    return 0;
 }
 
 /**
@@ -527,41 +523,35 @@ void print_labels(user_label *print)
 }
 
 /**
- * [cleanup  description]
- */
-void cleanup(void)
-{
-    FILE *lbls = fopen("labels.txt", "wb");
-    char txt[512];
-    assert(lbls);
-    user_label *cur, *tmp;
-    HASH_ITER(hh, labels, cur, tmp)
-    {
-        HASH_DEL(labels, cur);
-        sprintf(txt, "%#.4x: \"%s\"\n", (uint16_t)cur->address, cur->label);
-        fwrite(txt, 1, strlen(txt), lbls);
-        free(cur->label);
-        free(cur);
-    }
-    fclose(lbls);
-}
-
-/**
- * [process_source  description]
- * @param  source [buffer with source code null-terminated text]
- * @param  fmt [output format: tap, bin]
- * @param  out [file descriptor to the output file]
- * @return        [description]
- */
+@brief Assemble a source buffer and write the result.
+@param source Null-terminated source text
+@param fmt Output format: bin, tap or ihex
+@param out Output file, already open for writing
+@return ASM_OK on success, ASM_ERROR if any pass reported an error
+*/
 int process_source(char *source, char *fmt, FILE *out)
 {
     assembled_bytes = 0;
+    semantic_errors = 0;
+
+    /* Pass 1 collects label definitions; forward references are expected and
+       are not diagnosed until pass 2 knows every label. */
+    run_pass = PASS1;
+    PC = 0;
     asm_load_buffer(source);
-    int retval = asmparse();
+    if (0 != asmparse())
+    {
+        return ASM_ERROR;
+    }
+
     run_pass = PASS2;
     PC = 0;
     asm_load_buffer(source);
-    retval = asmparse();
+    if (0 != asmparse() || semantic_errors)
+    {
+        return ASM_ERROR;
+    }
+
     if (PROG_START == 0xFFFF)
     {
         PROG_START = 0x0000;
@@ -592,6 +582,5 @@ int process_source(char *source, char *fmt, FILE *out)
     {
         assembled_bytes = payload;
     }
-    // hex_print(prog, PC);
-    return retval;
+    return ASM_OK;
 }
