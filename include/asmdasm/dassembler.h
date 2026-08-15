@@ -77,16 +77,17 @@ typedef struct dsmopc
     char *mnemonic;
 } dsmopc;
 
-void disassembly_listing(char *source);
+bool disassembly_listing(char *source);
 dsmctx *disasm_ctx_init(void);
 void disasm_ctx_free(dsmctx *ctx);
 bool disasm_is_a_prefix(uint8_t byte);
-void disasm_byte_swap(char *p, int len);
-const char *disasm_find_opcode(uint32_t instruction, int8_t *data_size);
-bool disasm_is_an_abs_jump(uint32_t opcode);
-bool disasm_is_an_rel_jump(uint32_t opcode);
+const opcode_table *disasm_find_opcode(uint32_t instruction);
+bool disasm_is_abs_jump(uint32_t opcode);
+bool disasm_is_call(uint32_t opcode);
 char *disasm_compile_string(const char *format, ...);
+void disasm_add_label(uint16_t address);
 dsmopc *disasm_fetch_next_opcode(dsmctx *ctx);
 int disasm_parse_input_stream(dsmctx *ctx);
+void disasm_call_graph(void);
 
 #endif

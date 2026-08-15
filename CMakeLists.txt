@@ -71,4 +71,14 @@ if(Python3_FOUND)
              COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_tests.py
                      --zasm $<TARGET_FILE:zasm>
                      --tests ${CMAKE_CURRENT_SOURCE_DIR}/tests/asm_test.asm)
+
+    add_test(NAME opcode_table_invariants
+             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_table.py
+                     ${CMAKE_CURRENT_SOURCE_DIR}/src/asmdasm/z80tab.c)
+
+    # disassemble the 16K ROM and assemble the listing back to the same bytes
+    add_test(NAME round_trip_monitor48k
+             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/round_trip.py
+                     --zasm $<TARGET_FILE:zasm>
+                     --binary ${CMAKE_CURRENT_SOURCE_DIR}/tests/monitor48k/monitor48k.rom)
 endif()

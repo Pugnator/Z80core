@@ -10,24 +10,41 @@
 #include "dassembler.h"
 #include "uthash.h"
 
+/* Jump and call targets discovered on pass 1, printed as labels on pass 2.
+   Keyed by address; the key type and size must match at add and find. */
+typedef struct
+{
+    uint16_t address;
+    UT_hash_handle hh;
+} disasm_label;
+
+static disasm_label *disasm_labels = NULL;
+
 dsmctx *disasm_ctx_init(void)
 {
     dsmctx *new = calloc(1, sizeof *new);
     return new;
 }
 
-typedef struct
-{
-    int id;
-    UT_hash_handle hh;
-} disasm_label;
-
-disasm_label *disasm_labels = NULL;
-
 void disasm_ctx_free(dsmctx *ctx)
 {
+    if (!ctx)
+    {
+        return;
+    }
     free(CURRENT_DATA);
     free(ctx);
+}
+
+static void disasm_labels_free(void)
+{
+    disasm_label *cur, *tmp;
+    HASH_ITER(hh, disasm_labels, cur, tmp)
+    {
+        HASH_DEL(disasm_labels, cur);
+        free(cur);
+    }
+    disasm_labels = NULL;
 }
 
 bool disasm_is_a_prefix(uint8_t byte)
@@ -38,88 +55,39 @@ bool disasm_is_a_prefix(uint8_t byte)
     case 0xDD:
     case 0xFD:
     case 0xED:
-        return 1;
+        return true;
     default:
-        return 0;
+        return false;
     }
 }
 
-void disasm_byte_swap(char *p, int len)
-{
-    int i;
-    char tmp;
-    for (i = 0; i < len / 2; i++)
-    {
-        tmp = p[len - i - 1];
-        p[len - i - 1] = p[i];
-        p[i] = tmp;
-    }
-}
-
-const char *disasm_find_opcode(uint32_t instruction, int8_t *data_size)
+const opcode_table *disasm_find_opcode(uint32_t instruction)
 {
     for (int i = 0; opcode_tab[i].mnemo; i++)
     {
         if (instruction == opcode_tab[i].opcode)
         {
-            *data_size = opcode_tab[i].data_size;
-            return (opcode_tab[i].mnemo);
+            return &opcode_tab[i];
         }
     }
     return NULL;
 }
 
+/* JP nn and its conditional forms */
 bool disasm_is_abs_jump(uint32_t opcode)
 {
     switch (opcode)
     {
-    case 0xC2:
-    case 0xC3:
+    case 0xC3: /* JP nn */
+    case 0xC2: /* JP NZ  */
+    case 0xCA: /* JP Z   */
+    case 0xD2: /* JP NC  */
+    case 0xDA: /* JP C   */
+    case 0xE2: /* JP PO  */
+    case 0xEA: /* JP PE  */
+    case 0xF2: /* JP P   */
+    case 0xFA: /* JP M   */
         return true;
-    default:
-        return false;
-    }
-}
-
-bool disasm_is_return(uint32_t opcode)
-{
-    switch (opcode)
-    {
-    case 0xC9:
-    case 0xD8:
-    case 0xF8:
-    case 0xD0:
-    case 0xC0:
-    case 0xF0:
-    case 0xE8:
-    case 0xE0:
-    case 0xC8:
-    case 0xED4D:
-    case 0xED45:
-    case 0xED55:
-    case 0xED65:
-    case 0xED5D:
-    case 0xED75:
-    case 0xED6D:
-    case 0xED7D:
-        return true;
-    default:
-        return false;
-    }
-}
-
-bool disasm_is_rel_jump(uint32_t opcode)
-{
-    switch (opcode)
-    {
-    case 0x10:
-    case 0x18:
-    case 0x20:
-    case 0x28:
-    case 0x30:
-    case 0x38:
-        return true;
-        break;
     default:
         return false;
     }
@@ -129,18 +97,16 @@ bool disasm_is_call(uint32_t opcode)
 {
     switch (opcode)
     {
-    case 0x10:
-    case 0xCD:
-    case 0xDC:
-    case 0xFC:
-    case 0xD4:
-    case 0xC4:
-    case 0xF4:
-    case 0xEC:
-    case 0xE4:
-    case 0xCC:
+    case 0xCD: /* CALL nn */
+    case 0xC4: /* CALL NZ */
+    case 0xCC: /* CALL Z  */
+    case 0xD4: /* CALL NC */
+    case 0xDC: /* CALL C  */
+    case 0xE4: /* CALL PO */
+    case 0xEC: /* CALL PE */
+    case 0xF4: /* CALL P  */
+    case 0xFC: /* CALL M  */
         return true;
-        break;
     default:
         return false;
     }
@@ -176,41 +142,64 @@ char *disasm_compile_string(const char *format, ...)
     return string;
 }
 
-int32_t disasm_add_label(uint16_t address)
+void disasm_add_label(uint16_t address)
 {
-    disasm_label *lab = NULL;
+    if (PASS1 != run_pass)
+    {
+        return;
+    }
 
-    // Use HASH_FIND with correct key size
+    disasm_label *lab = NULL;
     HASH_FIND(hh, disasm_labels, &address, sizeof(address), lab);
     if (lab)
     {
-        if (PASS2 == run_pass)
-        {
-            return lab->id;
-        }
-        return -1;
+        return;
     }
 
-    if (PASS2 == run_pass)
-    {
-        return -1;
-    }
-
-    lab = (disasm_label *)malloc(sizeof(*lab));
+    lab = malloc(sizeof(*lab));
     if (!lab)
     {
-        puts("Memory allocation failed\n");
-        return -1;
+        puts("Memory allocation failed");
+        return;
     }
 
-    lab->id = address;
-
-    // Use HASH_ADD with correct key size
-    HASH_ADD(hh, disasm_labels, id, sizeof(address), lab);
-
-    return -1;
+    lab->address = address;
+    HASH_ADD(hh, disasm_labels, address, sizeof(address), lab);
 }
 
+static bool disasm_has_label(uint16_t address)
+{
+    disasm_label *lab = NULL;
+    HASH_FIND(hh, disasm_labels, &address, sizeof(address), lab);
+    return NULL != lab;
+}
+
+/* LD (IX+d),n and LD (IY+d),n carry a displacement *and* an immediate */
+static bool disasm_is_double_argumented(uint32_t opcode)
+{
+    return 0xDD36 == opcode || 0xFD36 == opcode;
+}
+
+static dsmopc *disasm_make_opcode(uint16_t address, char *mnemonic)
+{
+    dsmopc *opc = malloc(sizeof *opc);
+    if (!opc)
+    {
+        free(mnemonic);
+        return NULL;
+    }
+    opc->address = address;
+    opc->mnemonic = mnemonic;
+    return opc;
+}
+
+/**
+@brief Decode the instruction at the current position and advance past it.
+@return The decoded instruction, or NULL once the input is exhausted.
+
+A byte that does not start a known instruction is emitted as a "defb" so the
+listing stays complete, and decoding resumes at the following byte.
+*/
 dsmopc *disasm_fetch_next_opcode(dsmctx *ctx)
 {
     if (CURRENT_PC >= ctx->data_size)
@@ -218,211 +207,228 @@ dsmopc *disasm_fetch_next_opcode(dsmctx *ctx)
         return NULL;
     }
 
-    if (PASS2 == run_pass)
+    const uint16_t start = CURRENT_PC;
+    const uint8_t *code = CURRENT_DATA;
+    size_t left = ctx->data_size - start;
+    uint8_t first = code[start];
+
+    uint32_t opcode = first;
+    size_t length = 1;
+    /* the displacement of a DDCB/FDCB instruction sits before its opcode byte */
+    bool prefixed_index = false;
+    uint8_t index_displacement = 0;
+
+    if (0xDD == first || 0xFD == first)
     {
-        disasm_label *lab = NULL;
-        HASH_FIND_INT(disasm_labels, &CURRENT_PC, lab);
-        if (lab)
+        if (left < 2)
         {
-            printf("L%.4X:\n", lab->id & 0xFFFF);
+            return disasm_make_opcode(start, disasm_compile_string("defb %#.2x", first));
         }
-        else
+        if (0xCB == code[start + 1])
         {
-            // printf("Label not found at %.4X\n", CURRENT_PC);
-        }
-    }
-
-    int8_t opcode_byte_counter = 0;
-    bool opcode_prefixed = false;
-    int8_t data_size = 0;
-
-    dsmopc *opc = malloc(sizeof *opc);
-    if (!opc)
-    {
-        return NULL;
-    }
-
-    opc->mnemonic = NULL;
-    opc->address = CURRENT_PC;
-
-    while (CURRENT_PC < ctx->data_size && disasm_is_a_prefix(CURRENT_DATA[CURRENT_PC]))
-    {
-        ctx->opcode.byte[opcode_byte_counter++] = CURRENT_DATA[INC_PC];
-        opcode_prefixed = true;
-        if (CURRENT_PC >= ctx->data_size)
-        {
-            free(opc);
-            return NULL;
-        }
-    }
-
-    if (opcode_prefixed && opcode_byte_counter == 1)
-    {
-        if (CURRENT_PC >= ctx->data_size)
-        {
-            free(opc);
-            return NULL;
-        }
-        CURRENT_BYTE = CURRENT_DATA[INC_PC];
-        disasm_byte_swap(ctx->opcode.byte, 2);
-        const char *mnemo = disasm_find_opcode(CURRENT_INSTRUCTION, &data_size);
-        if (!mnemo)
-        {
-            free(opc);
-            return NULL;
-        }
-        if (data_size)
-        {
-            for (int8_t i = 0; i < data_size; i++)
+            if (left < 4)
             {
-                if (CURRENT_PC >= ctx->data_size)
-                {
-                    free(opc);
-                    return NULL;
-                }
-                ctx->data.byte[i] = CURRENT_DATA[INC_PC];
+                return disasm_make_opcode(start, disasm_compile_string("defb %#.2x", first));
             }
-            opc->mnemonic = disasm_compile_string(mnemo, ctx->data.data);
+            index_displacement = code[start + 2];
+            prefixed_index = true;
+            opcode = ((uint32_t)first << 16) | ((uint32_t)0xCB << 8) | code[start + 3];
+            length = 4;
         }
         else
         {
-            opc->mnemonic = disasm_compile_string("%s", mnemo);
+            opcode = ((uint32_t)first << 8) | code[start + 1];
+            length = 2;
         }
-        return opc;
+    }
+    else if (0xCB == first || 0xED == first)
+    {
+        if (left < 2)
+        {
+            return disasm_make_opcode(start, disasm_compile_string("defb %#.2x", first));
+        }
+        opcode = ((uint32_t)first << 8) | code[start + 1];
+        length = 2;
     }
 
-    if (opcode_prefixed && opcode_byte_counter == 2)
+    const opcode_table *entry = disasm_find_opcode(opcode);
+    if (!entry || !entry->mnemo)
     {
-        if (CURRENT_PC + 1 >= ctx->data_size)
+        /* unknown encoding: emit the leading byte and resynchronise on the next */
+        CURRENT_PC = start + 1;
+        return disasm_make_opcode(start, disasm_compile_string("defb %#.2x", first));
+    }
+
+    /* Operand bytes follow the opcode, except for DDCB/FDCB where the single
+       "data" byte is the displacement that was already read above. */
+    uint8_t operands[2] = {0};
+    size_t operand_count = prefixed_index ? 0 : entry->data_size;
+    if (disasm_is_double_argumented(opcode))
+    {
+        operand_count = 2;
+    }
+
+    if (left < length + operand_count)
+    {
+        CURRENT_PC = start + 1;
+        return disasm_make_opcode(start, disasm_compile_string("defb %#.2x", first));
+    }
+
+    for (size_t i = 0; i < operand_count; ++i)
+    {
+        operands[i] = code[start + length + i];
+    }
+    CURRENT_PC = (uint16_t)(start + length + operand_count);
+
+    char *text = NULL;
+    if (prefixed_index)
+    {
+        text = disasm_compile_string(entry->mnemo, index_displacement);
+    }
+    else if (disasm_is_double_argumented(opcode))
+    {
+        text = disasm_compile_string(entry->mnemo, operands[0], operands[1]);
+    }
+    else if (entry->reljmp)
+    {
+        /* the displacement is signed and relative to the next instruction */
+        uint16_t target = (uint16_t)(CURRENT_PC + (int8_t)operands[0]);
+        disasm_add_label(target);
+        text = disasm_compile_string(entry->mnemo, target);
+    }
+    else if (2 == operand_count)
+    {
+        uint16_t value = (uint16_t)(operands[0] | ((uint16_t)operands[1] << 8));
+        if (disasm_is_abs_jump(opcode) || disasm_is_call(opcode))
         {
-            free(opc);
-            return NULL;
+            disasm_add_label(value);
         }
-        CURRENT_BYTE = CURRENT_DATA[CURRENT_PC + 1];
-        uint8_t temp[4] = {0};
-        memcpy(temp, ctx->opcode.byte, 4);
-        disasm_byte_swap(ctx->opcode.byte, 3);
-        const char *mnemo = disasm_find_opcode(CURRENT_INSTRUCTION, &data_size);
-        memcpy(ctx->opcode.byte, temp, 4);
-        ctx->opcode.byte[opcode_byte_counter++] = CURRENT_DATA[INC_PC];
-        if (CURRENT_PC >= ctx->data_size)
-        {
-            free(opc);
-            return NULL;
-        }
-        CURRENT_BYTE = CURRENT_DATA[INC_PC];
-        disasm_byte_swap(ctx->opcode.byte, 4);
-        opc->mnemonic = disasm_compile_string(mnemo, ctx->opcode.byte[1]);
-        return opc;
+        text = disasm_compile_string(entry->mnemo, value);
+    }
+    else if (1 == operand_count)
+    {
+        text = disasm_compile_string(entry->mnemo, operands[0]);
     }
     else
     {
-        ctx->opcode.byte[opcode_byte_counter++] = CURRENT_DATA[INC_PC];
-        const char *mnemo = disasm_find_opcode(CURRENT_INSTRUCTION, &data_size);
-        if (data_size)
-        {
-            int8_t data_counter = 0;
-            while (data_counter < data_size)
-            {
-                if (CURRENT_PC >= ctx->data_size)
-                {
-                    free(opc);
-                    return NULL;
-                }
-                ctx->data.byte[data_counter++] = CURRENT_DATA[INC_PC];
-            }
-
-            /* Check if it is a jump instruction */
-            if (disasm_is_rel_jump(CURRENT_INSTRUCTION))
-            {
-                int32_t addr = disasm_add_label(ctx->data.data + CURRENT_PC);
-                opc->mnemonic = disasm_compile_string(mnemo, ctx->data.data + CURRENT_PC);
-            }
-            else if (disasm_is_abs_jump(CURRENT_INSTRUCTION) || disasm_is_call(CURRENT_INSTRUCTION))
-            {
-                int32_t addr = disasm_add_label(ctx->data.data);
-                opc->mnemonic = disasm_compile_string(mnemo, ctx->data.data);
-            }
-            else
-            {
-                opc->mnemonic = disasm_compile_string(mnemo, ctx->data.data);
-            }
-            return opc;
-        }
-
-        if (disasm_is_return(CURRENT_INSTRUCTION))
-        {
-        }
-        opc->mnemonic = disasm_compile_string("%s", mnemo);
-        return opc;
+        text = disasm_compile_string("%s", entry->mnemo);
     }
+
+    return disasm_make_opcode(start, text);
 }
 
-void disasm_call_graph()
+void disasm_call_graph(void)
 {
     disasm_label *cur, *tmp;
     HASH_ITER(hh, disasm_labels, cur, tmp)
     {
-        printf("L%.4X\n", cur->id);
+        printf("L%.4X\n", cur->address);
     }
 }
 
 int disasm_parse_input_stream(dsmctx *ctx)
 {
-    dsmopc *opcode = 0;
-    /* PASS 1 */
-    intmax_t opcode_ctr = ctx->opcodes_to_fetch;
+    dsmopc *opcode = NULL;
+
     for (run_pass = PASS1; PASS2 >= run_pass; run_pass++)
     {
+        /* every pass walks the whole input from the beginning */
+        intmax_t opcode_ctr = ctx->opcodes_to_fetch;
         CURRENT_PC = 0;
-        CURRENT_INSTRUCTION = 0;
-        ctx->data.data = 0;
-        ctx->opcode_size = 0;
+
         while ((opcode = disasm_fetch_next_opcode(ctx)))
         {
-            if (!opcode_ctr--)
+            if (0 == opcode_ctr)
             {
+                free(opcode->mnemonic);
+                free(opcode);
                 break;
             }
+            if (opcode_ctr > 0)
+            {
+                --opcode_ctr;
+            }
+
             if (PASS2 == run_pass)
             {
-                printf("%s\t\t\t;%.4Xh\n", opcode->mnemonic, CURRENT_PC - 1);
+                if (disasm_has_label(opcode->address))
+                {
+                    printf("L%.4X:\n", opcode->address);
+                }
+                printf("\t%s\t\t\t;%.4Xh\n", opcode->mnemonic ? opcode->mnemonic : "???", opcode->address);
             }
             free(opcode->mnemonic);
             free(opcode);
-            CURRENT_INSTRUCTION = 0;
-            ctx->data.data = 0;
-            ctx->opcode_size = 0;
         }
     }
-    disasm_call_graph();
     return 1;
 }
 
-void disassembly_listing(char *source)
+bool disassembly_listing(char *source)
 {
-    puts("Disassembly. Pass 1\n");
-    run_pass = PASS1;
-    intmax_t opcodes_to_fetch = -1;
-    intmax_t bytes_to_parse = -1;
-    dsmctx *new = disasm_ctx_init();
-    FILE *in = fopen(source, "r");
+    /* binary input: text mode mangles CRLF pairs and stops at 0x1A */
+    FILE *in = fopen(source, "rb");
     if (!in)
     {
         puts("Failed to open source file");
-        return;
+        return false;
     }
-    fseek(in, 0, SEEK_END);
-    new->data_size = ftell(in);
+
+    if (0 != fseek(in, 0, SEEK_END))
+    {
+        puts("Failed to read input file");
+        fclose(in);
+        return false;
+    }
+    long size = ftell(in);
     rewind(in);
-    new->prog = malloc(new->data_size + 1);
-    fread(new->prog, 1, new->data_size, in);
-    new->opcodes_to_fetch = opcodes_to_fetch;
-    new->bytes_to_parse = bytes_to_parse;
-    printf("Data size: %d\n", new->data_size);
+    if (size < 0)
+    {
+        puts("Failed to read input file");
+        fclose(in);
+        return false;
+    }
+    if (size > PROG_SIZE)
+    {
+        puts("Input does not fit into the 64K address space");
+        fclose(in);
+        return false;
+    }
+
+    dsmctx *new = disasm_ctx_init();
+    if (!new)
+    {
+        puts("Memory allocation failed");
+        fclose(in);
+        return false;
+    }
+
+    new->data_size = (size_t)size;
+    new->prog = malloc(new->data_size ? new->data_size : 1);
+    if (!new->prog)
+    {
+        puts("Memory allocation failed");
+        disasm_ctx_free(new);
+        fclose(in);
+        return false;
+    }
+
+    if (fread(new->prog, 1, new->data_size, in) != new->data_size)
+    {
+        puts("Failed to read input file");
+        disasm_ctx_free(new);
+        fclose(in);
+        return false;
+    }
+    fclose(in);
+
+    new->opcodes_to_fetch = -1;
+    new->bytes_to_parse = -1;
+    printf("; %s, %zu bytes\n", source, new->data_size);
 
     disasm_parse_input_stream(new);
-    puts("Disassembly completed\n");
+
     disasm_ctx_free(new);
-    fclose(in);
+    disasm_labels_free();
+    return true;
 }

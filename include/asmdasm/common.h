@@ -118,14 +118,14 @@ extern RUNPASS run_pass;
         }                                                                                                              \
     }
 
+/* Index displacement. The Z80 encodes it as a signed byte, but 0x80..0xFF is
+   accepted as the raw byte too: that is how the disassembler prints negative
+   displacements, so its output can be fed back in. */
 #define SIGN8(x)                                                                                                       \
-    if (x)                                                                                                             \
+    if (x > 0xFF || x < -128)                                                                                          \
     {                                                                                                                  \
-        if (x > 127 || x < -128)                                                                                       \
-        {                                                                                                              \
-            printf("JR can only jump forward up to 127 and back to 128 bytes: %jd\n", x);                              \
-            YYABORT;                                                                                                   \
-        }                                                                                                              \
+        printf("Index displacement %jd is out of range [-128..255]\n", x);                                             \
+        YYABORT;                                                                                                       \
     }
 
 #define UNSIGN16(x)                                                                                                    \
