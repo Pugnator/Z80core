@@ -209,7 +209,7 @@ int tap_create(struct t_tap_info *p_tap, FILE *out)
     l += DATA_HDR_OFFSET;
 
     /* write all headers to file */
-    if (fwrite(p, 1, l, out) != l)
+    if (fwrite(p, 1, l, out) != (size_t)l)
     {
         return -1;
     }

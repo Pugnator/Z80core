@@ -1291,7 +1291,7 @@ const opcode_table opcode_tab[] = {
     {.opcode = 0xDDAD, .mnemo = "XOR XL"},
     {.opcode = 0xFDAC, .mnemo = "XOR YH"},
     {.opcode = 0xFDAD, .mnemo = "XOR YL"},
-    {0, 0}};
+    {0}};
 
 /* without null terminated entry */
 const int opcode_tab_count = (sizeof(opcode_tab) / (sizeof(opcode_tab[0]))) - 1;

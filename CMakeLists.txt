@@ -42,7 +42,7 @@ if(WIN32)
 endif()
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
-    target_compile_options(zasm PRIVATE -Wall -ffunction-sections -fdata-sections)
+    target_compile_options(zasm PRIVATE -Wall -Wextra -Werror -ffunction-sections -fdata-sections)
     target_link_options(zasm PRIVATE -Wl,--gc-sections)
 
     # Each grammar rule renders its instruction into a fixed 64-byte buffer with
@@ -51,8 +51,14 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     # buries anything worth reading. A truncation could not corrupt the output
     # silently either: the shortened text would fail the opcode lookup and be
     # reported as an unknown mnemonic.
+    #
+    # The scanner and parser are machine-generated: their warnings are flex's
+    # and bison's to answer for and vary by version, so -Werror does not apply
+    # to them. Everything hand-written is held to it.
     set_source_files_properties(${BISON_z80_parser_OUTPUTS}
-                                PROPERTIES COMPILE_OPTIONS -Wno-format-truncation)
+                                PROPERTIES COMPILE_OPTIONS "-Wno-format-truncation;-Wno-error")
+    set_source_files_properties(${FLEX_z80_lexer_OUTPUTS}
+                                PROPERTIES COMPILE_OPTIONS "-Wno-error")
 endif()
 
 # The emulator core is not built yet; enable once src/emucore grows up.
@@ -84,6 +90,12 @@ if(Python3_FOUND)
     add_test(NAME opcode_table_invariants
              COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_table.py
                      ${CMAKE_CURRENT_SOURCE_DIR}/src/asmdasm/z80tab.c)
+
+    add_test(NAME ihex_output
+             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_ihex.py
+                     --zasm $<TARGET_FILE:zasm>
+                     --source ${CMAKE_CURRENT_SOURCE_DIR}/tests/monitor48k/monitor48k.asm
+                     --reference ${CMAKE_CURRENT_SOURCE_DIR}/tests/monitor48k/monitor48k.rom)
 
     # every instruction the table claims must be reachable from the grammar
     add_test(NAME opcode_coverage

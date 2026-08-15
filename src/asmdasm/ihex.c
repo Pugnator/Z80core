@@ -27,7 +27,7 @@ int save_array_to_ihex(FILE *ihex, int base, uint8_t b[], int size)
         sum8 = chunk_size + ((base >> 8) & 0xff) + (base & 0xff) + IHEX_BINARY_DATA;
         /* write header */
         len = sprintf(buf, ":%.2X%.4X%.2X", chunk_size & 0xFF, base & 0xFFFF, IHEX_BINARY_DATA);
-        if (fwrite(buf, 1, len, ihex) != len)
+        if (fwrite(buf, 1, len, ihex) != (size_t)len)
         {
             return -1;
         }
@@ -37,26 +37,26 @@ int save_array_to_ihex(FILE *ihex, int base, uint8_t b[], int size)
             data = *b++;
             sum8 += data;
             len = sprintf(buf, "%.2X", data);
-            if (fwrite(buf, 1, len, ihex) != len)
+            if (fwrite(buf, 1, len, ihex) != (size_t)len)
             {
                 return -1;
             }
         }
 
         len = sprintf(buf, "%.2X\r\n", (0 - sum8) & 0xFF);
-        if (fwrite(buf, 1, len, ihex) != len)
+        if (fwrite(buf, 1, len, ihex) != (size_t)len)
         {
             return -1;
         }
     }
     /* write EOF marker */
     len = sprintf(buf, ":%.2X%.4X%.2X%.2X\r\n", 0, 0, IHEX_EOF, (0 - IHEX_EOF) & 0xFF);
-    if (fwrite(buf, 1, len, ihex) != len)
+    if (fwrite(buf, 1, len, ihex) != (size_t)len)
     {
         return -1;
     }
 
-    return -1;
+    return 0;
 }
 
 void *create_array_from_ihex(FILE *ihex, int *res)
