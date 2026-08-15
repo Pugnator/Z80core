@@ -199,7 +199,6 @@ IN E, [C]                		;0xed58        		#size:2
 IN F, [C]                		;0xed70        		#size:2
 IN H, [C]                		;0xed60        		#size:2
 IN L, [C]                		;0xed68        		#size:2
-IN [C], [C]              		;0xed70        		#size:2
 INC A                    		;0x3c          		#size:1
 INC B                    		;0x04          		#size:1
 INC BC                   		;0x03          		#size:1

@@ -76,6 +76,12 @@ if(Python3_FOUND)
              COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_table.py
                      ${CMAKE_CURRENT_SOURCE_DIR}/src/asmdasm/z80tab.c)
 
+    # every instruction the table claims must be reachable from the grammar
+    add_test(NAME opcode_coverage
+             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_coverage.py
+                     --zasm $<TARGET_FILE:zasm>
+                     --table ${CMAKE_CURRENT_SOURCE_DIR}/src/asmdasm/z80tab.c)
+
     # disassemble the 16K ROM and assemble the listing back to the same bytes
     add_test(NAME round_trip_monitor48k
              COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/round_trip.py

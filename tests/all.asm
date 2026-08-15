@@ -335,7 +335,6 @@ IM 1                     		;0xed76        		#size:2
 IM 1                     		;0xed56        		#size:2
 IM 2                     		;0xed7e        		#size:2
 IM 2                     		;0xed5e        		#size:2
-IN [C], [C]              		;0xed70        		#size:2
 IN A, [0xaa]             		;0xdbaa        		#size:2
 IN A, [C]                		;0xed78        		#size:2
 IN B, [C]                		;0xed40        		#size:2

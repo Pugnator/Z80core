@@ -78,6 +78,17 @@ def main():
             opcodes = ", ".join(f"{e['opcode']:#x}" for e in group)
             failures.append(f"{mnemo!r} has {len(group)} entries without .duplicate: {opcodes}")
 
+    # 1c. an opcode decodes to exactly one mnemonic, or the disassembler's
+    #     linear search picks whichever entry happens to come first
+    by_opcode = {}
+    for entry in entries:
+        if entry["mnemo"] == PLACEHOLDER:
+            continue
+        by_opcode.setdefault(entry["opcode"], set()).add(entry["mnemo"])
+    for opcode, names in sorted(by_opcode.items()):
+        if len(names) > 1:
+            failures.append(f"{opcode:#x} decodes to {len(names)} different mnemonics: {sorted(names)}")
+
     # 2. data_size agrees with the format string
     for entry in entries:
         want = expected_data_size(entry["mnemo"])
