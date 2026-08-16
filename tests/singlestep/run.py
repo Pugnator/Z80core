@@ -53,6 +53,7 @@ class State(ctypes.Structure):
         ("sp", ctypes.c_uint16), ("pc", ctypes.c_uint16),
         ("wz", ctypes.c_uint16),
         ("i", ctypes.c_uint8), ("r", ctypes.c_uint8), ("im", ctypes.c_uint8),
+        ("q", ctypes.c_uint8),
         ("iff1", ctypes.c_bool), ("iff2", ctypes.c_bool), ("halted", ctypes.c_bool),
         ("edges", ctypes.c_uint64),
     ]
@@ -161,6 +162,7 @@ def build_state(initial):
     state.i = initial["i"]
     state.r = initial["r"]
     state.im = initial["im"]
+    state.q = initial["q"]
     state.iff1 = bool(initial["iff1"])
     state.iff2 = bool(initial["iff2"])
     state.halted = False
@@ -271,6 +273,9 @@ def run_case(lib, case, skip=()):
         problems.append("IFF1 %d, expected %d" % (final.iff1, expected["iff1"]))
     if final.iff2 != bool(expected["iff2"]):
         problems.append("IFF2 %d, expected %d" % (final.iff2, expected["iff2"]))
+
+    if final.q != expected["q"]:
+        problems.append("Q %02X, expected %02X" % (final.q, expected["q"]))
 
     for address, value in expected["ram"]:
         if memory[address] != value:

@@ -430,7 +430,19 @@ static uint8_t port_read(uint16_t port)
  */
 static bool known_divergence(const char *name)
 {
-    static const char *const cases[] = {"cb46", "cb4e", "cb56", "cb5e", "cb66", "cb6e", "cb76", "cb7e"};
+    /*
+     * SCF and CCF join BIT n,(HL) here, and for the same reason: FUSE does not
+     * model the internal register the rule depends on, so its format cannot
+     * express one, so every case it holds has that register at zero - and under
+     * that condition the rule it chose is indistinguishable from the right one.
+     *
+     * BIT n,(HL) reads the high half of WZ; FUSE has no MEMPTR and chose the
+     * byte tested. SCF and CCF read A OR'd with the flag bus residue, Q xor F;
+     * FUSE has no Q and chose A alone. SingleStepTests carries both registers
+     * and settles both, 400/400 and 800/800.
+     */
+    static const char *const cases[] = {"cb46", "cb4e", "cb56", "cb5e", "cb66", "cb6e", "cb76",
+                                        "cb7e", "37",   "37_1", "37_2", "37_3", "3f"};
     for (size_t i = 0; i < sizeof cases / sizeof cases[0]; ++i)
     {
         if (0 == strcmp(name, cases[i]))

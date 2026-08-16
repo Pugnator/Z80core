@@ -39,7 +39,7 @@
 
 /** Snapshot format, so a stale file is refused rather than misread. */
 #define Z80_SNAPSHOT_MAGIC 0x5A383043u /* "Z80C" */
-#define Z80_SNAPSHOT_VERSION 6u
+#define Z80_SNAPSHOT_VERSION 7u
 
 /** Outputs the core drives; the rest of ctrl belongs to the host. */
 #define Z80_OUTPUT_PINS (Z80_M1 | Z80_MREQ | Z80_IORQ | Z80_RD | Z80_WR | Z80_RFSH | Z80_HALT | Z80_BUSAK)
@@ -101,6 +101,11 @@ struct z80_t
     uint16_t bus_addr;   /**< address the current read or write uses */
     uint8_t bus_data;    /**< byte read, or byte to write */
     z80_pair tmp;        /**< 16-bit scratch, for operands WZ must not see */
+
+    /* Q, the flag bus residue */
+    uint8_t q;         /**< what the last instruction left on the flag bus */
+    uint8_t q_pending; /**< flags written so far by the instruction running */
+    bool q_written;    /**< whether it has written any */
 
     /* interrupts */
     bool nmi_previous;  /**< the level NMI was at last edge, for edge detection */
@@ -498,6 +503,22 @@ static uint8_t flags_sz_xy(uint8_t result)
     return flags;
 }
 
+/**
+ * Write F, and remember it.
+ *
+ * The remembering is what Q is. A-Z80 shows X and Y are never computed from a
+ * result - they are bits 3 and 5 of whatever byte is on the internal data bus
+ * when the flags latch - and on the NMOS part the bus still carries the last
+ * flag output when SCF or CCF puts A on it. Q is that residue, and it is why
+ * SCF gives different answers for the same A depending on what ran before it.
+ */
+static void write_flags(z80_t *cpu, uint8_t flags)
+{
+    cpu->af.byte.low = flags;
+    cpu->q_pending = flags;
+    cpu->q_written = true;
+}
+
 static void alu_add(z80_t *cpu, uint8_t value, uint8_t carry)
 {
     const uint8_t a = cpu->af.byte.high;
@@ -519,7 +540,7 @@ static void alu_add(z80_t *cpu, uint8_t value, uint8_t carry)
     }
 
     cpu->af.byte.high = result;
-    cpu->af.byte.low = flags;
+    write_flags(cpu, flags);
 }
 
 /** Shared by SUB, SBC and CP, which differ only in what they keep. */
@@ -551,7 +572,7 @@ static void alu_sub(z80_t *cpu, uint8_t value, uint8_t carry)
     uint8_t result = 0u;
     const uint8_t flags = sub_flags(cpu->af.byte.high, value, carry, &result);
     cpu->af.byte.high = result;
-    cpu->af.byte.low = flags;
+    write_flags(cpu, flags);
 }
 
 /**
@@ -563,7 +584,7 @@ static void alu_cp(z80_t *cpu, uint8_t value)
     uint8_t result = 0u;
     uint8_t flags = sub_flags(cpu->af.byte.high, value, 0u, &result);
     flags = (uint8_t)((flags & ~(uint8_t)Z80_FLAG_XY) | (value & Z80_FLAG_XY));
-    cpu->af.byte.low = flags;
+    write_flags(cpu, flags);
 }
 
 static void alu_logic(z80_t *cpu, uint8_t result, uint8_t half_carry)
@@ -574,7 +595,7 @@ static void alu_logic(z80_t *cpu, uint8_t result, uint8_t half_carry)
         flags |= Z80_FLAG_PV;
     }
     cpu->af.byte.high = result;
-    cpu->af.byte.low = flags;
+    write_flags(cpu, flags);
 }
 
 /** INC and DEC leave carry alone, which is why they are not ADD and SUB. */
@@ -590,7 +611,7 @@ static uint8_t alu_inc(z80_t *cpu, uint8_t value)
     {
         flags |= Z80_FLAG_PV;
     }
-    cpu->af.byte.low = flags;
+    write_flags(cpu, flags);
     return result;
 }
 
@@ -606,7 +627,7 @@ static uint8_t alu_dec(z80_t *cpu, uint8_t value)
     {
         flags |= Z80_FLAG_PV;
     }
-    cpu->af.byte.low = flags;
+    write_flags(cpu, flags);
     return result;
 }
 
@@ -634,7 +655,7 @@ static void alu_add16(z80_t *cpu, z80_pair *destination, uint16_t value)
 
     cpu->wz.word = (uint16_t)(a + 1u);
     destination->word = result;
-    cpu->af.byte.low = flags;
+    write_flags(cpu, flags);
 }
 
 /**
@@ -676,7 +697,7 @@ static void alu_rotate_a(z80_t *cpu, uint8_t which)
     }
 
     cpu->af.byte.high = result;
-    cpu->af.byte.low = flags;
+    write_flags(cpu, flags);
 }
 
 /**
@@ -714,7 +735,7 @@ static void alu_daa(z80_t *cpu)
     }
 
     cpu->af.byte.high = result;
-    cpu->af.byte.low = flags;
+    write_flags(cpu, flags);
 }
 
 /**
@@ -777,7 +798,7 @@ static uint8_t alu_shift(z80_t *cpu, uint8_t which, uint8_t value)
         flags |= Z80_FLAG_C;
     }
 
-    cpu->af.byte.low = flags;
+    write_flags(cpu, flags);
     return result;
 }
 
@@ -801,7 +822,7 @@ static void alu_bit(z80_t *cpu, uint8_t bit, uint8_t value, uint8_t undocumented
     }
     flags |= (uint8_t)(undocumented & Z80_FLAG_XY);
 
-    cpu->af.byte.low = flags;
+    write_flags(cpu, flags);
 }
 
 /**
@@ -835,7 +856,7 @@ static void alu_adc16(z80_t *cpu, uint16_t value)
 
     cpu->wz.word = (uint16_t)(a + 1u);
     cpu->hl.word = result;
-    cpu->af.byte.low = flags;
+    write_flags(cpu, flags);
 }
 
 static void alu_sbc16(z80_t *cpu, uint16_t value)
@@ -865,7 +886,7 @@ static void alu_sbc16(z80_t *cpu, uint16_t value)
 
     cpu->wz.word = (uint16_t)(a + 1u);
     cpu->hl.word = result;
-    cpu->af.byte.low = flags;
+    write_flags(cpu, flags);
 }
 
 /*
@@ -890,7 +911,7 @@ static void block_transfer_flags(z80_t *cpu, uint8_t value)
         flags |= Z80_FLAG_PV; /* P/V here means "more to do" */
     }
 
-    cpu->af.byte.low = flags;
+    write_flags(cpu, flags);
 }
 
 static void block_compare_flags(z80_t *cpu, uint8_t value)
@@ -920,7 +941,7 @@ static void block_compare_flags(z80_t *cpu, uint8_t value)
         flags |= Z80_FLAG_PV;
     }
 
-    cpu->af.byte.low = flags;
+    write_flags(cpu, flags);
 }
 
 static void block_io_flags(z80_t *cpu, uint8_t value, uint8_t addend)
@@ -941,7 +962,7 @@ static void block_io_flags(z80_t *cpu, uint8_t value, uint8_t addend)
         flags |= Z80_FLAG_PV;
     }
 
-    cpu->af.byte.low = flags;
+    write_flags(cpu, flags);
 }
 
 static bool condition_met(const z80_t *cpu, uint8_t code)
@@ -1520,20 +1541,29 @@ static void execute_cpl(z80_t *cpu, z80_pins_t *pins)
  * register. Phase 4 models Q; until then this is the common case.
  */
 
+/**
+ * X and Y come from A OR'd with the flag bus residue, which is Q exclusive-or
+ * the flags as they stand. Q equals F when the previous instruction wrote
+ * flags, so the residue is nothing and X and Y follow A alone; when it did not,
+ * Q is zero and F itself is still on the bus. Same A, two answers, depending
+ * only on what ran before - which is why this needs Q rather than a rule.
+ */
 static void execute_scf(z80_t *cpu, z80_pins_t *pins)
 {
     (void)pins;
+    const uint8_t residue = (uint8_t)(cpu->q ^ cpu->af.byte.low);
     uint8_t flags = (uint8_t)(cpu->af.byte.low & (Z80_FLAG_S | Z80_FLAG_Z | Z80_FLAG_PV));
-    flags |= (uint8_t)((cpu->af.byte.high & Z80_FLAG_XY) | Z80_FLAG_C);
-    cpu->af.byte.low = flags;
+    flags |= (uint8_t)(((cpu->af.byte.high | residue) & Z80_FLAG_XY) | Z80_FLAG_C);
+    write_flags(cpu, flags);
 }
 
 static void execute_ccf(z80_t *cpu, z80_pins_t *pins)
 {
     (void)pins;
     const uint8_t before = cpu->af.byte.low;
+    const uint8_t residue = (uint8_t)(cpu->q ^ before);
     uint8_t flags = (uint8_t)(before & (Z80_FLAG_S | Z80_FLAG_Z | Z80_FLAG_PV));
-    flags |= (uint8_t)(cpu->af.byte.high & Z80_FLAG_XY);
+    flags |= (uint8_t)((cpu->af.byte.high | residue) & Z80_FLAG_XY);
     if (before & Z80_FLAG_C)
     {
         flags |= Z80_FLAG_H; /* the old carry is where H comes from */
@@ -1542,7 +1572,7 @@ static void execute_ccf(z80_t *cpu, z80_pins_t *pins)
     {
         flags |= Z80_FLAG_C;
     }
-    cpu->af.byte.low = flags;
+    write_flags(cpu, flags);
 }
 
 static void execute_di(z80_t *cpu, z80_pins_t *pins)
@@ -1753,7 +1783,7 @@ static void execute_neg(z80_t *cpu, z80_pins_t *pins)
     uint8_t result = 0u;
     const uint8_t flags = sub_flags(0u, cpu->af.byte.high, 0u, &result);
     cpu->af.byte.high = result;
-    cpu->af.byte.low = flags;
+    write_flags(cpu, flags);
 }
 
 static void execute_adc_hl(z80_t *cpu, z80_pins_t *pins)
@@ -1817,7 +1847,7 @@ static void load_a_from_control_register(z80_t *cpu, z80_pins_t *pins, uint8_t v
     }
 
     cpu->af.byte.high = value;
-    cpu->af.byte.low = flags;
+    write_flags(cpu, flags);
 }
 
 static void execute_ld_a_from_i(z80_t *cpu, z80_pins_t *pins)
@@ -1848,7 +1878,7 @@ static void digit_rotate_flags(z80_t *cpu)
     {
         flags |= Z80_FLAG_PV;
     }
-    cpu->af.byte.low = flags;
+    write_flags(cpu, flags);
     cpu->wz.word = (uint16_t)(cpu->hl.word + 1u);
 }
 
@@ -1908,7 +1938,7 @@ static void execute_in_c(z80_t *cpu, z80_pins_t *pins)
     {
         flags |= Z80_FLAG_PV;
     }
-    cpu->af.byte.low = flags;
+    write_flags(cpu, flags);
     cpu->wz.word = (uint16_t)(cpu->bc.word + 1u);
 }
 
@@ -1970,7 +2000,7 @@ static void execute_ld_rp_from_memory(z80_t *cpu, z80_pins_t *pins)
 static void block_repeat_undocumented(z80_t *cpu)
 {
     const uint8_t high = (uint8_t)((uint16_t)(cpu->pc.word - 2u) >> 8);
-    cpu->af.byte.low = (uint8_t)((cpu->af.byte.low & ~(uint8_t)Z80_FLAG_XY) | (high & Z80_FLAG_XY));
+    write_flags(cpu, (uint8_t)((cpu->af.byte.low & ~(uint8_t)Z80_FLAG_XY) | (high & Z80_FLAG_XY)));
 }
 
 static int block_delta(const z80_t *cpu)
@@ -3202,6 +3232,11 @@ static uint32_t advance(z80_t *cpu, z80_pins_t *pins)
             {
                 cpu->prefix = 0;
                 cpu->index = 0;
+
+                /* An instruction that wrote no flags leaves nothing on the
+                   bus, which is what clears Q rather than any deliberate act. */
+                cpu->q = cpu->q_written ? cpu->q_pending : 0u;
+                cpu->q_written = false;
             }
             cpu->instr = NULL;
             cpu->seq = &m1_fetch_seq;
@@ -3384,6 +3419,7 @@ void z80_state(const z80_t *cpu, z80_state_t *out)
     out->im = cpu->im;
     out->iff1 = cpu->iff1;
     out->iff2 = cpu->iff2;
+    out->q = cpu->q;
     out->halted = cpu->halted;
     out->edges = cpu->edges;
 }
@@ -3414,6 +3450,9 @@ void z80_set_state(z80_t *cpu, const z80_state_t *state)
     cpu->iff1 = state->iff1;
     cpu->iff2 = state->iff2;
     cpu->halted = state->halted;
+    cpu->q = state->q;
+    cpu->q_pending = 0;
+    cpu->q_written = false;
 }
 
 const char *z80_reg_name(z80_reg which)
@@ -3453,6 +3492,7 @@ typedef struct
     uint8_t bus_released;
     uint8_t nmi_latched;
     uint8_t int_inhibit;
+    uint8_t q;
     uint8_t clk;
     uint16_t bus_addr;
     uint8_t bus_data;
@@ -3505,6 +3545,7 @@ size_t z80_save(const z80_t *cpu, void *buffer, size_t size)
     snapshot.prefix = cpu->prefix;
     snapshot.index = cpu->index;
     snapshot.bus_released = cpu->bus_released ? 1u : 0u;
+    snapshot.q = cpu->q;
     snapshot.nmi_latched = cpu->nmi_latched ? 1u : 0u;
     snapshot.int_inhibit = cpu->int_inhibit ? 1u : 0u;
     snapshot.clk = cpu->clk;
@@ -3556,6 +3597,7 @@ bool z80_load(z80_t *cpu, const void *buffer, size_t size)
     cpu->prefix = snapshot.prefix;
     cpu->index = snapshot.index;
     cpu->bus_released = 0 != snapshot.bus_released;
+    cpu->q = snapshot.q;
     cpu->nmi_latched = 0 != snapshot.nmi_latched;
     cpu->int_inhibit = 0 != snapshot.int_inhibit;
     cpu->clk = snapshot.clk;

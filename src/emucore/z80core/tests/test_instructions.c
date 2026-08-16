@@ -1615,6 +1615,42 @@ static void test_snapshot_mid_instruction(void)
     z80_free(cpu);
 }
 
+/**
+ * SCF and CCF give different answers for the same A depending on what ran
+ * before them, which is the whole of why Q has to exist.
+ *
+ * X and Y come from A OR'd with the flag bus residue. After an instruction
+ * that wrote flags there is no residue, so they follow A alone. After one that
+ * did not, F is still on the bus and shows through.
+ */
+static void test_scf_reads_the_flag_bus(void)
+{
+    /* a NOP writes no flags, so F leaks into X and Y */
+    static const uint8_t quiet[] = {0x00, 0x37}; /* NOP ; SCF */
+    z80_t *cpu = boot(quiet, sizeof quiet);
+    z80_pins_t pins = {0};
+
+    z80_set(cpu, Z80_REG_AF, 0x0028); /* A = 00, and X and Y set in F */
+    run_many(cpu, &pins, 2);
+
+    CHECK(0x28 == (reg_f(cpu) & 0x28u), "after a NOP, F should show through into X and Y; F is %02X", reg_f(cpu));
+    z80_free(cpu);
+
+    /* XOR A writes flags, so the bus carries them and nothing leaks */
+    static const uint8_t noisy[] = {0xAF, 0x37}; /* XOR A ; SCF */
+    cpu = boot(noisy, sizeof noisy);
+    memset(&pins, 0, sizeof pins);
+
+    z80_set(cpu, Z80_REG_AF, 0x0028);
+    run_many(cpu, &pins, 2);
+
+    CHECK(0x00 == (reg_f(cpu) & 0x28u), "after a flag-writing instruction, X and Y should follow A alone; F is %02X",
+          reg_f(cpu));
+    CHECK(0 != (reg_f(cpu) & 0x01u), "SCF should still have set carry");
+
+    z80_free(cpu);
+}
+
 int main(void)
 {
     test_alu_flags();
@@ -1659,6 +1695,7 @@ int main(void)
     test_repeated_prefixes();
     test_ed_cancels_the_index_prefix();
     test_every_opcode_is_implemented();
+    test_scf_reads_the_flag_bus();
     test_snapshot_mid_instruction();
 
     if (failures)

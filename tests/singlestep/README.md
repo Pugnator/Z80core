@@ -52,7 +52,7 @@ Not compared:
   per machine cycle and cannot express a strobe that begins on a falling edge —
   which is exactly what this core models. The address bus is driven for the
   whole cycle in both models, so it carries the check instead.
-- **`q` and `p`**, until issue #49 implements Q.
+- **`p`**, which this core does not model. `q` **is** compared, since #49.
 - **`ei`**, until interrupts land (#51).
 
 ## Known divergences
@@ -70,3 +70,5 @@ Not compared:
   high half of the address they resume at rather than from the byte that moved:
   400/400 for `LDIR`, against 89 for the `A + byte` rule that applies to the
   non-repeating forms.
+- **`SCF`/`CCF` and Q** — X and Y come from `A | (Q ^ F)`, 800/800 against 606
+  for `A` alone. Q is compared on every opcode now, not just those two.

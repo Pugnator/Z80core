@@ -109,6 +109,7 @@ typedef struct
     uint16_t ix, iy, sp, pc, wz;
     uint8_t i, r;
     uint8_t im;     /**< interrupt mode, 0..2 */
+    uint8_t q;      /**< the flag bus residue SCF and CCF read; see the spec */
     bool iff1;      /**< interrupts enabled */
     bool iff2;      /**< the copy NMI keeps */
     bool halted;    /**< executing NOPs at the halt address */

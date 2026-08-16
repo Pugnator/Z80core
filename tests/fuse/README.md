@@ -71,7 +71,7 @@ the wrong place.
 ## What the suite does not cover
 
 - **`WZ`/MEMPTR** is not in the format at all. That needs z80test.
-- **`Q`** likewise — see issue #49.
+- **`Q`** likewise. Same consequence: see below.
 - Interrupts, since there is no way to assert one in the input format.
 
 ## Where FUSE is wrong, and how we know
@@ -92,6 +92,11 @@ value that happens to agree, and four disagree. Those four are listed in
 `known_divergence()` in the harness and reported on every run rather than
 silently forgiven.
 
+`SCF` and `CCF` are the same story with a different register. They take X and Y
+from `A` OR'd with the flag bus residue — `Q ^ F` — and FUSE, having no Q,
+chose `A` alone. SingleStepTests puts the full rule at 800 of 800 against 606
+for `A`. Five more cases diverge, listed alongside the others.
+
 This is the argument for having a second suite in one paragraph: the first one
-was confidently and undetectably wrong, and following it cost a working
-implementation until something independent disagreed.
+was confidently and undetectably wrong, twice, in the same way — and each time
+it was only something independent that could say so.
