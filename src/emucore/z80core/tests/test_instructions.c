@@ -1236,38 +1236,308 @@ static void test_every_ed_opcode_is_implemented(void)
     }
 }
 
-/** Nothing in the unprefixed set should reach the unimplemented counter. */
-static void test_every_unprefixed_opcode_is_implemented(void)
+/* ---------------------------------------------------------------- */
+/* The DD and FD sets                                                */
+/* ---------------------------------------------------------------- */
+
+/**
+ * A prefix that does not meet an (HL) simply redirects HL to an index
+ * register, and costs its four T-states for the privilege.
+ */
+static void test_index_register_substitution(void)
 {
-    static const uint8_t prefixes[] = {0xDD, 0xFD};
-
-    for (unsigned opcode = 0; opcode < 0x100u; ++opcode)
+    static const struct
     {
-        bool is_prefix = false;
-        for (size_t i = 0; i < sizeof prefixes; ++i)
-        {
-            is_prefix = is_prefix || (prefixes[i] == opcode);
-        }
+        const char *name;
+        uint8_t program[4];
+        size_t length;
+        int expect_t;
+    } cases[] = {
+        {"LD IX,nn", {0xDD, 0x21, 0x34, 0x12}, 4u, 14},
+        {"INC IX", {0xDD, 0x23}, 2u, 10},
+        {"ADD IX,BC", {0xDD, 0x09}, 2u, 15},
+        {"PUSH IX", {0xDD, 0xE5}, 2u, 15},
+        {"LD SP,IX", {0xDD, 0xF9}, 2u, 10},
+        {"JP (IX)", {0xDD, 0xE9}, 2u, 8},
+        {"EX (SP),IX", {0xDD, 0xE3}, 2u, 23},
+        {"LD IXH,n", {0xDD, 0x26, 0x55}, 3u, 11},
+        {"INC IXL", {0xDD, 0x2C}, 2u, 8},
+    };
 
-        /* two of them, so a stray fetch of the operand cannot be mistaken for
-           the instruction itself being missing */
-        const uint8_t program[] = {(uint8_t)opcode, 0x00, 0x00, 0x00};
-        z80_t *cpu = boot(program, sizeof program);
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; ++i)
+    {
+        z80_t *cpu = boot(cases[i].program, cases[i].length);
         z80_pins_t pins = {0};
 
+        z80_set(cpu, Z80_REG_IX, 0x4000);
         z80_set(cpu, Z80_REG_SP, 0x8000);
-        (void)run_one(cpu, &pins);
 
-        if (is_prefix)
-        {
-            CHECK(z80_unimplemented(cpu) > 0, "prefix %02X should still be counted as unimplemented", opcode);
-        }
-        else
-        {
-            CHECK(0 == z80_unimplemented(cpu), "opcode %02X is not implemented", opcode);
-        }
+        const int tstates = run_prefixed(cpu, &pins);
+        CHECK(cases[i].expect_t == tstates, "%s should take %d T-states, took %d", cases[i].name, cases[i].expect_t,
+              tstates);
 
         z80_free(cpu);
+    }
+}
+
+static void test_index_register_results(void)
+{
+    static const uint8_t program[] = {
+        0xDD, 0x21, 0x34, 0x12, /* LD IX,1234 */
+        0xDD, 0x23,             /* INC IX     */
+        0xDD, 0x26, 0xAB,       /* LD IXH,AB  */
+        0xFD, 0x21, 0x00, 0x50  /* LD IY,5000 */
+    };
+
+    z80_t *cpu = boot(program, sizeof program);
+    z80_pins_t pins = {0};
+
+    (void)run_prefixed(cpu, &pins);
+    CHECK(0x1234 == z80_get(cpu, Z80_REG_IX), "LD IX,nn gave %04X", z80_get(cpu, Z80_REG_IX));
+
+    (void)run_prefixed(cpu, &pins);
+    CHECK(0x1235 == z80_get(cpu, Z80_REG_IX), "INC IX gave %04X", z80_get(cpu, Z80_REG_IX));
+
+    (void)run_prefixed(cpu, &pins);
+    CHECK(0xAB35 == z80_get(cpu, Z80_REG_IX), "LD IXH,n gave %04X", z80_get(cpu, Z80_REG_IX));
+    CHECK(0x0000 == z80_get(cpu, Z80_REG_HL), "the prefix must not have touched HL, it is %04X",
+          z80_get(cpu, Z80_REG_HL));
+
+    (void)run_prefixed(cpu, &pins);
+    CHECK(0x5000 == z80_get(cpu, Z80_REG_IY), "LD IY,nn gave %04X", z80_get(cpu, Z80_REG_IY));
+
+    z80_free(cpu);
+}
+
+/** The displacement is signed, so an index can reach backwards as well. */
+static void test_indexed_memory_access(void)
+{
+    static const struct
+    {
+        const char *name;
+        uint8_t program[4];
+        size_t length;
+        int expect_t;
+    } cases[] = {
+        {"LD B,(IX+d)", {0xDD, 0x46, 0x05}, 3u, 19},  {"LD (IX+d),B", {0xDD, 0x70, 0x05}, 3u, 19},
+        {"ADD A,(IX+d)", {0xDD, 0x86, 0x05}, 3u, 19}, {"LD (IX+d),n", {0xDD, 0x36, 0x05, 0x99}, 4u, 19},
+        {"INC (IX+d)", {0xDD, 0x34, 0x05}, 3u, 23},   {"DEC (IX+d)", {0xDD, 0x35, 0x05}, 3u, 23},
+    };
+
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; ++i)
+    {
+        z80_t *cpu = boot(cases[i].program, cases[i].length);
+        z80_pins_t pins = {0};
+
+        z80_set(cpu, Z80_REG_IX, 0x4000);
+        const int tstates = run_prefixed(cpu, &pins);
+
+        CHECK(cases[i].expect_t == tstates, "%s should take %d T-states, took %d", cases[i].name, cases[i].expect_t,
+              tstates);
+        CHECK(0x4005 == z80_get(cpu, Z80_REG_WZ), "%s should leave IX+d in WZ, left %04X", cases[i].name,
+              z80_get(cpu, Z80_REG_WZ));
+
+        z80_free(cpu);
+    }
+}
+
+static void test_indexed_values_and_negative_displacement(void)
+{
+    static const uint8_t program[] = {
+        0xDD, 0x36, 0x05, 0x99, /* LD (IX+5),99  */
+        0xDD, 0x46, 0x05,       /* LD B,(IX+5)   */
+        0xDD, 0x77, 0xFB,       /* LD (IX-5),A   */
+        0xDD, 0x34, 0x05        /* INC (IX+5)    */
+    };
+
+    z80_t *cpu = boot(program, sizeof program);
+    z80_pins_t pins = {0};
+
+    z80_set(cpu, Z80_REG_IX, 0x4000);
+    z80_set(cpu, Z80_REG_AF, 0x7700);
+
+    (void)run_prefixed(cpu, &pins);
+    CHECK(0x99 == world.memory[0x4005], "LD (IX+5),n stored %02X", world.memory[0x4005]);
+
+    (void)run_prefixed(cpu, &pins);
+    CHECK(0x99 == (z80_get(cpu, Z80_REG_BC) >> 8), "LD B,(IX+5) read %02X", (unsigned)(z80_get(cpu, Z80_REG_BC) >> 8));
+
+    (void)run_prefixed(cpu, &pins);
+    CHECK(0x77 == world.memory[0x3FFB], "LD (IX-5),A should reach backwards, memory holds %02X", world.memory[0x3FFB]);
+
+    (void)run_prefixed(cpu, &pins);
+    CHECK(0x9A == world.memory[0x4005], "INC (IX+5) gave %02X", world.memory[0x4005]);
+
+    z80_free(cpu);
+}
+
+/**
+ * LD H,(IX+d) really does mean H. One byte cannot name an index register in
+ * one field and a plain one in the other, so the (IX+d) forms suspend the
+ * substitution for their register operand.
+ */
+static void test_indexed_register_operand_is_not_substituted(void)
+{
+    static const uint8_t program[] = {0xDD, 0x66, 0x05}; /* LD H,(IX+5) */
+
+    z80_t *cpu = boot(program, sizeof program);
+    z80_pins_t pins = {0};
+
+    world.memory[0x4005] = 0x42;
+    z80_set(cpu, Z80_REG_IX, 0x4000);
+    z80_set(cpu, Z80_REG_HL, 0x0000);
+
+    (void)run_prefixed(cpu, &pins);
+
+    CHECK(0x4200 == z80_get(cpu, Z80_REG_HL), "H should have taken the byte, HL is %04X", z80_get(cpu, Z80_REG_HL));
+    CHECK(0x4000 == z80_get(cpu, Z80_REG_IX), "IX must be untouched, is %04X", z80_get(cpu, Z80_REG_IX));
+
+    z80_free(cpu);
+}
+
+/** EX DE,HL is the instruction the prefix pointedly does not redirect. */
+static void test_ex_de_hl_ignores_the_index_prefix(void)
+{
+    static const uint8_t program[] = {0xDD, 0xEB}; /* DD EX DE,HL */
+
+    z80_t *cpu = boot(program, sizeof program);
+    z80_pins_t pins = {0};
+
+    z80_set(cpu, Z80_REG_DE, 0x1111);
+    z80_set(cpu, Z80_REG_HL, 0x2222);
+    z80_set(cpu, Z80_REG_IX, 0x3333);
+
+    (void)run_prefixed(cpu, &pins);
+
+    CHECK(0x2222 == z80_get(cpu, Z80_REG_DE) && 0x1111 == z80_get(cpu, Z80_REG_HL), "DE and HL did not swap");
+    CHECK(0x3333 == z80_get(cpu, Z80_REG_IX), "IX should not have been involved, is %04X", z80_get(cpu, Z80_REG_IX));
+
+    z80_free(cpu);
+}
+
+/**
+ * DD CB is the odd corner of the instruction set: displacement before the
+ * operation byte, and that byte read rather than fetched - so R moves twice,
+ * not three times, across the four bytes.
+ */
+static void test_index_cb(void)
+{
+    static const uint8_t rlc[] = {0xDD, 0xCB, 0x05, 0x06};  /* RLC (IX+5)   */
+    static const uint8_t bit[] = {0xDD, 0xCB, 0x05, 0x46};  /* BIT 0,(IX+5) */
+    static const uint8_t copy[] = {0xDD, 0xCB, 0x05, 0x00}; /* RLC (IX+5),B */
+
+    z80_t *cpu = boot(rlc, sizeof rlc);
+    z80_pins_t pins = {0};
+    world.memory[0x4005] = 0x85;
+    z80_set(cpu, Z80_REG_IX, 0x4000);
+    z80_set(cpu, Z80_REG_IR, 0x0000);
+
+    int tstates = run_prefixed(cpu, &pins);
+    CHECK(23 == tstates, "RLC (IX+d) should take 23 T-states, took %d", tstates);
+    CHECK(0x0B == world.memory[0x4005], "RLC (IX+5) left %02X", world.memory[0x4005]);
+    CHECK(2 == (z80_get(cpu, Z80_REG_IR) & 0xFFu), "R should have moved twice, not three times: it is %02X",
+          (unsigned)(z80_get(cpu, Z80_REG_IR) & 0xFFu));
+    CHECK(0x0004 == z80_get(cpu, Z80_REG_PC), "PC should be past all four bytes, is %04X", z80_get(cpu, Z80_REG_PC));
+
+    z80_free(cpu);
+
+    cpu = boot(bit, sizeof bit);
+    memset(&pins, 0, sizeof pins);
+    world.memory[0x4005] = 0x01;
+    z80_set(cpu, Z80_REG_IX, 0x4000);
+
+    tstates = run_prefixed(cpu, &pins);
+    CHECK(20 == tstates, "BIT n,(IX+d) should take 20 T-states, took %d", tstates);
+    CHECK(0 == (reg_f(cpu) & 0x40u), "BIT 0 of 01 should leave Z clear, F is %02X", reg_f(cpu));
+    CHECK(0x01 == world.memory[0x4005], "BIT must not write back");
+
+    z80_free(cpu);
+
+    /* undocumented, and every emulator implements it: the low three bits still
+       name a register, and the result is copied there too */
+    cpu = boot(copy, sizeof copy);
+    memset(&pins, 0, sizeof pins);
+    world.memory[0x4005] = 0x85;
+    z80_set(cpu, Z80_REG_IX, 0x4000);
+
+    (void)run_prefixed(cpu, &pins);
+    CHECK(0x0B == world.memory[0x4005], "RLC (IX+5),B left %02X in memory", world.memory[0x4005]);
+    CHECK(0x0B == (z80_get(cpu, Z80_REG_BC) >> 8), "RLC (IX+5),B should have copied to B, B is %02X",
+          (unsigned)(z80_get(cpu, Z80_REG_BC) >> 8));
+
+    z80_free(cpu);
+}
+
+/** A second index prefix replaces the first, at four T-states each. */
+static void test_repeated_prefixes(void)
+{
+    static const uint8_t program[] = {0xDD, 0xFD, 0x21, 0x34, 0x12}; /* DD then LD IY,1234 */
+
+    z80_t *cpu = boot(program, sizeof program);
+    z80_pins_t pins = {0};
+
+    (void)run_one(cpu, &pins); /* DD */
+    (void)run_one(cpu, &pins); /* FD */
+    (void)run_one(cpu, &pins); /* LD IY,nn */
+
+    CHECK(0x1234 == z80_get(cpu, Z80_REG_IY), "the last prefix should win, IY is %04X", z80_get(cpu, Z80_REG_IY));
+    CHECK(0x0000 == z80_get(cpu, Z80_REG_IX), "IX should not have been written, is %04X", z80_get(cpu, Z80_REG_IX));
+
+    z80_free(cpu);
+}
+
+/** ED ignores an index prefix rather than combining with it. */
+static void test_ed_cancels_the_index_prefix(void)
+{
+    static const uint8_t program[] = {0xDD, 0xED, 0x4A}; /* DD then ADC HL,BC */
+
+    z80_t *cpu = boot(program, sizeof program);
+    z80_pins_t pins = {0};
+
+    z80_set(cpu, Z80_REG_HL, 0x1000);
+    z80_set(cpu, Z80_REG_IX, 0x2000);
+    z80_set(cpu, Z80_REG_BC, 0x0001);
+    z80_set(cpu, Z80_REG_AF, 0x0000);
+
+    run_many(cpu, &pins, 3);
+
+    CHECK(0x1001 == z80_get(cpu, Z80_REG_HL), "ADC should have used HL, which is %04X", z80_get(cpu, Z80_REG_HL));
+    CHECK(0x2000 == z80_get(cpu, Z80_REG_IX), "IX should be untouched, is %04X", z80_get(cpu, Z80_REG_IX));
+
+    z80_free(cpu);
+}
+
+/**
+ * Every encoding of the instruction set, prefixed and not. The counter that
+ * made the gaps visible while it was being written should now never move.
+ */
+static void test_every_opcode_is_implemented(void)
+{
+    static const uint8_t leaders[] = {0x00, 0xCB, 0xDD, 0xED, 0xFD};
+
+    for (size_t lead = 0; lead < sizeof leaders; ++lead)
+    {
+        for (unsigned opcode = 0; opcode < 0x100u; ++opcode)
+        {
+            /* DD CB needs its displacement and operation byte behind it */
+            const uint8_t program[] = {leaders[lead], (uint8_t)opcode, 0x02, 0x00, 0x00, 0x00};
+            z80_t *cpu = boot(program, sizeof program);
+            z80_pins_t pins = {0};
+
+            z80_set(cpu, Z80_REG_HL, 0x4000);
+            z80_set(cpu, Z80_REG_DE, 0x5000);
+            z80_set(cpu, Z80_REG_IX, 0x4000);
+            z80_set(cpu, Z80_REG_IY, 0x4000);
+            z80_set(cpu, Z80_REG_BC, 0x0101);
+            z80_set(cpu, Z80_REG_SP, 0x8000);
+
+            /* three, so a prefix chain is followed all the way to its opcode */
+            run_many(cpu, &pins, 3);
+
+            CHECK(0 == z80_unimplemented(cpu), "%02X %02X is not implemented", leaders[lead], opcode);
+
+            z80_free(cpu);
+        }
     }
 }
 
@@ -1379,7 +1649,16 @@ int main(void)
     test_ld_a_i_reports_the_interrupt_flag();
     test_ed_timing();
     test_every_ed_opcode_is_implemented();
-    test_every_unprefixed_opcode_is_implemented();
+    test_index_register_substitution();
+    test_index_register_results();
+    test_indexed_memory_access();
+    test_indexed_values_and_negative_displacement();
+    test_indexed_register_operand_is_not_substituted();
+    test_ex_de_hl_ignores_the_index_prefix();
+    test_index_cb();
+    test_repeated_prefixes();
+    test_ed_cancels_the_index_prefix();
+    test_every_opcode_is_implemented();
     test_snapshot_mid_instruction();
 
     if (failures)

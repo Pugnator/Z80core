@@ -208,16 +208,21 @@ static void test_halt_holds_pc_and_asserts_the_pin(void)
     z80_free(cpu);
 }
 
-/** An opcode with no implementation is counted, not silently ignored. */
-static void test_unimplemented_opcodes_are_counted(void)
+/**
+ * The instruction set is complete, so the counter that made the gaps visible
+ * should now never move. It is kept as the alarm it always was: if a future
+ * change leaves an encoding unreachable, this is what says so.
+ */
+static void test_nothing_is_unimplemented(void)
 {
-    /* DD - the index registers are the remaining gap in Phase 3 */
-    static const uint8_t program[] = {0xDD, 0xDD, 0xDD, 0xDD};
+    /* one of each prefix, which is where the gaps were longest */
+    static const uint8_t program[] = {0xDD, 0x00, 0xFD, 0x00, 0xED, 0x00, 0xCB, 0x00};
     z80_t *cpu = z80_new();
 
-    (void)run_program(cpu, program, sizeof program, 40);
+    (void)run_program(cpu, program, sizeof program, 200);
 
-    CHECK(z80_unimplemented(cpu) > 0, "an unimplemented opcode was not counted");
+    CHECK(0 == z80_unimplemented(cpu), "%llu opcode(s) reached the unimplemented counter",
+          (unsigned long long)z80_unimplemented(cpu));
 
     z80_free(cpu);
 }
@@ -467,7 +472,7 @@ int main(void)
     test_nop_advances_pc();
     test_refresh_counts_fetches();
     test_halt_holds_pc_and_asserts_the_pin();
-    test_unimplemented_opcodes_are_counted();
+    test_nothing_is_unimplemented();
     test_load_immediate();
     test_load_register_to_register();
     test_load_from_memory();

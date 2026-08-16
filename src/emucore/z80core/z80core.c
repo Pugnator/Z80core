@@ -13,9 +13,15 @@
  * and selects what runs next. Adding an instruction means describing its
  * machine cycles and what it does around them - the engine itself never grows.
  *
- * PHASE 3: the whole unprefixed instruction set, the ALU and its flags, and
- * I/O cycles. The CB, DD, ED and FD prefixes still count as unimplemented, so
- * the gap is visible through z80_unimplemented() rather than silent.
+ * PHASE 3 is complete: every encoding of the instruction set, prefixed and
+ * not, along with the ALU and its flags and the I/O cycles. Nothing reaches
+ * z80_unimplemented() any more, which is what finishing the set means.
+ *
+ * What is still owed: the Q register behind SCF and CCF, and the conformance
+ * suites that would prove the undocumented corners rather than assert them
+ * (Phase 4); interrupts, and with them the only two behaviours the instruction
+ * set cannot express by itself - the delay after EI and waking from HALT
+ * (Phase 5).
  *
  * The separation that makes this work: a z80_seq is *pin choreography* and
  * nothing else - what a memory read looks like on the bus, edge by edge. A
@@ -33,7 +39,7 @@
 
 /** Snapshot format, so a stale file is refused rather than misread. */
 #define Z80_SNAPSHOT_MAGIC 0x5A383043u /* "Z80C" */
-#define Z80_SNAPSHOT_VERSION 3u
+#define Z80_SNAPSHOT_VERSION 4u
 
 /** Outputs the core drives; the rest of ctrl belongs to the host. */
 #define Z80_OUTPUT_PINS (Z80_M1 | Z80_MREQ | Z80_IORQ | Z80_RD | Z80_WR | Z80_RFSH | Z80_HALT | Z80_BUSAK)
@@ -84,7 +90,8 @@ struct z80_t
     const struct z80_seq *seq; /**< machine cycle being executed */
     uint8_t step;              /**< cursor into it */
     uint8_t opcode;            /**< what the last fetch latched */
-    uint8_t prefix;            /**< the prefix byte in force, or 0 */
+    uint8_t prefix;            /**< CB or ED in force, or 0 */
+    uint8_t index;             /**< DD or FD in force, or 0 */
     uint8_t clk;               /**< the level the core last advanced to */
 
     /* the instruction in progress, and the bus cycle it is running */
@@ -880,13 +887,40 @@ static bool condition_met(const z80_t *cpu, uint8_t code)
 /* ---------------------------------------------------------------- */
 
 /**
+ * HL, or whichever index register a DD or FD prefix has put in its place.
+ *
+ * The substitution is the whole of what those prefixes do: the instruction
+ * decodes exactly as it would have, and every place that would have reached
+ * for HL reaches here instead.
+ */
+static z80_pair *index_pair(z80_t *cpu)
+{
+    switch (cpu->index)
+    {
+    case 0xDDu:
+        return &cpu->ix;
+    case 0xFDu:
+        return &cpu->iy;
+    default:
+        return &cpu->hl;
+    }
+}
+
+/**
  * The eight places the register field of an opcode can name. Index 6 is (HL),
  * which is memory rather than a register: an instruction naming it does a bus
  * cycle, which is why those forms cost more T-states.
+ *
+ * @param substitute Whether a DD or FD prefix reaches the halves of the pair.
+ *        It does for LD IXH,n and its neighbours, and it does not when the
+ *        other operand is (IX+d) - LD H,(IX+d) really does mean H. One byte of
+ *        an instruction cannot name both an index register and a plain one.
  */
-static uint8_t *register_slot(z80_t *cpu, uint8_t index)
+static uint8_t *register_half(z80_t *cpu, uint8_t which, bool substitute)
 {
-    switch (index & 7u)
+    z80_pair *const high_low = substitute ? index_pair(cpu) : &cpu->hl;
+
+    switch (which & 7u)
     {
     case 0:
         return &cpu->bc.byte.high; /* B */
@@ -897,14 +931,24 @@ static uint8_t *register_slot(z80_t *cpu, uint8_t index)
     case 3:
         return &cpu->de.byte.low; /* E */
     case 4:
-        return &cpu->hl.byte.high; /* H */
+        return &high_low->byte.high; /* H, IXH or IYH */
     case 5:
-        return &cpu->hl.byte.low; /* L */
+        return &high_low->byte.low; /* L, IXL or IYL */
     case 7:
         return &cpu->af.byte.high; /* A */
     default:
         return NULL; /* 6 is (HL) */
     }
+}
+
+static uint8_t *register_slot(z80_t *cpu, uint8_t which)
+{
+    return register_half(cpu, which, true);
+}
+
+static uint8_t *register_slot_plain(z80_t *cpu, uint8_t which)
+{
+    return register_half(cpu, which, false);
 }
 
 /** Bits 5-4 name a pair: BC, DE, HL, SP - the set the arithmetic uses. */
@@ -917,7 +961,7 @@ static z80_pair *pair_rp(z80_t *cpu, uint8_t opcode)
     case 1:
         return &cpu->de;
     case 2:
-        return &cpu->hl;
+        return index_pair(cpu);
     default:
         return &cpu->sp;
     }
@@ -933,7 +977,7 @@ static z80_pair *pair_rp2(z80_t *cpu, uint8_t opcode)
     case 1:
         return &cpu->de;
     case 2:
-        return &cpu->hl;
+        return index_pair(cpu);
     default:
         return &cpu->af;
     }
@@ -1095,7 +1139,7 @@ static void exit_to_wz_high(z80_t *cpu, z80_pins_t *pins)
 static void exit_to_l(z80_t *cpu, z80_pins_t *pins)
 {
     (void)pins;
-    cpu->hl.byte.low = cpu->bus_data;
+    index_pair(cpu)->byte.low = cpu->bus_data;
 }
 
 /*
@@ -1138,25 +1182,25 @@ static void enter_write_a_at_tmp(z80_t *cpu, z80_pins_t *pins)
 static void enter_write_l_at_tmp(z80_t *cpu, z80_pins_t *pins)
 {
     (void)pins;
-    write_at(cpu, cpu->tmp.word, cpu->hl.byte.low);
+    write_at(cpu, cpu->tmp.word, index_pair(cpu)->byte.low);
 }
 
 static void enter_write_h_at_tmp(z80_t *cpu, z80_pins_t *pins)
 {
     (void)pins;
-    write_at(cpu, (uint16_t)(cpu->tmp.word + 1u), cpu->hl.byte.high);
+    write_at(cpu, (uint16_t)(cpu->tmp.word + 1u), index_pair(cpu)->byte.high);
 }
 
 static void enter_write_h_at_sp(z80_t *cpu, z80_pins_t *pins)
 {
     (void)pins;
-    write_at(cpu, (uint16_t)(cpu->sp.word + 1u), cpu->hl.byte.high);
+    write_at(cpu, (uint16_t)(cpu->sp.word + 1u), index_pair(cpu)->byte.high);
 }
 
 static void enter_write_l_at_sp(z80_t *cpu, z80_pins_t *pins)
 {
     (void)pins;
-    write_at(cpu, cpu->sp.word, cpu->hl.byte.low);
+    write_at(cpu, cpu->sp.word, index_pair(cpu)->byte.low);
 }
 
 /* ---------------------------------------------------------------- */
@@ -1222,7 +1266,7 @@ static void execute_ld_rp_nn(z80_t *cpu, z80_pins_t *pins)
 static void execute_ld_hl_from_memory(z80_t *cpu, z80_pins_t *pins)
 {
     (void)pins;
-    cpu->hl.byte.high = cpu->bus_data;
+    index_pair(cpu)->byte.high = cpu->bus_data;
     cpu->wz.word = (uint16_t)(cpu->tmp.word + 1u);
 }
 
@@ -1236,7 +1280,7 @@ static void execute_memptr_after_tmp(z80_t *cpu, z80_pins_t *pins)
 static void execute_ld_sp_hl(z80_t *cpu, z80_pins_t *pins)
 {
     (void)pins;
-    cpu->sp.word = cpu->hl.word;
+    cpu->sp.word = index_pair(cpu)->word;
 }
 
 static void execute_pop(z80_t *cpu, z80_pins_t *pins)
@@ -1279,7 +1323,7 @@ static void execute_exx(z80_t *cpu, z80_pins_t *pins)
 static void execute_ex_sp_hl(z80_t *cpu, z80_pins_t *pins)
 {
     (void)pins;
-    cpu->hl.word = cpu->tmp.word;
+    index_pair(cpu)->word = cpu->tmp.word;
     cpu->wz.word = cpu->tmp.word;
 }
 
@@ -1350,7 +1394,7 @@ static void execute_dec_rp(z80_t *cpu, z80_pins_t *pins)
 static void execute_add_hl_rp(z80_t *cpu, z80_pins_t *pins)
 {
     (void)pins;
-    alu_add16(cpu, &cpu->hl, pair_rp(cpu, cpu->opcode)->word);
+    alu_add16(cpu, index_pair(cpu), pair_rp(cpu, cpu->opcode)->word);
 }
 
 static void execute_rotate_a(z80_t *cpu, z80_pins_t *pins)
@@ -1443,7 +1487,7 @@ static void execute_jump_conditional(z80_t *cpu, z80_pins_t *pins)
 static void execute_jump_hl(z80_t *cpu, z80_pins_t *pins)
 {
     (void)pins;
-    cpu->pc.word = cpu->hl.word;
+    cpu->pc.word = index_pair(cpu)->word;
 }
 
 /** The idle cycle this runs in only happens when the branch is taken. */
@@ -1900,6 +1944,93 @@ static void exit_block_out(z80_t *cpu, z80_pins_t *pins)
     }
 }
 
+/* the DD and FD sets: HL becomes IX or IY, and (HL) becomes (IX+d) */
+
+/**
+ * The displacement is signed and added to the index register, and the answer
+ * is kept in WZ. That is not a convenience: WZ really is where the real part
+ * forms the address, which is why every indexed instruction leaves MEMPTR
+ * holding IX+d afterwards.
+ */
+static void exit_to_displacement(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    cpu->wz.word = (uint16_t)(index_pair(cpu)->word + (int8_t)cpu->bus_data);
+}
+
+static void at_wz(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    cpu->bus_addr = cpu->wz.word;
+}
+
+/** LD r,(IX+d): the register named is the plain one, never the index half. */
+static void execute_ld_plain_reg_from_bus(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    uint8_t *destination = register_slot_plain(cpu, (uint8_t)(cpu->opcode >> 3));
+    if (destination)
+    {
+        *destination = cpu->bus_data;
+    }
+}
+
+static void enter_write_plain_reg_at_wz(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    const uint8_t *source = register_slot_plain(cpu, cpu->opcode);
+    write_at(cpu, cpu->wz.word, source ? *source : 0u);
+}
+
+/**
+ * DD CB puts the displacement before the operation byte, and that byte arrives
+ * through an ordinary memory read rather than a fetch - so R is incremented
+ * twice for the whole instruction, not three times.
+ */
+static void exit_latch_operation(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    cpu->opcode = cpu->bus_data;
+}
+
+static void exit_index_cb_apply(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    const uint8_t group = (uint8_t)(cpu->opcode >> 6);
+    const uint8_t bit = (uint8_t)((cpu->opcode >> 3) & 7u);
+
+    if (1u == group)
+    {
+        /* BIT has nothing to write back, so X and Y come from the address it
+           formed instead of from a result */
+        alu_bit(cpu, bit, cpu->bus_data, cpu->wz.byte.high);
+        end_instruction_here(cpu);
+        return;
+    }
+
+    switch (group)
+    {
+    case 0:
+        cpu->bus_data = alu_shift(cpu, bit, cpu->bus_data);
+        break;
+    case 2:
+        cpu->bus_data = (uint8_t)(cpu->bus_data & ~(uint8_t)(1u << bit));
+        break;
+    default:
+        cpu->bus_data = (uint8_t)(cpu->bus_data | (uint8_t)(1u << bit));
+        break;
+    }
+
+    /* Undocumented, and universal: the low three bits still name a register,
+       and the result is copied there as well as written back to memory. Only
+       the encoding for (HL) leaves it in memory alone. */
+    uint8_t *slot = register_slot_plain(cpu, cpu->opcode);
+    if (slot)
+    {
+        *slot = cpu->bus_data;
+    }
+}
+
 /**
  * A prefix is a whole M1 cycle that decodes nothing: it costs four T-states,
  * increments R a second time, and tells the next fetch which table to use.
@@ -1907,14 +2038,24 @@ static void exit_block_out(z80_t *cpu, z80_pins_t *pins)
 static void execute_prefix(z80_t *cpu, z80_pins_t *pins)
 {
     (void)pins;
-    cpu->prefix = cpu->opcode;
-}
-
-/** An opcode the core does not implement yet: costs its fetch, does nothing. */
-static void execute_unimplemented(z80_t *cpu, z80_pins_t *pins)
-{
-    (void)pins;
-    ++cpu->unimplemented;
+    switch (cpu->opcode)
+    {
+    case 0xDDu:
+    case 0xFDu:
+        /* A second index prefix simply replaces the first, at four T-states
+           each: DD FD 21 is LD IY,nn with four wasted cycles in front. */
+        cpu->index = cpu->opcode;
+        cpu->prefix = 0;
+        break;
+    case 0xEDu:
+        /* ED ignores an index prefix entirely rather than combining with it */
+        cpu->prefix = 0xEDu;
+        cpu->index = 0;
+        break;
+    default:
+        cpu->prefix = 0xCBu;
+        break;
+    }
 }
 
 /* ---------------------------------------------------------------- */
@@ -1946,7 +2087,6 @@ static const z80_instr instr_exx = {NO_CYCLES, 0u, execute_exx};
 static const z80_instr instr_jp_hl = {NO_CYCLES, 0u, execute_jump_hl};
 static const z80_instr instr_di = {NO_CYCLES, 0u, execute_di};
 static const z80_instr instr_ei = {NO_CYCLES, 0u, execute_ei};
-static const z80_instr instr_unimplemented = {NO_CYCLES, 0u, execute_unimplemented};
 static const z80_instr instr_prefix = {NO_CYCLES, 0u, execute_prefix};
 static const z80_instr instr_cb_reg = {NO_CYCLES, 0u, execute_cb_reg};
 
@@ -1957,6 +2097,68 @@ static const z80_instr instr_cb_mem = {
 /* BIT reads and tests but never writes back, so it is three T-states shorter */
 static const z80_instr instr_cb_bit_mem = {
     {{&mem_read_seq, at_hl, NULL}, {&idle1_seq, NULL, NULL}}, 2u, execute_cb_bit_memory};
+
+/*
+ * The DD and FD sets. Everything that does not touch (HL) reuses the ordinary
+ * descriptor and simply finds an index register where HL would have been, so
+ * only the six shapes below have to exist: the ones that turn a register
+ * operand into a displaced memory access, which costs a byte to read and five
+ * T-states to add up.
+ */
+static const z80_instr instr_index_ld_reg_mem = {
+    {{&mem_read_seq, at_pc, exit_to_displacement}, {&idle5_seq, NULL, NULL}, {&mem_read_seq, at_wz, NULL}},
+    3u,
+    execute_ld_plain_reg_from_bus};
+
+static const z80_instr instr_index_ld_mem_reg = {{{&mem_read_seq, at_pc, exit_to_displacement},
+                                                  {&idle5_seq, NULL, NULL},
+                                                  {&mem_write_seq, enter_write_plain_reg_at_wz, NULL}},
+                                                 3u,
+                                                 NULL};
+
+static const z80_instr instr_index_alu_mem = {
+    {{&mem_read_seq, at_pc, exit_to_displacement}, {&idle5_seq, NULL, NULL}, {&mem_read_seq, at_wz, NULL}},
+    3u,
+    execute_alu_bus};
+
+/* LD (IX+d),n reads both bytes first, so its wait is two T-states, not five */
+static const z80_instr instr_index_ld_mem_n = {{{&mem_read_seq, at_pc, exit_to_displacement},
+                                                {&mem_read_seq, at_pc, NULL},
+                                                {&idle2_seq, NULL, NULL},
+                                                {&mem_write_seq, at_wz, NULL}},
+                                               4u,
+                                               NULL};
+
+static const z80_instr instr_index_inc_mem = {{{&mem_read_seq, at_pc, exit_to_displacement},
+                                               {&idle5_seq, NULL, NULL},
+                                               {&mem_read_seq, at_wz, exit_inc_bus},
+                                               {&idle1_seq, NULL, NULL},
+                                               {&mem_write_seq, at_wz, NULL}},
+                                              5u,
+                                              NULL};
+
+static const z80_instr instr_index_dec_mem = {{{&mem_read_seq, at_pc, exit_to_displacement},
+                                               {&idle5_seq, NULL, NULL},
+                                               {&mem_read_seq, at_wz, exit_dec_bus},
+                                               {&idle1_seq, NULL, NULL},
+                                               {&mem_write_seq, at_wz, NULL}},
+                                              5u,
+                                              NULL};
+
+/*
+ * DD CB is the odd one out of the whole instruction set: the displacement
+ * comes before the operation byte, and that byte is collected by an ordinary
+ * memory read rather than a fetch. Twenty-three T-states, or twenty for BIT,
+ * which stops before the write.
+ */
+static const z80_instr instr_index_cb = {{{&mem_read_seq, at_pc, exit_to_displacement},
+                                          {&mem_read_seq, at_pc, exit_latch_operation},
+                                          {&idle2_seq, NULL, NULL},
+                                          {&mem_read_seq, at_wz, NULL},
+                                          {&idle1_seq, NULL, exit_index_cb_apply},
+                                          {&mem_write_seq, at_wz, NULL}},
+                                         6u,
+                                         NULL};
 
 /* the ED set. Every one of these carries the four T-states of the prefix on
    top of what is listed here, so ED 44 (NEG) costs eight in total. */
@@ -2340,11 +2542,7 @@ static const z80_instr *decode_base(const z80_t *cpu)
             {
                 return &instr_call;
             }
-            if (2u == p)
-            {
-                return &instr_prefix; /* ED */
-            }
-            return &instr_unimplemented; /* DD and FD, the index registers */
+            return &instr_prefix; /* DD, ED and FD */
         case 6:
             return &instr_alu_n;
         default:
@@ -2424,18 +2622,96 @@ static const z80_instr *decode_ed(const z80_t *cpu)
     }
 }
 
+/**
+ * Under DD or FD the ordinary table still applies - the index register has
+ * simply taken HL's place, which index_pair() has already arranged. Only the
+ * encodings that name (HL) as memory need a different shape, because those
+ * grow a displacement byte and the time to add it up.
+ */
+static const z80_instr *decode_indexed(const z80_t *cpu)
+{
+    const uint8_t opcode = cpu->opcode;
+    const uint8_t x = (uint8_t)(opcode >> 6);
+    const uint8_t y = (uint8_t)((opcode >> 3) & 7u);
+    const uint8_t z = (uint8_t)(opcode & 7u);
+
+    /* another prefix byte replaces this one, or hands over to ED */
+    if (0xCBu == opcode)
+    {
+        return &instr_index_cb;
+    }
+    if (0xDDu == opcode || 0xEDu == opcode || 0xFDu == opcode)
+    {
+        return &instr_prefix;
+    }
+
+    switch (x)
+    {
+    case 0:
+        if (6u == y)
+        {
+            if (4u == z)
+            {
+                return &instr_index_inc_mem;
+            }
+            if (5u == z)
+            {
+                return &instr_index_dec_mem;
+            }
+            if (6u == z)
+            {
+                return &instr_index_ld_mem_n;
+            }
+        }
+        break;
+
+    case 1:
+        if (6u == y && 6u == z)
+        {
+            break; /* HALT is HALT, prefix or not */
+        }
+        if (6u == z)
+        {
+            return &instr_index_ld_reg_mem;
+        }
+        if (6u == y)
+        {
+            return &instr_index_ld_mem_reg;
+        }
+        break;
+
+    case 2:
+        if (6u == z)
+        {
+            return &instr_index_alu_mem;
+        }
+        break;
+
+    default:
+        break;
+    }
+
+    /* Everything else - including EX DE,HL, which the prefix pointedly does
+       not touch - decodes exactly as it would unprefixed. */
+    return decode_base(cpu);
+}
+
 /** Which table the byte just fetched should be read against. */
 static const z80_instr *decode(const z80_t *cpu)
 {
-    switch (cpu->prefix)
+    if (0xEDu == cpu->prefix)
     {
-    case 0xCBu:
-        return decode_cb(cpu);
-    case 0xEDu:
         return decode_ed(cpu);
-    default:
-        return decode_base(cpu);
     }
+    if (0xCBu == cpu->prefix)
+    {
+        return decode_cb(cpu);
+    }
+    if (0u != cpu->index)
+    {
+        return decode_indexed(cpu);
+    }
+    return decode_base(cpu);
 }
 
 /* ---------------------------------------------------------------- */
@@ -2547,10 +2823,12 @@ static uint32_t advance(z80_t *cpu, z80_pins_t *pins)
             {
                 cpu->instr->execute(cpu, pins);
             }
-            /* A prefix has just set this; anything else has finished with it. */
+            /* A prefix has just set these; anything else has finished with
+               them, and the next fetch starts from the ordinary table. */
             if (cpu->instr != &instr_prefix)
             {
                 cpu->prefix = 0;
+                cpu->index = 0;
             }
             cpu->instr = NULL;
             cpu->seq = &m1_fetch_seq;
@@ -2740,6 +3018,7 @@ typedef struct
     uint8_t cycle_limit; /**< how many it will run; a condition may have lowered it */
     uint8_t opcode;
     uint8_t prefix;
+    uint8_t index;
     uint8_t clk;
     uint16_t bus_addr;
     uint8_t bus_data;
@@ -2790,6 +3069,7 @@ size_t z80_save(const z80_t *cpu, void *buffer, size_t size)
     snapshot.cycle_limit = cpu->cycle_limit;
     snapshot.opcode = cpu->opcode;
     snapshot.prefix = cpu->prefix;
+    snapshot.index = cpu->index;
     snapshot.clk = cpu->clk;
     snapshot.bus_addr = cpu->bus_addr;
     snapshot.bus_data = cpu->bus_data;
@@ -2837,6 +3117,7 @@ bool z80_load(z80_t *cpu, const void *buffer, size_t size)
     cpu->halted = 0 != snapshot.halted;
     cpu->opcode = snapshot.opcode;
     cpu->prefix = snapshot.prefix;
+    cpu->index = snapshot.index;
     cpu->clk = snapshot.clk;
     cpu->edges = snapshot.edges;
     cpu->unimplemented = snapshot.unimplemented;
