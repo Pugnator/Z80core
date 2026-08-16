@@ -36,7 +36,10 @@ add_executable(z80mon WIN32 main.cpp monitor.cpp)
 
 target_link_libraries(z80mon PRIVATE imgui z80core)
 
-set_target_properties(z80mon PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+set_target_properties(z80mon PROPERTIES CXX_STANDARD 17
+                                        CXX_STANDARD_REQUIRED ON
+                                        # beside zasm rather than three directories down
+                                        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     # -Werror is not applied here: the warnings that matter are in our code and

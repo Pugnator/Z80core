@@ -9,9 +9,9 @@ everything it does goes through `z80core.h`.
 ## Building
 
 ```sh
-cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_Z80MON=ON
-cmake --build build
-./build/tools/z80mon/z80mon
+cmake --preset tools
+cmake --build --preset tools
+./build/tools/z80mon
 ```
 
 Dear ImGui is fetched at configure time and pinned to a release tag, so the

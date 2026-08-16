@@ -8,16 +8,45 @@
 `zasm` is a Z80 assembler and disassembler supporting the documented and the
 undocumented instruction set.
 
+###### What is in here
+
+| | |
+| --- | --- |
+| `zasm` | Z80 assembler and disassembler, all documented and undocumented opcodes |
+| `z80core` | the CPU core: a C library, edge-precise, no memory and no devices ([spec](docs/CPU-CORE-SPEC.md)) |
+| `z80mon` | an ImGui window onto the core: pins, clock, waveform ([readme](tools/z80mon/README.md)) |
+
 ###### Building
 
-Requires a C99 compiler, CMake 3.13+, bison and flex. Python 3 is optional and
-enables the test suite.
+Needs **GCC** (MSYS2 UCRT64 on Windows), CMake 3.21+, Ninja, bison and flex.
+Python 3 is optional and enables most of the test suite.
 
 ```sh
-cmake -B build
-cmake --build build
-ctest --test-dir build
+cmake --preset default          # zasm and the CPU core
+cmake --build --preset default
+ctest --preset default
 ```
+
+Binaries land in `build/default`: `zasm.exe` at the top,
+`src/emucore/z80core/` for the core's test and benchmark.
+
+To include the ImGui monitor — this one fetches Dear ImGui, so it needs the
+network once:
+
+```sh
+cmake --preset tools
+cmake --build --preset tools
+./build/tools/z80mon
+```
+
+`--preset debug` builds the same targets with symbols.
+
+**Use the presets, or pass `-G Ninja` yourself.** A bare `cmake -B build`
+picks whatever generator CMake defaults to, which on a machine with Visual
+Studio installed is MSVC — and `zasm` does not build with MSVC, because it
+uses `unistd.h`, `strings.h` and `getopt.h`. The failure is a confusing wall
+of missing-header errors rather than anything that names the real problem.
+The core itself is clean C99 and does compile with MSVC.
 
 ###### Using
 
@@ -55,6 +84,9 @@ zasm -d -s program.bin                       # disassemble to stdout
 | `opcode_table_invariants` | `z80tab.c` stays sorted, has one primary encoding per mnemonic and one mnemonic per opcode, and keeps `data_size` consistent with each format string |
 | `opcode_coverage` | every instruction in the table is reachable from the grammar and assembles to the bytes the table specifies |
 | `selftest_fallingblocks` | a second real program still assembles |
+| `ihex_output` | Intel HEX output parses, every checksum is right, and decodes back to the reference image |
+| `cpu_core` | the core's clock, changed-pin mask and reset behave (`src/emucore/z80core`) |
+| `cpu_core_benchmark` | the edge benchmark still runs; the rate it prints is for humans, nothing fails on being slow |
 
 ###### Continuous integration
 
@@ -77,6 +109,6 @@ for contributors and third-party code.
 ###### TODO
 
 - [ ] Macro assembler/disassembler
-- [ ] Cycle-accurate emulator
-- [ ] OpenVSM support
+- [ ] Cycle-accurate emulator (in progress: [spec](docs/CPU-CORE-SPEC.md), [phase 0](docs/PHASE0.md))
+- [ ] OpenVSM support (the core reaches Proteus through an openvsm device script)
 - [ ] Lua to Forth translator
