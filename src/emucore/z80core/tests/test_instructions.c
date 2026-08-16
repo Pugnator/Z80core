@@ -911,10 +911,335 @@ static void test_every_cb_opcode_is_implemented(void)
     }
 }
 
+/* ---------------------------------------------------------------- */
+/* The ED set                                                        */
+/* ---------------------------------------------------------------- */
+
+/**
+ * LDIR repeats by winding PC back over its own two bytes, so every iteration
+ * is a full instruction with its own fetch. That is how the real part does it,
+ * and it is why an interrupt can be taken partway through a 64 KB copy.
+ */
+static void test_ldir(void)
+{
+    static const uint8_t program[] = {
+        0x21, 0x00, 0x40, /* LD HL,4000 */
+        0x11, 0x00, 0x50, /* LD DE,5000 */
+        0x01, 0x04, 0x00, /* LD BC,0004 */
+        0xED, 0xB0        /* LDIR       */
+    };
+
+    z80_t *cpu = boot(program, sizeof program);
+    z80_pins_t pins = {0};
+    for (int i = 0; i < 4; ++i)
+    {
+        world.memory[0x4000 + i] = (uint8_t)(0x11u * (unsigned)(i + 1));
+    }
+
+    run_many(cpu, &pins, 3);
+
+    int repeating = 0;
+    int final = 0;
+    for (int i = 0; i < 4; ++i)
+    {
+        const int tstates = run_prefixed(cpu, &pins);
+        if (i < 3)
+        {
+            repeating = tstates;
+        }
+        else
+        {
+            final = tstates;
+        }
+    }
+
+    CHECK(21 == repeating, "a repeating LDIR should take 21 T-states, took %d", repeating);
+    CHECK(16 == final, "the last LDIR should take 16 T-states, took %d", final);
+    for (int i = 0; i < 4; ++i)
+    {
+        CHECK((uint8_t)(0x11u * (unsigned)(i + 1)) == world.memory[0x5000 + i], "byte %d copied as %02X", i,
+              world.memory[0x5000 + i]);
+    }
+    CHECK(0x0000 == z80_get(cpu, Z80_REG_BC), "BC should have reached zero, is %04X", z80_get(cpu, Z80_REG_BC));
+    CHECK(0x4004 == z80_get(cpu, Z80_REG_HL), "HL should be past the source, is %04X", z80_get(cpu, Z80_REG_HL));
+    CHECK(0x5004 == z80_get(cpu, Z80_REG_DE), "DE should be past the target, is %04X", z80_get(cpu, Z80_REG_DE));
+    CHECK(0x000B == z80_get(cpu, Z80_REG_PC), "PC should be past the LDIR, is %04X", z80_get(cpu, Z80_REG_PC));
+    CHECK(0 == (reg_f(cpu) & 0x04u), "P/V should be clear once BC reaches zero");
+
+    z80_free(cpu);
+}
+
+/** CPIR stops on a match as well as on running out, which LDIR cannot do. */
+static void test_cpir_stops_on_a_match(void)
+{
+    static const uint8_t program[] = {
+        0x21, 0x00, 0x40, /* LD HL,4000 */
+        0x01, 0x04, 0x00, /* LD BC,0004 */
+        0x3E, 0x33,       /* LD A,33    */
+        0xED, 0xB1        /* CPIR       */
+    };
+
+    z80_t *cpu = boot(program, sizeof program);
+    z80_pins_t pins = {0};
+    world.memory[0x4000] = 0x11;
+    world.memory[0x4001] = 0x22;
+    world.memory[0x4002] = 0x33;
+    world.memory[0x4003] = 0x44;
+
+    run_many(cpu, &pins, 3);
+    run_many(cpu, &pins, 6); /* three iterations, two fetches each */
+
+    CHECK(0x4003 == z80_get(cpu, Z80_REG_HL), "HL should be just past the match, is %04X", z80_get(cpu, Z80_REG_HL));
+    CHECK(0x0001 == z80_get(cpu, Z80_REG_BC), "BC should be 1, is %04X", z80_get(cpu, Z80_REG_BC));
+    CHECK(0 != (reg_f(cpu) & 0x40u), "Z should be set on a match");
+    CHECK(0 != (reg_f(cpu) & 0x04u), "P/V should still be set: BC has not run out");
+
+    z80_free(cpu);
+}
+
+static void test_ed_arithmetic(void)
+{
+    static const struct
+    {
+        const char *name;
+        uint8_t opcode;
+        uint16_t hl;
+        uint16_t bc;
+        uint8_t flags_in;
+        uint16_t expect_hl;
+        uint8_t expect_f;
+    } cases[] = {
+        {"SBC HL,BC borrow", 0x42, 0x0000, 0x0001, 0x00, 0xFFFF, 0xBB},
+        {"ADC HL,BC half carry", 0x4A, 0x0FFF, 0x0001, 0x00, 0x1000, 0x10},
+        {"SBC HL,BC to zero", 0x42, 0x1234, 0x1234, 0x00, 0x0000, 0x42},
+    };
+
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; ++i)
+    {
+        const uint8_t program[] = {0xED, cases[i].opcode};
+        z80_t *cpu = boot(program, sizeof program);
+        z80_pins_t pins = {0};
+
+        z80_set(cpu, Z80_REG_HL, cases[i].hl);
+        z80_set(cpu, Z80_REG_BC, cases[i].bc);
+        z80_set(cpu, Z80_REG_AF, cases[i].flags_in);
+
+        const int tstates = run_prefixed(cpu, &pins);
+
+        CHECK(15 == tstates, "%s should take 15 T-states, took %d", cases[i].name, tstates);
+        CHECK(cases[i].expect_hl == z80_get(cpu, Z80_REG_HL), "%s: HL should be %04X, is %04X", cases[i].name,
+              cases[i].expect_hl, z80_get(cpu, Z80_REG_HL));
+        CHECK(cases[i].expect_f == reg_f(cpu), "%s: F should be %02X, is %02X", cases[i].name, cases[i].expect_f,
+              reg_f(cpu));
+
+        z80_free(cpu);
+    }
+}
+
+static void test_neg(void)
+{
+    static const struct
+    {
+        uint8_t before;
+        uint8_t expect;
+        uint8_t expect_f;
+    } cases[] = {
+        {0x01, 0xFF, 0xBB},
+        {0x00, 0x00, 0x42},
+        /* 80 is the one value NEG cannot represent, so it overflows */
+        {0x80, 0x80, 0x87},
+    };
+
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; ++i)
+    {
+        static const uint8_t program[] = {0xED, 0x44};
+        z80_t *cpu = boot(program, sizeof program);
+        z80_pins_t pins = {0};
+
+        z80_set(cpu, Z80_REG_AF, (uint16_t)((uint16_t)cases[i].before << 8));
+        (void)run_prefixed(cpu, &pins);
+
+        CHECK(cases[i].expect == reg_a(cpu), "NEG %02X gave %02X, should give %02X", cases[i].before, reg_a(cpu),
+              cases[i].expect);
+        CHECK(cases[i].expect_f == reg_f(cpu), "NEG %02X: F should be %02X, is %02X", cases[i].before,
+              cases[i].expect_f, reg_f(cpu));
+
+        z80_free(cpu);
+    }
+}
+
+/** RRD and RLD move one BCD digit between A and memory. */
+static void test_digit_rotates(void)
+{
+    static const uint8_t rrd[] = {0xED, 0x67};
+    static const uint8_t rld[] = {0xED, 0x6F};
+
+    z80_t *cpu = boot(rrd, sizeof rrd);
+    z80_pins_t pins = {0};
+    world.memory[0x4000] = 0x20;
+    z80_set(cpu, Z80_REG_HL, 0x4000);
+    z80_set(cpu, Z80_REG_AF, 0x8400);
+
+    int tstates = run_prefixed(cpu, &pins);
+    CHECK(18 == tstates, "RRD should take 18 T-states, took %d", tstates);
+    CHECK(0x80 == reg_a(cpu), "RRD should leave A as 80, left %02X", reg_a(cpu));
+    CHECK(0x42 == world.memory[0x4000], "RRD should leave 42 in memory, left %02X", world.memory[0x4000]);
+
+    z80_free(cpu);
+
+    cpu = boot(rld, sizeof rld);
+    memset(&pins, 0, sizeof pins);
+    world.memory[0x4000] = 0x31;
+    z80_set(cpu, Z80_REG_HL, 0x4000);
+    z80_set(cpu, Z80_REG_AF, 0x7A00);
+
+    tstates = run_prefixed(cpu, &pins);
+    CHECK(18 == tstates, "RLD should take 18 T-states, took %d", tstates);
+    CHECK(0x73 == reg_a(cpu), "RLD should leave A as 73, left %02X", reg_a(cpu));
+    CHECK(0x1A == world.memory[0x4000], "RLD should leave 1A in memory, left %02X", world.memory[0x4000]);
+
+    z80_free(cpu);
+}
+
+/** The (C) forms address the port with the whole of BC, not just C. */
+static void test_ed_io(void)
+{
+    static const uint8_t program[] = {
+        0xED, 0x41, /* OUT (C),B */
+        0xED, 0x50  /* IN D,(C)  */
+    };
+
+    z80_t *cpu = boot(program, sizeof program);
+    z80_pins_t pins = {0};
+    z80_set(cpu, Z80_REG_BC, 0x1234);
+    z80_set(cpu, Z80_REG_AF, 0x0001); /* carry set, and IN must leave it alone */
+
+    const int out_t = run_prefixed(cpu, &pins);
+    CHECK(12 == out_t, "OUT (C),r should take 12 T-states, took %d", out_t);
+    CHECK(0x1234 == world.last_io_port, "the port should be the whole of BC, was %04X", world.last_io_port);
+    CHECK(0x12 == world.io[0x1234], "OUT (C),B should have written B, wrote %02X", world.io[0x1234]);
+
+    world.io[0x1234] = 0x00; /* zero, so the parity and Z flags have work to do */
+    const int in_t = run_prefixed(cpu, &pins);
+    CHECK(12 == in_t, "IN r,(C) should take 12 T-states, took %d", in_t);
+    CHECK(0x00 == (z80_get(cpu, Z80_REG_DE) >> 8), "IN D,(C) read %02X", (unsigned)(z80_get(cpu, Z80_REG_DE) >> 8));
+    CHECK(0x45 == reg_f(cpu), "IN of zero should set Z and parity and keep C, F is %02X", reg_f(cpu));
+
+    z80_free(cpu);
+}
+
+static void test_ed_sixteen_bit_loads(void)
+{
+    static const uint8_t program[] = {
+        0xED, 0x43, 0x00, 0x40, /* LD (4000),BC */
+        0xED, 0x5B, 0x00, 0x40  /* LD DE,(4000) */
+    };
+
+    z80_t *cpu = boot(program, sizeof program);
+    z80_pins_t pins = {0};
+    z80_set(cpu, Z80_REG_BC, 0x1234);
+
+    const int store_t = run_prefixed(cpu, &pins);
+    CHECK(20 == store_t, "LD (nn),rr should take 20 T-states, took %d", store_t);
+    CHECK(0x34 == world.memory[0x4000] && 0x12 == world.memory[0x4001], "stored %02X%02X", world.memory[0x4001],
+          world.memory[0x4000]);
+
+    const int load_t = run_prefixed(cpu, &pins);
+    CHECK(20 == load_t, "LD rr,(nn) should take 20 T-states, took %d", load_t);
+    CHECK(0x1234 == z80_get(cpu, Z80_REG_DE), "LD DE,(nn) read back %04X", z80_get(cpu, Z80_REG_DE));
+
+    z80_free(cpu);
+}
+
+/** LD A,I copies the interrupt flip-flop into P/V - the only way to read it. */
+static void test_ld_a_i_reports_the_interrupt_flag(void)
+{
+    static const uint8_t program[] = {
+        0xFB,      /* EI      */
+        0xED, 0x57 /* LD A,I  */
+    };
+
+    z80_t *cpu = boot(program, sizeof program);
+    z80_pins_t pins = {0};
+    z80_set(cpu, Z80_REG_IR, 0x7F00);
+
+    (void)run_one(cpu, &pins);
+    const int tstates = run_prefixed(cpu, &pins);
+
+    CHECK(9 == tstates, "LD A,I should take 9 T-states, took %d", tstates);
+    CHECK(0x7F == reg_a(cpu), "A should have taken I, is %02X", reg_a(cpu));
+    CHECK(0 != (reg_f(cpu) & 0x04u), "P/V should report that interrupts are enabled");
+
+    z80_free(cpu);
+}
+
+static void test_ed_timing(void)
+{
+    static const struct
+    {
+        const char *name;
+        uint8_t opcode;
+        int expect;
+    } cases[] = {
+        {"NEG", 0x44, 8},
+        {"IM 1", 0x56, 8},
+        {"RETN", 0x45, 14},
+        {"LD I,A", 0x47, 9},
+        {"LD A,R", 0x5F, 9},
+        {"LDI", 0xA0, 16},
+        {"LDD", 0xA8, 16},
+        {"CPI", 0xA1, 16},
+        {"INI", 0xA2, 16},
+        {"OUTI", 0xA3, 16},
+        {"RRD", 0x67, 18},
+        /* an ED opcode with no meaning is two NOPs, and costs like it */
+        {"undefined ED 00", 0x00, 8},
+    };
+
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; ++i)
+    {
+        const uint8_t program[] = {0xED, cases[i].opcode};
+        z80_t *cpu = boot(program, sizeof program);
+        z80_pins_t pins = {0};
+
+        z80_set(cpu, Z80_REG_HL, 0x4000);
+        z80_set(cpu, Z80_REG_DE, 0x5000);
+        z80_set(cpu, Z80_REG_BC, 0x0301); /* B is 3, so the block forms do not repeat away */
+        z80_set(cpu, Z80_REG_SP, 0x8000);
+
+        const int tstates = run_prefixed(cpu, &pins);
+        CHECK(cases[i].expect == tstates, "%s should take %d T-states, took %d", cases[i].name, cases[i].expect,
+              tstates);
+
+        z80_free(cpu);
+    }
+}
+
+/** Every ED encoding does something, even if that something is two NOPs. */
+static void test_every_ed_opcode_is_implemented(void)
+{
+    for (unsigned opcode = 0; opcode < 0x100u; ++opcode)
+    {
+        const uint8_t program[] = {0xED, (uint8_t)opcode};
+        z80_t *cpu = boot(program, sizeof program);
+        z80_pins_t pins = {0};
+
+        z80_set(cpu, Z80_REG_HL, 0x4000);
+        z80_set(cpu, Z80_REG_DE, 0x5000);
+        z80_set(cpu, Z80_REG_BC, 0x0101);
+        z80_set(cpu, Z80_REG_SP, 0x8000);
+        (void)run_prefixed(cpu, &pins);
+
+        CHECK(0 == z80_unimplemented(cpu), "ED %02X is not implemented", opcode);
+
+        z80_free(cpu);
+    }
+}
+
 /** Nothing in the unprefixed set should reach the unimplemented counter. */
 static void test_every_unprefixed_opcode_is_implemented(void)
 {
-    static const uint8_t prefixes[] = {0xDD, 0xED, 0xFD};
+    static const uint8_t prefixes[] = {0xDD, 0xFD};
 
     for (unsigned opcode = 0; opcode < 0x100u; ++opcode)
     {
@@ -1044,6 +1369,16 @@ int main(void)
     test_cb_memory();
     test_prefix_increments_refresh_twice();
     test_every_cb_opcode_is_implemented();
+    test_ldir();
+    test_cpir_stops_on_a_match();
+    test_ed_arithmetic();
+    test_neg();
+    test_digit_rotates();
+    test_ed_io();
+    test_ed_sixteen_bit_loads();
+    test_ld_a_i_reports_the_interrupt_flag();
+    test_ed_timing();
+    test_every_ed_opcode_is_implemented();
     test_every_unprefixed_opcode_is_implemented();
     test_snapshot_mid_instruction();
 

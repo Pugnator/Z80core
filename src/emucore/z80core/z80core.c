@@ -378,6 +378,7 @@ static const z80_seq io_read_seq = {io_read_steps, 8u, 5u};
 static const z80_seq io_write_seq = {io_write_steps, 8u, 5u};
 static const z80_seq idle1_seq = {idle_steps, 2u, Z80_NO_WAIT};
 static const z80_seq idle2_seq = {idle_steps, 4u, Z80_NO_WAIT};
+static const z80_seq idle4_seq = {idle_steps, 8u, Z80_NO_WAIT};
 static const z80_seq idle5_seq = {idle_steps, 10u, Z80_NO_WAIT};
 static const z80_seq idle7_seq = {idle_steps, 14u, Z80_NO_WAIT};
 
@@ -706,6 +707,146 @@ static void alu_bit(z80_t *cpu, uint8_t bit, uint8_t value, uint8_t undocumented
         flags |= (uint8_t)(Z80_FLAG_Z | Z80_FLAG_PV);
     }
     flags |= (uint8_t)(undocumented & Z80_FLAG_XY);
+
+    cpu->af.byte.low = flags;
+}
+
+/**
+ * ADC HL,rr and SBC HL,rr, which unlike ADD HL,rr set every flag: they are
+ * meant for extended-precision arithmetic, so S, Z and overflow all matter.
+ */
+static void alu_adc16(z80_t *cpu, uint16_t value)
+{
+    const uint16_t a = cpu->hl.word;
+    const uint8_t carry = (uint8_t)((cpu->af.byte.low & Z80_FLAG_C) ? 1u : 0u);
+    const uint32_t wide = (uint32_t)a + value + carry;
+    const uint16_t result = (uint16_t)wide;
+
+    uint8_t flags = (uint8_t)((result >> 8) & (Z80_FLAG_S | Z80_FLAG_XY));
+    if (0u == result)
+    {
+        flags |= Z80_FLAG_Z;
+    }
+    if ((a ^ value ^ result) & 0x1000u)
+    {
+        flags |= Z80_FLAG_H;
+    }
+    if ((a ^ result) & (value ^ result) & 0x8000u)
+    {
+        flags |= Z80_FLAG_PV;
+    }
+    if (wide & 0x10000u)
+    {
+        flags |= Z80_FLAG_C;
+    }
+
+    cpu->wz.word = (uint16_t)(a + 1u);
+    cpu->hl.word = result;
+    cpu->af.byte.low = flags;
+}
+
+static void alu_sbc16(z80_t *cpu, uint16_t value)
+{
+    const uint16_t a = cpu->hl.word;
+    const uint8_t carry = (uint8_t)((cpu->af.byte.low & Z80_FLAG_C) ? 1u : 0u);
+    const uint32_t wide = (uint32_t)((uint32_t)a - value - carry);
+    const uint16_t result = (uint16_t)wide;
+
+    uint8_t flags = (uint8_t)(((result >> 8) & (Z80_FLAG_S | Z80_FLAG_XY)) | Z80_FLAG_N);
+    if (0u == result)
+    {
+        flags |= Z80_FLAG_Z;
+    }
+    if ((a ^ value ^ result) & 0x1000u)
+    {
+        flags |= Z80_FLAG_H;
+    }
+    if ((a ^ value) & (a ^ result) & 0x8000u)
+    {
+        flags |= Z80_FLAG_PV;
+    }
+    if (wide & 0x10000u)
+    {
+        flags |= Z80_FLAG_C;
+    }
+
+    cpu->wz.word = (uint16_t)(a + 1u);
+    cpu->hl.word = result;
+    cpu->af.byte.low = flags;
+}
+
+/*
+ * The block instructions have the strangest flags on the part. X and Y do not
+ * copy the result - there is no result - but bits 3 and 1 of a value computed
+ * from the byte that moved. They are documented by reverse engineering rather
+ * than by Zilog, and z80test is what proves them right.
+ */
+
+static void block_transfer_flags(z80_t *cpu, uint8_t value)
+{
+    const uint8_t n = (uint8_t)(cpu->af.byte.high + value);
+
+    uint8_t flags = (uint8_t)(cpu->af.byte.low & (Z80_FLAG_S | Z80_FLAG_Z | Z80_FLAG_C));
+    flags |= (uint8_t)(n & Z80_FLAG_X);
+    if (n & 0x02u)
+    {
+        flags |= Z80_FLAG_Y; /* bit 1, not bit 5 */
+    }
+    if (0u != cpu->bc.word)
+    {
+        flags |= Z80_FLAG_PV; /* P/V here means "more to do" */
+    }
+
+    cpu->af.byte.low = flags;
+}
+
+static void block_compare_flags(z80_t *cpu, uint8_t value)
+{
+    const uint8_t a = cpu->af.byte.high;
+    const uint8_t result = (uint8_t)(a - value);
+    uint8_t n = result;
+
+    uint8_t flags = (uint8_t)((cpu->af.byte.low & Z80_FLAG_C) | Z80_FLAG_N);
+    flags |= (uint8_t)(result & Z80_FLAG_S);
+    if (0u == result)
+    {
+        flags |= Z80_FLAG_Z;
+    }
+    if ((a ^ value ^ result) & 0x10u)
+    {
+        flags |= Z80_FLAG_H;
+        n = (uint8_t)(n - 1u);
+    }
+    flags |= (uint8_t)(n & Z80_FLAG_X);
+    if (n & 0x02u)
+    {
+        flags |= Z80_FLAG_Y;
+    }
+    if (0u != cpu->bc.word)
+    {
+        flags |= Z80_FLAG_PV;
+    }
+
+    cpu->af.byte.low = flags;
+}
+
+static void block_io_flags(z80_t *cpu, uint8_t value, uint8_t addend)
+{
+    const uint16_t k = (uint16_t)(value + addend);
+
+    uint8_t flags = flags_sz_xy(cpu->bc.byte.high);
+    if (value & 0x80u)
+    {
+        flags |= Z80_FLAG_N; /* N copies bit 7 of the byte that moved */
+    }
+    if (k > 0xFFu)
+    {
+        flags |= (uint8_t)(Z80_FLAG_H | Z80_FLAG_C);
+    }
+    if (parity_even((uint8_t)((k & 7u) ^ cpu->bc.byte.high)))
+    {
+        flags |= Z80_FLAG_PV;
+    }
 
     cpu->af.byte.low = flags;
 }
@@ -1453,6 +1594,312 @@ static void execute_cb_bit_memory(z80_t *cpu, z80_pins_t *pins)
     alu_bit(cpu, (uint8_t)((cpu->opcode >> 3) & 7u), cpu->bus_data, cpu->wz.byte.high);
 }
 
+/* the ED set */
+
+static void execute_neg(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    uint8_t result = 0u;
+    const uint8_t flags = sub_flags(0u, cpu->af.byte.high, 0u, &result);
+    cpu->af.byte.high = result;
+    cpu->af.byte.low = flags;
+}
+
+static void execute_adc_hl(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    alu_adc16(cpu, pair_rp(cpu, cpu->opcode)->word);
+}
+
+static void execute_sbc_hl(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    alu_sbc16(cpu, pair_rp(cpu, cpu->opcode)->word);
+}
+
+static void execute_set_interrupt_mode(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    /* Eight encodings, four modes: the table repeats, and two of the eight
+       select mode 0 by a route Zilog never documented. */
+    static const uint8_t modes[8] = {0u, 0u, 1u, 2u, 0u, 0u, 1u, 2u};
+    cpu->im = modes[(cpu->opcode >> 3) & 7u];
+}
+
+static void execute_ld_i_from_a(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    cpu->i = cpu->af.byte.high;
+}
+
+static void execute_ld_r_from_a(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    cpu->r = cpu->af.byte.high;
+}
+
+/**
+ * LD A,I and LD A,R put the interrupt enable flip-flop into P/V, which is the
+ * only way to read it. On the real part an interrupt arriving during the
+ * instruction clears it - a race Phase 5 has to model.
+ */
+static void load_a_from_control_register(z80_t *cpu, uint8_t value)
+{
+    uint8_t flags = (uint8_t)(cpu->af.byte.low & Z80_FLAG_C);
+    flags |= flags_sz_xy(value);
+    if (cpu->iff2)
+    {
+        flags |= Z80_FLAG_PV;
+    }
+    cpu->af.byte.high = value;
+    cpu->af.byte.low = flags;
+}
+
+static void execute_ld_a_from_i(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    load_a_from_control_register(cpu, cpu->i);
+}
+
+static void execute_ld_a_from_r(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    load_a_from_control_register(cpu, cpu->r);
+}
+
+static void exit_return_from_interrupt(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    cpu->wz.byte.high = cpu->bus_data;
+    cpu->pc.word = cpu->wz.word;
+    cpu->iff1 = cpu->iff2; /* what makes this a return from an interrupt */
+}
+
+/* RRD and RLD rotate one BCD digit between A and memory. */
+
+static void digit_rotate_flags(z80_t *cpu)
+{
+    uint8_t flags = (uint8_t)(cpu->af.byte.low & Z80_FLAG_C);
+    flags |= flags_sz_xy(cpu->af.byte.high);
+    if (parity_even(cpu->af.byte.high))
+    {
+        flags |= Z80_FLAG_PV;
+    }
+    cpu->af.byte.low = flags;
+    cpu->wz.word = (uint16_t)(cpu->hl.word + 1u);
+}
+
+static void exit_rrd(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    const uint8_t a = cpu->af.byte.high;
+    const uint8_t memory = cpu->bus_data;
+
+    cpu->bus_data = (uint8_t)((a << 4) | (memory >> 4));
+    cpu->af.byte.high = (uint8_t)((a & 0xF0u) | (memory & 0x0Fu));
+    digit_rotate_flags(cpu);
+}
+
+static void exit_rld(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    const uint8_t a = cpu->af.byte.high;
+    const uint8_t memory = cpu->bus_data;
+
+    cpu->bus_data = (uint8_t)((memory << 4) | (a & 0x0Fu));
+    cpu->af.byte.high = (uint8_t)((a & 0xF0u) | (memory >> 4));
+    digit_rotate_flags(cpu);
+}
+
+/* IN r,(C) and OUT (C),r address the port with the whole of BC. */
+
+static void enter_io_at_bc(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    cpu->bus_addr = cpu->bc.word;
+}
+
+static void enter_out_c(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    /* register_slot gives NULL for index 6, which is the encoding that outputs
+       a constant - zero on the NMOS part */
+    const uint8_t *source = register_slot(cpu, (uint8_t)(cpu->opcode >> 3));
+    write_at(cpu, cpu->bc.word, source ? *source : 0u);
+}
+
+static void execute_in_c(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    const uint8_t value = cpu->bus_data;
+    uint8_t *slot = register_slot(cpu, (uint8_t)(cpu->opcode >> 3));
+
+    if (slot)
+    {
+        *slot = value; /* index 6 is IN (C): the flags move, nothing else */
+    }
+
+    uint8_t flags = (uint8_t)(cpu->af.byte.low & Z80_FLAG_C);
+    flags |= flags_sz_xy(value);
+    if (parity_even(value))
+    {
+        flags |= Z80_FLAG_PV;
+    }
+    cpu->af.byte.low = flags;
+    cpu->wz.word = (uint16_t)(cpu->bc.word + 1u);
+}
+
+static void execute_out_c(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    cpu->wz.word = (uint16_t)(cpu->bc.word + 1u);
+}
+
+/* LD (nn),rr and LD rr,(nn), the ED forms that reach every pair */
+
+static void enter_write_rp_low(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    write_at(cpu, cpu->tmp.word, pair_rp(cpu, cpu->opcode)->byte.low);
+}
+
+static void enter_write_rp_high(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    write_at(cpu, (uint16_t)(cpu->tmp.word + 1u), pair_rp(cpu, cpu->opcode)->byte.high);
+}
+
+static void exit_to_rp_low(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    pair_rp(cpu, cpu->opcode)->byte.low = cpu->bus_data;
+}
+
+static void execute_ld_rp_from_memory(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    pair_rp(cpu, cpu->opcode)->byte.high = cpu->bus_data;
+    cpu->wz.word = (uint16_t)(cpu->tmp.word + 1u);
+}
+
+/*
+ * The block instructions. One descriptor serves all four of each family: bit 3
+ * of the opcode chooses the direction and bit 4 whether it repeats, exactly as
+ * the encoding intends, so LDI and LDDR differ only in what the hooks read out
+ * of the opcode they are already holding.
+ *
+ * Repeating is done the way the hardware does it - by winding PC back over the
+ * two prefix bytes so the same instruction is fetched again. An interrupt can
+ * therefore be taken between iterations, which is the entire reason a 64 KB
+ * copy does not lock the machine out for the duration.
+ */
+
+static int block_delta(const z80_t *cpu)
+{
+    return (cpu->opcode & 0x08u) ? -1 : 1;
+}
+
+static bool block_repeats(const z80_t *cpu)
+{
+    return 0u != (cpu->opcode & 0x10u);
+}
+
+static void enter_block_repeat(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    cpu->pc.word = (uint16_t)(cpu->pc.word - 2u);
+    cpu->wz.word = (uint16_t)(cpu->pc.word + 1u);
+}
+
+/** The write of a transfer: the byte is already on the bus from the read. */
+static void enter_block_write_de(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    cpu->bus_addr = cpu->de.word;
+}
+
+static void enter_block_write_hl(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    cpu->bus_addr = cpu->hl.word;
+}
+
+static void exit_block_transfer(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    const int delta = block_delta(cpu);
+    const uint8_t value = cpu->bus_data;
+
+    cpu->hl.word = (uint16_t)(cpu->hl.word + delta);
+    cpu->de.word = (uint16_t)(cpu->de.word + delta);
+    cpu->bc.word = (uint16_t)(cpu->bc.word - 1u);
+    block_transfer_flags(cpu, value);
+
+    if (!block_repeats(cpu) || 0u == cpu->bc.word)
+    {
+        end_instruction_here(cpu);
+    }
+}
+
+static void exit_block_compare(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    const int delta = block_delta(cpu);
+    const uint8_t value = cpu->bus_data;
+
+    cpu->hl.word = (uint16_t)(cpu->hl.word + delta);
+    cpu->bc.word = (uint16_t)(cpu->bc.word - 1u);
+    cpu->wz.word = (uint16_t)(cpu->wz.word + delta);
+    block_compare_flags(cpu, value);
+
+    /* a search stops on a match as well as on running out */
+    if (!block_repeats(cpu) || 0u == cpu->bc.word || (cpu->af.byte.low & Z80_FLAG_Z))
+    {
+        end_instruction_here(cpu);
+    }
+}
+
+static void exit_block_in(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    const int delta = block_delta(cpu);
+    const uint8_t value = cpu->bus_data;
+
+    cpu->wz.word = (uint16_t)(cpu->bc.word + delta);
+    cpu->bc.byte.high = (uint8_t)(cpu->bc.byte.high - 1u);
+    cpu->hl.word = (uint16_t)(cpu->hl.word + delta);
+    block_io_flags(cpu, value, (uint8_t)(cpu->bc.byte.low + delta));
+
+    if (!block_repeats(cpu) || 0u == cpu->bc.byte.high)
+    {
+        end_instruction_here(cpu);
+    }
+}
+
+/** B is decremented before the cycle, so the port address carries the new B. */
+static void enter_block_out(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    cpu->bc.byte.high = (uint8_t)(cpu->bc.byte.high - 1u);
+    cpu->bus_addr = cpu->bc.word;
+}
+
+static void exit_block_out(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    const int delta = block_delta(cpu);
+    const uint8_t value = cpu->bus_data;
+
+    cpu->hl.word = (uint16_t)(cpu->hl.word + delta);
+    cpu->wz.word = (uint16_t)(cpu->bc.word + delta);
+    block_io_flags(cpu, value, cpu->hl.byte.low);
+
+    if (!block_repeats(cpu) || 0u == cpu->bc.byte.high)
+    {
+        end_instruction_here(cpu);
+    }
+}
+
 /**
  * A prefix is a whole M1 cycle that decodes nothing: it costs four T-states,
  * increments R a second time, and tells the next fetch which table to use.
@@ -1510,6 +1957,80 @@ static const z80_instr instr_cb_mem = {
 /* BIT reads and tests but never writes back, so it is three T-states shorter */
 static const z80_instr instr_cb_bit_mem = {
     {{&mem_read_seq, at_hl, NULL}, {&idle1_seq, NULL, NULL}}, 2u, execute_cb_bit_memory};
+
+/* the ED set. Every one of these carries the four T-states of the prefix on
+   top of what is listed here, so ED 44 (NEG) costs eight in total. */
+static const z80_instr instr_ed_neg = {NO_CYCLES, 0u, execute_neg};
+static const z80_instr instr_ed_im = {NO_CYCLES, 0u, execute_set_interrupt_mode};
+/* an ED opcode with no meaning behaves as two NOPs, which is what it is */
+static const z80_instr instr_ed_nop = {NO_CYCLES, 0u, NULL};
+
+static const z80_instr instr_ed_adc_hl = {{{&idle7_seq, NULL, NULL}}, 1u, execute_adc_hl};
+static const z80_instr instr_ed_sbc_hl = {{{&idle7_seq, NULL, NULL}}, 1u, execute_sbc_hl};
+
+static const z80_instr instr_ed_ld_i_a = {{{&idle1_seq, NULL, NULL}}, 1u, execute_ld_i_from_a};
+static const z80_instr instr_ed_ld_r_a = {{{&idle1_seq, NULL, NULL}}, 1u, execute_ld_r_from_a};
+static const z80_instr instr_ed_ld_a_i = {{{&idle1_seq, NULL, NULL}}, 1u, execute_ld_a_from_i};
+static const z80_instr instr_ed_ld_a_r = {{{&idle1_seq, NULL, NULL}}, 1u, execute_ld_a_from_r};
+
+static const z80_instr instr_ed_retn = {
+    {{&mem_read_seq, at_pop, exit_to_wz_low}, {&mem_read_seq, at_pop, exit_return_from_interrupt}}, 2u, NULL};
+
+static const z80_instr instr_ed_in_c = {{{&io_read_seq, enter_io_at_bc, NULL}}, 1u, execute_in_c};
+static const z80_instr instr_ed_out_c = {{{&io_write_seq, enter_out_c, NULL}}, 1u, execute_out_c};
+
+static const z80_instr instr_ed_ld_nn_rp = {{{&mem_read_seq, at_pc, exit_to_tmp_low},
+                                             {&mem_read_seq, at_pc, exit_to_tmp_high},
+                                             {&mem_write_seq, enter_write_rp_low, NULL},
+                                             {&mem_write_seq, enter_write_rp_high, NULL}},
+                                            4u,
+                                            execute_memptr_after_tmp};
+
+static const z80_instr instr_ed_ld_rp_nn = {{{&mem_read_seq, at_pc, exit_to_tmp_low},
+                                             {&mem_read_seq, at_pc, exit_to_tmp_high},
+                                             {&mem_read_seq, at_tmp, exit_to_rp_low},
+                                             {&mem_read_seq, at_tmp_high, NULL}},
+                                            4u,
+                                            execute_ld_rp_from_memory};
+
+static const z80_instr instr_ed_rrd = {
+    {{&mem_read_seq, at_hl, exit_rrd}, {&idle4_seq, NULL, NULL}, {&mem_write_seq, enter_block_write_hl, NULL}},
+    3u,
+    NULL};
+
+static const z80_instr instr_ed_rld = {
+    {{&mem_read_seq, at_hl, exit_rld}, {&idle4_seq, NULL, NULL}, {&mem_write_seq, enter_block_write_hl, NULL}},
+    3u,
+    NULL};
+
+/* The four families of block instruction, one descriptor each. The last cycle
+   only runs when the instruction repeats, which is where the extra five
+   T-states of LDIR over LDI come from. */
+static const z80_instr instr_ed_block_transfer = {{{&mem_read_seq, at_hl, NULL},
+                                                   {&mem_write_seq, enter_block_write_de, NULL},
+                                                   {&idle2_seq, NULL, exit_block_transfer},
+                                                   {&idle5_seq, enter_block_repeat, NULL}},
+                                                  4u,
+                                                  NULL};
+
+static const z80_instr instr_ed_block_compare = {
+    {{&mem_read_seq, at_hl, NULL}, {&idle5_seq, NULL, exit_block_compare}, {&idle5_seq, enter_block_repeat, NULL}},
+    3u,
+    NULL};
+
+static const z80_instr instr_ed_block_in = {{{&idle1_seq, NULL, NULL},
+                                             {&io_read_seq, enter_io_at_bc, NULL},
+                                             {&mem_write_seq, enter_block_write_hl, exit_block_in},
+                                             {&idle5_seq, enter_block_repeat, NULL}},
+                                            4u,
+                                            NULL};
+
+static const z80_instr instr_ed_block_out = {{{&idle1_seq, NULL, NULL},
+                                              {&mem_read_seq, at_hl, NULL},
+                                              {&io_write_seq, enter_block_out, exit_block_out},
+                                              {&idle5_seq, enter_block_repeat, NULL}},
+                                             4u,
+                                             NULL};
 
 /* 8-bit loads */
 static const z80_instr instr_ld_reg_immediate = {{{&mem_read_seq, at_pc, NULL}}, 1u, execute_ld_reg_from_bus};
@@ -1819,7 +2340,11 @@ static const z80_instr *decode_base(const z80_t *cpu)
             {
                 return &instr_call;
             }
-            return &instr_unimplemented; /* DD, ED and FD prefixes */
+            if (2u == p)
+            {
+                return &instr_prefix; /* ED */
+            }
+            return &instr_unimplemented; /* DD and FD, the index registers */
         case 6:
             return &instr_alu_n;
         default:
@@ -1828,14 +2353,89 @@ static const z80_instr *decode_base(const z80_t *cpu)
     }
 }
 
+/**
+ * The ED table is mostly empty. Two bands of it carry everything: 40-7F holds
+ * the I/O, the 16-bit arithmetic and the interrupt control, and a corner of
+ * A0-BF holds the block instructions. Every other encoding is a two-byte NOP,
+ * which is what the hardware does rather than a convenience.
+ */
+static const z80_instr *decode_ed(const z80_t *cpu)
+{
+    const uint8_t opcode = cpu->opcode;
+    const uint8_t x = (uint8_t)(opcode >> 6);
+    const uint8_t y = (uint8_t)((opcode >> 3) & 7u);
+    const uint8_t z = (uint8_t)(opcode & 7u);
+    const uint8_t q = (uint8_t)(y & 1u);
+
+    if (2u == x && z <= 3u && y >= 4u)
+    {
+        switch (z)
+        {
+        case 0:
+            return &instr_ed_block_transfer; /* LDI LDD LDIR LDDR */
+        case 1:
+            return &instr_ed_block_compare; /* CPI CPD CPIR CPDR */
+        case 2:
+            return &instr_ed_block_in; /* INI IND INIR INDR */
+        default:
+            return &instr_ed_block_out; /* OUTI OUTD OTIR OTDR */
+        }
+    }
+
+    if (1u != x)
+    {
+        return &instr_ed_nop;
+    }
+
+    switch (z)
+    {
+    case 0:
+        return &instr_ed_in_c;
+    case 1:
+        return &instr_ed_out_c;
+    case 2:
+        return q ? &instr_ed_adc_hl : &instr_ed_sbc_hl;
+    case 3:
+        return q ? &instr_ed_ld_rp_nn : &instr_ed_ld_nn_rp;
+    case 4:
+        return &instr_ed_neg;
+    case 5:
+        return &instr_ed_retn; /* RETI differs from RETN only to a peripheral */
+    case 6:
+        return &instr_ed_im;
+    default:
+        switch (y)
+        {
+        case 0:
+            return &instr_ed_ld_i_a;
+        case 1:
+            return &instr_ed_ld_r_a;
+        case 2:
+            return &instr_ed_ld_a_i;
+        case 3:
+            return &instr_ed_ld_a_r;
+        case 4:
+            return &instr_ed_rrd;
+        case 5:
+            return &instr_ed_rld;
+        default:
+            return &instr_ed_nop;
+        }
+    }
+}
+
 /** Which table the byte just fetched should be read against. */
 static const z80_instr *decode(const z80_t *cpu)
 {
-    if (0xCBu == cpu->prefix)
+    switch (cpu->prefix)
     {
+    case 0xCBu:
         return decode_cb(cpu);
+    case 0xEDu:
+        return decode_ed(cpu);
+    default:
+        return decode_base(cpu);
     }
-    return decode_base(cpu);
 }
 
 /* ---------------------------------------------------------------- */

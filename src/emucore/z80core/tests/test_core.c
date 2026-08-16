@@ -211,8 +211,8 @@ static void test_halt_holds_pc_and_asserts_the_pin(void)
 /** An opcode with no implementation is counted, not silently ignored. */
 static void test_unimplemented_opcodes_are_counted(void)
 {
-    /* ED - the prefixed sets are the remaining gap in Phase 3 */
-    static const uint8_t program[] = {0xED, 0xED, 0xED, 0xED};
+    /* DD - the index registers are the remaining gap in Phase 3 */
+    static const uint8_t program[] = {0xDD, 0xDD, 0xDD, 0xDD};
     z80_t *cpu = z80_new();
 
     (void)run_program(cpu, program, sizeof program, 40);
