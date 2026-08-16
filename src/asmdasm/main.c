@@ -16,8 +16,6 @@
 #include <getopt.h>
 #include <inttypes.h>
 
-int verbose = 0;
-
 void usage(void)
 {
     const char *help = "USAGE:\r\n"

@@ -11,7 +11,7 @@
 
 #include "monitor.hpp"
 
-#include "disasm_host.h"
+#include "zdasm.h"
 #include "imgui.h"
 
 #include <windows.h>
@@ -709,7 +709,7 @@ void Monitor::drawDisassembly()
     for (int line = 0; line < disasmLines_; ++line)
     {
         char text[128];
-        const size_t used = z80mon_disasm(memory_.data(), memory_.size(), address, text, sizeof text);
+        const uint8_t used = zdasm_one(memory_.data(), memory_.size(), address, text, sizeof text);
         const bool here = address == pins_.A;
 
         /* the bytes this instruction occupies, so the listing reads like one */

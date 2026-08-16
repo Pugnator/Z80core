@@ -15,25 +15,44 @@ flex_target(z80_lexer src/grammar/z80.lex ${CMAKE_CURRENT_BINARY_DIR}/z80lex.c
             COMPILE_FLAGS "-f -i")
 add_flex_bison_dependency(z80_lexer z80_parser)
 
-add_executable(zasm
-    src/asmdasm/main.c
+# The disassembler, as a library anything can link: the opcode table and the
+# C library are all it needs - no globals, no output, no generated headers.
+# BUILD_SHARED_LIBS=ON makes this and zasmlib shared instead of static.
+# MinGW exports everything from a DLL by default and MSVC exports nothing, so
+# say it explicitly and get the same library either way.
+set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+
+add_library(zdasm src/asmdasm/zdasm.c src/asmdasm/z80tab.c)
+target_include_directories(zdasm PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include/asmdasm)
+set_target_properties(zdasm PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# The assembler, as a library. Unlike zdasm it needs the generated parser and
+# scanner, and it keeps its state in globals, so only one assembly may be in
+# flight at a time - see zasm.h and docs/EMBEDDING.md.
+add_library(zasmlib
     src/asmdasm/assembler.c
     src/asmdasm/dassembler.c
     src/asmdasm/compat.c
-    src/asmdasm/z80tab.c
     src/asmdasm/tap.c
     src/asmdasm/ihex.c
     src/asmdasm/utils.c
     ${BISON_z80_parser_OUTPUTS}
     ${FLEX_z80_lexer_OUTPUTS})
 
-target_include_directories(zasm PRIVATE
+target_include_directories(zasmlib PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include/asmdasm
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_BINARY_DIR})
 
+target_link_libraries(zasmlib PUBLIC zdasm)
+set_target_properties(zasmlib PROPERTIES POSITION_INDEPENDENT_CODE ON OUTPUT_NAME zasm)
+
+# the command line is a shell over the library
+add_executable(zasm src/asmdasm/main.c)
+target_link_libraries(zasm PRIVATE zasmlib)
+
 if(WIN32)
-    target_compile_definitions(zasm PRIVATE
+    target_compile_definitions(zasmlib PUBLIC
         _WIN32_WINNT=0x0600
         _CRT_SECURE_NO_WARNINGS
         _CRT_NONSTDC_NO_DEPRECATE)
@@ -42,7 +61,9 @@ if(WIN32)
 endif()
 
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
-    target_compile_options(zasm PRIVATE -Wall -Wextra -Werror -ffunction-sections -fdata-sections)
+    foreach(target zasm zasmlib zdasm)
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Werror -ffunction-sections -fdata-sections)
+    endforeach()
     target_link_options(zasm PRIVATE -Wl,--gc-sections)
 
     # Each grammar rule renders its instruction into a fixed 64-byte buffer with
@@ -87,6 +108,12 @@ add_test(NAME rom_monitor48k
                  -DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/monitor48k.bin
                  -DREFERENCE=${CMAKE_CURRENT_SOURCE_DIR}/tests/monitor48k/monitor48k.rom
                  -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/rom_compare.cmake)
+# Uses zasm.h and zdasm.h and nothing else, so it fails if the libraries stop
+# being usable from outside the project.
+add_executable(embed_test tests/embed_test.c)
+target_link_libraries(embed_test PRIVATE zasmlib zdasm)
+add_test(NAME embedding_api COMMAND embed_test)
+
 add_test(NAME selftest_fallingblocks
          COMMAND zasm -s ${CMAKE_CURRENT_SOURCE_DIR}/tests/fallingblocks/fallingblocks.asm
                  -o fallingblocks.tap -x tap)

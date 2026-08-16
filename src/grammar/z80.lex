@@ -296,12 +296,12 @@ bin               0b[01]+|%[01]+
 
 void asmerror(const char *error_txt)
 {
-
-    #ifdef __linux__
-    printf("\x1B[31m%d error%s detected, line %d: %s near \"%s\"\x1B[0m\n", asmnerrs, 1 == asmnerrs ? "":"s" , asmlineno, error_txt, asmtext);
-    #else
-    printf("%d error%s detected, line %d: %s near \"%s\"\n", asmnerrs, 1 == asmnerrs ? "":"s" , asmlineno, error_txt, asmtext);
-    #endif
+    /* Through the same sink as every other diagnostic, so a program embedding
+       the assembler collects syntax errors along with the rest instead of
+       finding them on stdout. */
+    char message[MAX_TOKEN_SIZE + 256];
+    snprintf(message, sizeof message, "%s near \"%s\"", error_txt, asmtext);
+    asm_diagnostic(asmlineno, message);
 }
 
 void asm_load_buffer (const char *input)

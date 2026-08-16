@@ -153,6 +153,7 @@ extern RUNPASS run_pass;
 int asmlex(void);
 void asmerror(const char *s);
 /* diagnostics; a reported error fails the assembly (see assembler.c) */
+void asm_diagnostic(int line, const char *message);
 void error_print(const char *format, ...);
 void error_print_early(const char *format, ...);
 void debug_print(const char *format, ...);

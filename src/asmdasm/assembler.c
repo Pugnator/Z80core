@@ -13,8 +13,15 @@
 #include <assembler.h>
 #include <tap.h>
 #include <ihex.h>
+#include <zasm.h>
+
+#define ZASM_VERSION "1.0.0"
 
 RUNPASS run_pass = PASS1;
+/* Belongs to the assembler, not to the command line: the library reads it when
+   deciding whether to print a listing, so it has to be defined alongside the
+   code that uses it. main.c sets it from -v. */
+int verbose = 0;
 bool abort_on_error = true;
 uint16_t PC = 0;
 uint16_t DATA_PC = 0;
@@ -217,19 +224,50 @@ void debug_print(const char *format, ...)
     }
 }
 
+/* Where diagnostics go. NULL means the command line's own printing. */
+static zasm_diag_fn diagnostic_sink = NULL;
+static void *diagnostic_user = NULL;
+
+static void print_diagnostic(void *user, int line, const char *message)
+{
+    (void)user;
+    if (line > 0)
+    {
+        printf("Line %d: %s\n", line, message);
+    }
+    else
+    {
+        printf("%s\n", message);
+    }
+}
+
+/**
+@brief Hand one diagnostic to whoever is listening.
+
+The message arrives without its trailing newline: a host putting these into a
+list box or an error window wants the text, not the formatting.
+*/
+void asm_diagnostic(int line, const char *message)
+{
+    (diagnostic_sink ? diagnostic_sink : print_diagnostic)(diagnostic_user, line, message);
+}
+
 static void report(const char *format, va_list args)
 {
     ++semantic_errors;
     char *string;
     if (0 > vasprintf(&string, format, args))
     {
-        string = NULL;
+        return;
     }
-    if (string)
+
+    size_t length = strlen(string);
+    while (length && ('\n' == string[length - 1] || '\r' == string[length - 1]))
     {
-        printf("Line %d: %s", current_line, string);
-        free(string);
+        string[--length] = '\0';
     }
+    asm_diagnostic(current_line, string);
+    free(string);
 }
 
 void error_print(const char *format, ...)
@@ -540,6 +578,25 @@ static bool is_reserved_word(const char *name)
     return false;
 }
 
+/**
+@brief Drop every label.
+
+The table lives in a global, so without this a second assembly in the same
+process would start with the first one's labels already defined and report
+every one of them as a redefinition.
+*/
+static void free_labels(void)
+{
+    user_label *cur, *tmp;
+    HASH_ITER(hh, labels, cur, tmp)
+    {
+        HASH_DEL(labels, cur);
+        free(cur->label);
+        free(cur);
+    }
+    labels = NULL;
+}
+
 /* labels are case-insensitive: the hash key is the lowercased name */
 static user_label *find_label(const char *name)
 {
@@ -727,16 +784,24 @@ void print_labels(user_label *print)
 }
 
 /**
-@brief Assemble a source buffer and write the result.
-@param source Null-terminated source text
-@param fmt Output format: bin, tap or ihex
-@param out Output file, already open for writing
-@return ASM_OK on success, ASM_ERROR if any pass reported an error
+@brief Run both passes over a source buffer.
+
+Everything that assembles goes through here: the command line, and the library
+entry point below. Leaves the result in prog[], PROG_START and prog_end.
+
+@return true if the source assembled without errors.
 */
-int process_source(char *source, char *fmt, FILE *out)
+static bool run_passes(const char *source)
 {
     assembled_bytes = 0;
     semantic_errors = 0;
+
+    /* labels persist between calls otherwise, and a second assembly would
+       inherit the first one's definitions */
+    free_labels();
+    PROG_START = 0xFFFF;
+    CURRENT_ORG = 0;
+    DATA_PC = 0;
 
     /* Pass 1 collects label definitions; forward references are expected and
        are not diagnosed until pass 2 knows every label. */
@@ -748,7 +813,7 @@ int process_source(char *source, char *fmt, FILE *out)
     asm_load_buffer(source);
     if (0 != asmparse())
     {
-        return ASM_ERROR;
+        return false;
     }
 
     run_pass = PASS2;
@@ -759,12 +824,28 @@ int process_source(char *source, char *fmt, FILE *out)
     asm_load_buffer(source);
     if (0 != asmparse() || semantic_errors)
     {
-        return ASM_ERROR;
+        return false;
     }
 
     if (PROG_START == 0xFFFF)
     {
         PROG_START = 0x0000;
+    }
+    return true;
+}
+
+/**
+@brief Assemble a source buffer and write the result.
+@param source Null-terminated source text
+@param fmt Output format: bin, tap or ihex
+@param out Output file, already open for writing
+@return ASM_OK on success, ASM_ERROR if any pass reported an error
+*/
+int process_source(char *source, char *fmt, FILE *out)
+{
+    if (!run_passes(source))
+    {
+        return ASM_ERROR;
     }
     /* prog_end is the highest address written + 1, so it survives a program
        that ends exactly at 0xFFFF (where PC can no longer advance) */
@@ -800,4 +881,128 @@ int process_source(char *source, char *fmt, FILE *out)
         return ASM_ERROR;
     }
     return ASM_OK;
+}
+
+/* ------------------------------------------------------------------------ */
+/* The library entry point. See include/asmdasm/zasm.h and docs/EMBEDDING.md */
+/* ------------------------------------------------------------------------ */
+
+const char *zasm_version(void)
+{
+    return ZASM_VERSION;
+}
+
+void zasm_image_free(zasm_image *image)
+{
+    if (!image)
+    {
+        return;
+    }
+    free(image->bytes);
+    image->bytes = NULL;
+    image->size = 0;
+    image->origin = 0;
+}
+
+/**
+@brief Capture a formatted image without going near the filesystem.
+
+tap and ihex are written through FILE handles, being file formats. Rather than
+reimplement either, the library writes to a temporary stream and reads it back;
+the buffer a caller receives is the same bytes the command line would produce.
+*/
+static bool capture_formatted(zasm_format format, size_t payload, zasm_image *out)
+{
+    FILE *scratch = tmpfile();
+    if (!scratch)
+    {
+        asm_diagnostic(0, "could not open a temporary stream for the output format");
+        return false;
+    }
+
+    bool written = true;
+    if (ZASM_FORMAT_TAP == format)
+    {
+        struct t_tap_info tap = {0};
+        tap.prog_start = PROG_START;
+        tap.entry_point = PROG_START;
+        tap.rom_size = payload;
+        tap.rom = &prog[PROG_START];
+        written = tap_create(&tap, scratch) >= 0;
+    }
+    else
+    {
+        written = 0 == save_array_to_ihex(scratch, PROG_START, &prog[PROG_START], payload);
+    }
+
+    if (!written)
+    {
+        asm_diagnostic(0, "the output format could not be written");
+        fclose(scratch);
+        return false;
+    }
+
+    const long size = (0 == fseek(scratch, 0, SEEK_END)) ? ftell(scratch) : -1;
+    if (size < 0)
+    {
+        fclose(scratch);
+        return false;
+    }
+    rewind(scratch);
+
+    out->bytes = malloc((size_t)size ? (size_t)size : 1);
+    if (!out->bytes)
+    {
+        fclose(scratch);
+        return false;
+    }
+    out->size = fread(out->bytes, 1, (size_t)size, scratch);
+    fclose(scratch);
+    return out->size == (size_t)size;
+}
+
+bool zasm_assemble(const char *source, zasm_format format, zasm_image *out, zasm_diag_fn diag, void *user)
+{
+    if (!source || !out)
+    {
+        return false;
+    }
+    memset(out, 0, sizeof *out);
+
+    diagnostic_sink = diag;
+    diagnostic_user = user;
+
+    bool assembled = run_passes(source);
+    if (assembled)
+    {
+        const size_t payload = (prog_end > PROG_START) ? (size_t)(prog_end - PROG_START) : 0;
+        out->origin = PROG_START;
+
+        if (ZASM_FORMAT_BIN == format)
+        {
+            out->size = prog_end;
+            out->bytes = malloc(out->size ? out->size : 1);
+            if (out->bytes)
+            {
+                memcpy(out->bytes, prog, out->size);
+            }
+            else
+            {
+                assembled = false;
+            }
+        }
+        else
+        {
+            assembled = capture_formatted(format, payload, out);
+        }
+    }
+
+    if (!assembled)
+    {
+        zasm_image_free(out);
+    }
+
+    diagnostic_sink = NULL;
+    diagnostic_user = NULL;
+    return assembled;
 }
