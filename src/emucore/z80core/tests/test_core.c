@@ -202,7 +202,10 @@ static void test_halt_holds_pc_and_asserts_the_pin(void)
 
     CHECK(state.halted, "the CPU did not halt");
     CHECK(0 != (pins.ctrl & Z80_HALT), "the HALT pin is not asserted");
-    CHECK(1 == state.pc, "PC should stay at 1 while halted, is %04X", state.pc);
+    /* PC stays *on* the HALT, not past it: a halted Z80 keeps fetching this
+       same opcode, which is what the refresh cycles below are attached to.
+       Leaving PC at 1 would re-fetch whatever follows the HALT instead. */
+    CHECK(0 == state.pc, "PC should sit on the HALT at 0000, is %04X", state.pc);
     CHECK(state.edges >= 64, "the clock stopped along with the program counter");
 
     z80_free(cpu);

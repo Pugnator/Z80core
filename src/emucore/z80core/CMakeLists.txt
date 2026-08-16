@@ -30,8 +30,21 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_compile_options(z80core_instruction_test PRIVATE -Wall -Wextra -Werror)
 endif()
 
+# The FUSE conformance suite: the first check on this core that was not
+# written by the same person who wrote the core. See tests/fuse/README.md.
+add_executable(z80core_fuse_test tests/fuse_test.c)
+target_link_libraries(z80core_fuse_test PRIVATE z80core)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(z80core_fuse_test PRIVATE -Wall -Wextra -Werror)
+endif()
+
 add_test(NAME cpu_core COMMAND z80core_test)
 add_test(NAME cpu_instructions COMMAND z80core_instruction_test)
+add_test(NAME cpu_conformance_fuse
+         COMMAND z80core_fuse_test
+                 "${CMAKE_SOURCE_DIR}/tests/fuse/tests.in"
+                 "${CMAKE_SOURCE_DIR}/tests/fuse/tests.expected")
 
 # A short run, purely to prove the benchmark still works. The number it prints
 # is for humans; nothing fails on being slow.

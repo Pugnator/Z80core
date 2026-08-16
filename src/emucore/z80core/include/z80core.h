@@ -162,6 +162,22 @@ Z80_API uint64_t z80_unimplemented(const z80_t *cpu);
 Z80_API uint16_t z80_get(const z80_t *cpu, z80_reg which);
 Z80_API void z80_set(z80_t *cpu, z80_reg which, uint16_t value);
 Z80_API void z80_state(const z80_t *cpu, z80_state_t *out);
+
+/**
+ * @brief Impose a whole machine state, the interrupt flip-flops included.
+ *
+ * The counterpart of z80_state(), and the only way to reach @c iff1, @c iff2,
+ * @c im and @c halted from outside - z80_set() reaches registers only. It is
+ * what a debugger's "set registers" does, and what a conformance suite needs
+ * to place the machine at the start of a case.
+ *
+ * Meant for use between instructions. Mid-instruction it will leave the engine
+ * running a machine cycle that no longer matches the registers it was started
+ * with; use z80_load() to resume a captured position instead. @c edges is not
+ * restored, since it counts what this core has run rather than describing the
+ * machine.
+ */
+Z80_API void z80_set_state(z80_t *cpu, const z80_state_t *state);
 /** Name of a register pair, for a debugger's own labels. */
 Z80_API const char *z80_reg_name(z80_reg which);
 

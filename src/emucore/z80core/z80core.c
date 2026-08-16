@@ -198,12 +198,7 @@ static void step_m1_t3_rise(z80_t *cpu, z80_pins_t *pins)
     /* the opcode is sampled here, and the fetch ends */
     cpu->opcode = pins->D;
 
-    /* A halted CPU keeps fetching from the halt address: it executes NOPs in
-       place until something interrupts it, which is what the real part does. */
-    if (!cpu->halted)
-    {
-        cpu->pc.word = (uint16_t)(cpu->pc.word + 1u);
-    }
+    cpu->pc.word = (uint16_t)(cpu->pc.word + 1u);
 
     pins->ctrl &= ~(uint32_t)(Z80_M1 | Z80_MREQ | Z80_RD);
 
@@ -1216,6 +1211,16 @@ static void execute_halt(z80_t *cpu, z80_pins_t *pins)
 {
     cpu->halted = true;
     pins->ctrl |= Z80_HALT;
+
+    /*
+     * Wind PC back onto the HALT so the next fetch reads it again. A halted
+     * Z80 is not idle - it runs M1 cycles at the halt address, refreshing
+     * memory as it goes - and the instruction it keeps fetching is this one.
+     * Leaving PC past it would re-fetch whatever follows the HALT, which is
+     * both wrong on the bus and wrong as a return address when an interrupt
+     * eventually wakes it.
+     */
+    cpu->pc.word = (uint16_t)(cpu->pc.word - 1u);
 }
 
 static void execute_ld_reg_reg(z80_t *cpu, z80_pins_t *pins)
@@ -1632,10 +1637,20 @@ static void exit_cb_bus(z80_t *cpu, z80_pins_t *pins)
     }
 }
 
+/**
+ * BIT n,(HL) takes X and Y from the byte it tested, exactly as BIT n,r takes
+ * them from the register. The indexed form does not - there they come from the
+ * high half of IX+d - and that asymmetry is real rather than an oversight
+ * here: FUSE's cases pin this form to the value in all eight samples, where
+ * the address matches only two.
+ *
+ * FUSE does not model MEMPTR, so it cannot settle whether the indexed form is
+ * reading WZ or the address it happens to equal. z80test is what would.
+ */
 static void execute_cb_bit_memory(z80_t *cpu, z80_pins_t *pins)
 {
     (void)pins;
-    alu_bit(cpu, (uint8_t)((cpu->opcode >> 3) & 7u), cpu->bus_data, cpu->wz.byte.high);
+    alu_bit(cpu, (uint8_t)((cpu->opcode >> 3) & 7u), cpu->bus_data, cpu->bus_data);
 }
 
 /* the ED set */
@@ -2983,6 +2998,34 @@ void z80_state(const z80_t *cpu, z80_state_t *out)
     out->iff2 = cpu->iff2;
     out->halted = cpu->halted;
     out->edges = cpu->edges;
+}
+
+void z80_set_state(z80_t *cpu, const z80_state_t *state)
+{
+    if (!cpu || !state)
+    {
+        return;
+    }
+
+    cpu->af.word = state->af;
+    cpu->bc.word = state->bc;
+    cpu->de.word = state->de;
+    cpu->hl.word = state->hl;
+    cpu->af_alt.word = state->af_alt;
+    cpu->bc_alt.word = state->bc_alt;
+    cpu->de_alt.word = state->de_alt;
+    cpu->hl_alt.word = state->hl_alt;
+    cpu->ix.word = state->ix;
+    cpu->iy.word = state->iy;
+    cpu->sp.word = state->sp;
+    cpu->pc.word = state->pc;
+    cpu->wz.word = state->wz;
+    cpu->i = state->i;
+    cpu->r = state->r;
+    cpu->im = state->im;
+    cpu->iff1 = state->iff1;
+    cpu->iff2 = state->iff2;
+    cpu->halted = state->halted;
 }
 
 const char *z80_reg_name(z80_reg which)
