@@ -466,6 +466,75 @@ static void test_registers_round_trip(void)
     z80_free(cpu);
 }
 
+/**
+ * A host asserting BUSRQ gets the bus at the end of the current machine cycle,
+ * and the CPU picks up exactly where it left off afterwards.
+ */
+static void test_bus_request_releases_and_resumes(void)
+{
+    static const uint8_t program[] = {0x21, 0x34, 0x12, 0x00}; /* LD HL,1234 */
+
+    z80_t *cpu = z80_new();
+    z80_pins_t pins = {0};
+
+    /* run into the middle of the instruction, then ask for the bus */
+    for (int i = 0; i < 9; ++i)
+    {
+        (void)z80_tick(cpu, &pins, (i + 1) & 1);
+        if ((pins.ctrl & Z80_MREQ) && (pins.ctrl & Z80_RD))
+        {
+            pins.D = (pins.A < sizeof program) ? program[pins.A] : 0x00;
+        }
+    }
+
+    pins.ctrl |= Z80_BUSRQ;
+
+    bool acknowledged = false;
+    for (int i = 9; i < 40; ++i)
+    {
+        (void)z80_tick(cpu, &pins, (i + 1) & 1);
+        if (pins.ctrl & Z80_BUSAK)
+        {
+            acknowledged = true;
+            break;
+        }
+        if ((pins.ctrl & Z80_MREQ) && (pins.ctrl & Z80_RD))
+        {
+            pins.D = (pins.A < sizeof program) ? program[pins.A] : 0x00;
+        }
+    }
+    CHECK(acknowledged, "BUSRQ was never acknowledged");
+
+    const uint32_t driven = pins.ctrl & (Z80_M1 | Z80_MREQ | Z80_IORQ | Z80_RD | Z80_WR | Z80_RFSH);
+    CHECK(0 == driven, "the CPU is still driving %08X while the bus is released", driven);
+
+    /* hold it, and nothing must move */
+    const uint16_t held_pc = z80_get(cpu, Z80_REG_PC);
+    for (int i = 0; i < 20; ++i)
+    {
+        (void)z80_tick(cpu, &pins, i & 1);
+        CHECK(0 != (pins.ctrl & Z80_BUSAK), "BUSAK dropped while BUSRQ was still held");
+    }
+    CHECK(held_pc == z80_get(cpu, Z80_REG_PC), "the CPU advanced while the bus was released");
+
+    /* give it back, and the instruction must finish correctly */
+    pins.ctrl &= ~(uint32_t)Z80_BUSRQ;
+    for (int i = 0; i < 40; ++i)
+    {
+        (void)z80_tick(cpu, &pins, i & 1);
+        if ((pins.ctrl & Z80_MREQ) && (pins.ctrl & Z80_RD))
+        {
+            pins.D = (pins.A < sizeof program) ? program[pins.A] : 0x00;
+        }
+    }
+
+    CHECK(0 == (pins.ctrl & Z80_BUSAK), "BUSAK is still asserted after BUSRQ was released");
+    CHECK(0x1234 == z80_get(cpu, Z80_REG_HL), "the interrupted instruction gave HL=%04X, should be 1234",
+          z80_get(cpu, Z80_REG_HL));
+
+    z80_free(cpu);
+}
+
 int main(void)
 {
     test_stalled_clock_does_not_advance();
@@ -476,6 +545,7 @@ int main(void)
     test_refresh_counts_fetches();
     test_halt_holds_pc_and_asserts_the_pin();
     test_nothing_is_unimplemented();
+    test_bus_request_releases_and_resumes();
     test_load_immediate();
     test_load_register_to_register();
     test_load_from_memory();

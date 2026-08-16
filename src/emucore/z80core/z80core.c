@@ -39,7 +39,7 @@
 
 /** Snapshot format, so a stale file is refused rather than misread. */
 #define Z80_SNAPSHOT_MAGIC 0x5A383043u /* "Z80C" */
-#define Z80_SNAPSHOT_VERSION 4u
+#define Z80_SNAPSHOT_VERSION 5u
 
 /** Outputs the core drives; the rest of ctrl belongs to the host. */
 #define Z80_OUTPUT_PINS (Z80_M1 | Z80_MREQ | Z80_IORQ | Z80_RD | Z80_WR | Z80_RFSH | Z80_HALT | Z80_BUSAK)
@@ -101,6 +101,10 @@ struct z80_t
     uint16_t bus_addr;   /**< address the current read or write uses */
     uint8_t bus_data;    /**< byte read, or byte to write */
     z80_pair tmp;        /**< 16-bit scratch, for operands WZ must not see */
+
+    /* bus arbitration */
+    bool bus_request_latched; /**< BUSRQ seen at this cycle's sampling edge */
+    bool bus_released;        /**< the host has the buses; BUSAK is asserted */
 
     uint64_t edges;
     uint64_t unimplemented;
@@ -2818,6 +2822,23 @@ static uint32_t advance(z80_t *cpu, z80_pins_t *pins)
     const uint8_t data_before = pins->D;
     const uint32_t ctrl_before = pins->ctrl;
 
+    /*
+     * While the host holds the bus the CPU does nothing at all: the cursor
+     * stays where it is, and picks up on the same step when BUSRQ is released.
+     * Refresh stops with everything else, which on a machine with DRAM is the
+     * host's problem to bound rather than a detail.
+     */
+    if (cpu->bus_released)
+    {
+        ++cpu->edges;
+        if (0u == (pins->ctrl & Z80_BUSRQ))
+        {
+            cpu->bus_released = false;
+            pins->ctrl &= ~(uint32_t)Z80_BUSAK;
+        }
+        return (pins->ctrl ^ ctrl_before) & Z80_OUTPUT_PINS;
+    }
+
     const uint8_t executed = cpu->step;
     cpu->seq->steps[executed](cpu, pins);
     ++cpu->edges;
@@ -2830,6 +2851,16 @@ static uint32_t advance(z80_t *cpu, z80_pins_t *pins)
     {
         --cpu->step;
         return (pins->ctrl ^ ctrl_before) & Z80_OUTPUT_PINS;
+    }
+
+    /*
+     * BUSRQ is sampled on the rising edge of a machine cycle's last T-state,
+     * so a request is granted between machine cycles rather than between
+     * instructions - a host can take the bus in the middle of an LDIR.
+     */
+    if (cpu->seq->count >= 2u && executed == (uint8_t)(cpu->seq->count - 2u) && (pins->ctrl & Z80_BUSRQ))
+    {
+        cpu->bus_request_latched = true;
     }
 
     ++cpu->step;
@@ -2884,6 +2915,20 @@ static uint32_t advance(z80_t *cpu, z80_pins_t *pins)
             cpu->instr = NULL;
             cpu->seq = &m1_fetch_seq;
         }
+    }
+
+    /*
+     * Grant the bus now the cycle has finished. Everything the CPU drives is
+     * let go together; the host is told by BUSAK, which is the only thing this
+     * interface can say - a pin struct owned by the caller has no way to
+     * express high impedance, so BUSAK asserted means "these are not mine".
+     */
+    if (cpu->bus_request_latched && 0u == cpu->step)
+    {
+        cpu->bus_request_latched = false;
+        cpu->bus_released = true;
+        pins->ctrl &= ~(uint32_t)(Z80_M1 | Z80_MREQ | Z80_IORQ | Z80_RD | Z80_WR | Z80_RFSH);
+        pins->ctrl |= Z80_BUSAK;
     }
 
     uint32_t changed = (pins->ctrl ^ ctrl_before) & Z80_OUTPUT_PINS;
@@ -3098,6 +3143,7 @@ typedef struct
     uint8_t opcode;
     uint8_t prefix;
     uint8_t index;
+    uint8_t bus_released;
     uint8_t clk;
     uint16_t bus_addr;
     uint8_t bus_data;
@@ -3149,6 +3195,7 @@ size_t z80_save(const z80_t *cpu, void *buffer, size_t size)
     snapshot.opcode = cpu->opcode;
     snapshot.prefix = cpu->prefix;
     snapshot.index = cpu->index;
+    snapshot.bus_released = cpu->bus_released ? 1u : 0u;
     snapshot.clk = cpu->clk;
     snapshot.bus_addr = cpu->bus_addr;
     snapshot.bus_data = cpu->bus_data;
@@ -3197,6 +3244,7 @@ bool z80_load(z80_t *cpu, const void *buffer, size_t size)
     cpu->opcode = snapshot.opcode;
     cpu->prefix = snapshot.prefix;
     cpu->index = snapshot.index;
+    cpu->bus_released = 0 != snapshot.bus_released;
     cpu->clk = snapshot.clk;
     cpu->edges = snapshot.edges;
     cpu->unimplemented = snapshot.unimplemented;
