@@ -85,6 +85,6 @@ jobs:
         run: |
           # The parser and scanner are generated into the build tree and
           # uthash.h is vendored; see docs/CODE-STYLE.md for what is in scope.
-          files=$(git ls-files '*.c' '*.cc' '*.h' '*.hpp' | grep -v 'uthash.h')
+          files=$(git ls-files '*.c' '*.cc' '*.cpp' '*.h' '*.hpp' | grep -v 'uthash.h')
           echo "$files"
           clang-format --dry-run --Werror $files

@@ -61,10 +61,21 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
                                 PROPERTIES COMPILE_OPTIONS "-Wno-error")
 endif()
 
-# The emulator core is not built yet; enable once src/emucore grows up.
-# add_executable(zemu src/emucore/cpu.cc src/emucore/exec.cc ...)
-
+# Before add_subdirectory: tests registered in a subdirectory are only picked
+# up if testing was enabled in the top level first.
 enable_testing()
+
+# The Z80 CPU core: see docs/CPU-CORE-SPEC.md. Phase 0 is a walking skeleton -
+# the engine and the interface are real, the instruction set is not there yet.
+add_subdirectory(src/emucore/z80core)
+
+# z80mon: an ImGui window onto the core - pins, clock control and a waveform.
+# Off by default because it downloads Dear ImGui at configure time.
+option(BUILD_Z80MON "Build the ImGui monitor for the CPU core" OFF)
+if(BUILD_Z80MON)
+    enable_language(CXX)
+    add_subdirectory(tools/z80mon)
+endif()
 
 # monitor48k.asm is a listing of the real 16K ZX Spectrum ROM, so the assembled
 # image must match monitor48k.rom byte for byte. This is the strongest

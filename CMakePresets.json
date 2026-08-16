@@ -1,0 +1,80 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++"
+      }
+    },
+    {
+      "name": "default",
+      "inherits": "base",
+      "displayName": "Release",
+      "description": "zasm and the CPU core, optimised. The everyday build.",
+      "binaryDir": "${sourceDir}/build/default",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "debug",
+      "inherits": "base",
+      "displayName": "Debug",
+      "description": "Same targets with symbols and no optimisation.",
+      "binaryDir": "${sourceDir}/build/debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "tools",
+      "inherits": "base",
+      "displayName": "Release plus z80mon",
+      "description": "Adds the ImGui monitor. Fetches Dear ImGui, so this one needs the network once.",
+      "binaryDir": "${sourceDir}/build/tools",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "BUILD_Z80MON": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "default",
+      "configurePreset": "default"
+    },
+    {
+      "name": "debug",
+      "configurePreset": "debug"
+    },
+    {
+      "name": "tools",
+      "configurePreset": "tools"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "default",
+      "configurePreset": "default",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "debug",
+      "configurePreset": "debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}
