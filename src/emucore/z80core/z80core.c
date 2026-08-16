@@ -39,7 +39,7 @@
 
 /** Snapshot format, so a stale file is refused rather than misread. */
 #define Z80_SNAPSHOT_MAGIC 0x5A383043u /* "Z80C" */
-#define Z80_SNAPSHOT_VERSION 5u
+#define Z80_SNAPSHOT_VERSION 6u
 
 /** Outputs the core drives; the rest of ctrl belongs to the host. */
 #define Z80_OUTPUT_PINS (Z80_M1 | Z80_MREQ | Z80_IORQ | Z80_RD | Z80_WR | Z80_RFSH | Z80_HALT | Z80_BUSAK)
@@ -101,6 +101,12 @@ struct z80_t
     uint16_t bus_addr;   /**< address the current read or write uses */
     uint8_t bus_data;    /**< byte read, or byte to write */
     z80_pair tmp;        /**< 16-bit scratch, for operands WZ must not see */
+
+    /* interrupts */
+    bool nmi_previous;  /**< the level NMI was at last edge, for edge detection */
+    bool nmi_latched;   /**< an NMI edge is pending acceptance */
+    bool int_inhibit;   /**< EI ran last: do not accept before the next boundary */
+    uint8_t reset_held; /**< T-states RESET has been asserted for */
 
     /* bus arbitration */
     bool bus_request_latched; /**< BUSRQ seen at this cycle's sampling edge */
@@ -390,6 +396,84 @@ static const z80_seq idle2_seq = {idle_steps, 4u, Z80_NO_WAIT};
 static const z80_seq idle4_seq = {idle_steps, 8u, Z80_NO_WAIT};
 static const z80_seq idle5_seq = {idle_steps, 10u, Z80_NO_WAIT};
 static const z80_seq idle7_seq = {idle_steps, 14u, Z80_NO_WAIT};
+
+/*
+ * The two acknowledge cycles.
+ *
+ * An interrupt acknowledge is seven T-states: an M1 with IORQ alongside it -
+ * the one combination no other cycle uses - and two automatic wait states so a
+ * peripheral has time to put a vector on the bus. Seven is what makes the
+ * published totals work: mode 1 is 7+3+3 = 13, mode 2 is 7+3+3+3+3 = 19.
+ *
+ * An NMI acknowledge is five, with no IORQ. It performs an ordinary fetch and
+ * throws the byte away, and PC does not move - the vector is fixed.
+ */
+
+static void step_int_ack_start(z80_t *cpu, z80_pins_t *pins)
+{
+    pins->A = cpu->pc.word;
+    pins->ctrl |= Z80_M1;
+}
+
+static void step_int_ack_iorq(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)cpu;
+    pins->ctrl |= Z80_IORQ;
+}
+
+/** Take the vector, end the acknowledge, and refresh as any M1 does. */
+static void step_int_ack_sample(z80_t *cpu, z80_pins_t *pins)
+{
+    cpu->bus_data = pins->D;
+    pins->ctrl &= ~(uint32_t)(Z80_M1 | Z80_IORQ);
+
+    pins->A = (uint16_t)(((uint16_t)cpu->i << 8) | cpu->r);
+    cpu->r = (uint8_t)((cpu->r & 0x80u) | ((cpu->r + 1u) & 0x7Fu));
+    pins->ctrl |= Z80_RFSH;
+}
+
+/** The NMI fetch discards its byte and leaves PC alone. */
+static void step_nmi_ack_discard(z80_t *cpu, z80_pins_t *pins)
+{
+    pins->ctrl &= ~(uint32_t)(Z80_M1 | Z80_MREQ | Z80_RD);
+
+    pins->A = (uint16_t)(((uint16_t)cpu->i << 8) | cpu->r);
+    cpu->r = (uint8_t)((cpu->r & 0x80u) | ((cpu->r + 1u) & 0x7Fu));
+    pins->ctrl |= Z80_RFSH;
+}
+
+static const z80_step_fn int_ack_steps[] = {
+    step_int_ack_start,  /* T1 rise: address out, M1 asserted       */
+    step_nothing,        /* T1 fall                                 */
+    step_int_ack_iorq,   /* T2 rise: IORQ alongside M1              */
+    step_nothing,        /* T2 fall: WAIT sampled here              */
+    step_nothing,        /* TW rise: the first automatic wait       */
+    step_nothing,        /* TW fall                                 */
+    step_nothing,        /* TW rise: the second                     */
+    step_nothing,        /* TW fall                                 */
+    step_int_ack_sample, /* T3 rise: vector taken, refresh begins   */
+    step_m1_t3_fall,     /* T3 fall: MREQ for the refresh           */
+    step_nothing,        /* T4 rise                                 */
+    step_m1_t4_fall,     /* T4 fall: MREQ and RFSH released         */
+    step_nothing,        /* T5 rise                                 */
+    step_nothing         /* T5 fall                                 */
+};
+
+static const z80_step_fn nmi_ack_steps[] = {
+    step_m1_t1_rise,      /* T1 rise: address out, M1 asserted    */
+    step_m1_t1_fall,      /* T1 fall: MREQ, RD asserted           */
+    step_nothing,         /* T2 rise                              */
+    step_nothing,         /* T2 fall: WAIT sampled here           */
+    step_nmi_ack_discard, /* T3 rise: byte discarded, PC unmoved  */
+    step_m1_t3_fall,      /* T3 fall: MREQ for the refresh        */
+    step_nothing,         /* T4 rise                              */
+    step_m1_t4_fall,      /* T4 fall: MREQ and RFSH released      */
+    step_nothing,         /* T5 rise                              */
+    step_nothing          /* T5 fall                              */
+};
+
+static const z80_seq int_ack_seq = {int_ack_steps, 14u, 3u};
+static const z80_seq nmi_ack_seq = {nmi_ack_steps, 10u, 3u};
 
 /* ---------------------------------------------------------------- */
 /* The ALU and its flags                                             */
@@ -1471,10 +1555,10 @@ static void execute_di(z80_t *cpu, z80_pins_t *pins)
 static void execute_ei(z80_t *cpu, z80_pins_t *pins)
 {
     (void)pins;
-    /* The one-instruction delay before interrupts are actually accepted is
-       Phase 5's business, along with everything else that accepts them. */
     cpu->iff1 = true;
     cpu->iff2 = true;
+    /* and not accepted until the instruction after this one has run */
+    cpu->int_inhibit = true;
 }
 
 /* jumps, calls and returns */
@@ -1710,28 +1794,40 @@ static void execute_ld_r_from_a(z80_t *cpu, z80_pins_t *pins)
  * only way to read it. On the real part an interrupt arriving during the
  * instruction clears it - a race Phase 5 has to model.
  */
-static void load_a_from_control_register(z80_t *cpu, uint8_t value)
+static void load_a_from_control_register(z80_t *cpu, z80_pins_t *pins, uint8_t value)
 {
     uint8_t flags = (uint8_t)(cpu->af.byte.low & Z80_FLAG_C);
     flags |= flags_sz_xy(value);
-    if (cpu->iff2)
+
+    /*
+     * The race. If an interrupt is accepted while this instruction is running,
+     * the flip-flop is cleared before P/V samples it, and the program reads
+     * back "interrupts were off" when they were on.
+     *
+     * That is a real fault on real hardware, not a curiosity: code that uses
+     * LD A,I to save the interrupt state around a critical section restores
+     * the wrong one, and the bug lands somewhere else entirely.
+     */
+    const bool interrupt_imminent =
+        !cpu->int_inhibit && (cpu->nmi_latched || (cpu->iff1 && 0u != (pins->ctrl & Z80_INT)));
+
+    if (cpu->iff2 && !interrupt_imminent)
     {
         flags |= Z80_FLAG_PV;
     }
+
     cpu->af.byte.high = value;
     cpu->af.byte.low = flags;
 }
 
 static void execute_ld_a_from_i(z80_t *cpu, z80_pins_t *pins)
 {
-    (void)pins;
-    load_a_from_control_register(cpu, cpu->i);
+    load_a_from_control_register(cpu, pins, cpu->i);
 }
 
 static void execute_ld_a_from_r(z80_t *cpu, z80_pins_t *pins)
 {
-    (void)pins;
-    load_a_from_control_register(cpu, cpu->r);
+    load_a_from_control_register(cpu, pins, cpu->r);
 }
 
 static void exit_return_from_interrupt(z80_t *cpu, z80_pins_t *pins)
@@ -2411,6 +2507,65 @@ static const z80_instr instr_ret_cc = {{{&idle1_seq, NULL, exit_return_condition
                                        3u,
                                        NULL};
 
+/* --- interrupts --- */
+
+/**
+ * Where an accepted interrupt goes. Mode 1 always vectors to 0038. Mode 0
+ * executes whatever the device put on the bus, which in every system that uses
+ * it is an RST - so the RST is honoured and nothing else is, which is a real
+ * limitation and a documented one.
+ */
+static void exit_interrupt_vector(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    const uint16_t target = (0u == cpu->im) ? (uint16_t)(cpu->tmp.byte.low & 0x38u) : 0x0038u;
+    cpu->pc.word = target;
+    cpu->wz.word = target;
+}
+
+static void exit_nmi_vector(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    cpu->pc.word = 0x0066u;
+    cpu->wz.word = 0x0066u;
+}
+
+/** Mode 2 forms a table address from I and the byte the device supplied. */
+static void at_interrupt_table(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    cpu->tmp.byte.high = cpu->i;
+    cpu->bus_addr = cpu->tmp.word;
+}
+
+static void at_interrupt_table_high(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    cpu->bus_addr = (uint16_t)(cpu->tmp.word + 1u);
+}
+
+static const z80_instr instr_nmi = {{{&nmi_ack_seq, NULL, NULL},
+                                     {&mem_write_seq, enter_push_pc_high, NULL},
+                                     {&mem_write_seq, enter_push_pc_low, exit_nmi_vector}},
+                                    3u,
+                                    NULL};
+
+/* modes 0 and 1: acknowledge, push, vector. Thirteen T-states. */
+static const z80_instr instr_interrupt = {{{&int_ack_seq, NULL, exit_to_tmp_low},
+                                           {&mem_write_seq, enter_push_pc_high, NULL},
+                                           {&mem_write_seq, enter_push_pc_low, exit_interrupt_vector}},
+                                          3u,
+                                          NULL};
+
+/* mode 2: and then two more reads to fetch the handler's address. Nineteen. */
+static const z80_instr instr_interrupt_mode2 = {{{&int_ack_seq, NULL, exit_to_tmp_low},
+                                                 {&mem_write_seq, enter_push_pc_high, NULL},
+                                                 {&mem_write_seq, enter_push_pc_low, NULL},
+                                                 {&mem_read_seq, at_interrupt_table, exit_to_wz_low},
+                                                 {&mem_read_seq, at_interrupt_table_high, exit_return_to_wz_high}},
+                                                5u,
+                                                NULL};
+
 static const z80_instr instr_rst = {{{&idle1_seq, NULL, NULL},
                                      {&mem_write_seq, enter_rst_target, NULL},
                                      {&mem_write_seq, enter_push_pc_low, exit_take_wz}},
@@ -2816,6 +2971,104 @@ void z80_reset(z80_t *cpu)
  * each step announcing itself: a step that writes the value already there has
  * changed nothing, and the host should not be told otherwise.
  */
+/**
+ * Leaving HALT. PC sits *on* the HALT while halted, so the return address the
+ * acknowledge is about to push has to be the instruction after it. Getting
+ * this wrong is invisible until something returns.
+ */
+static void wake_from_halt(z80_t *cpu, z80_pins_t *pins)
+{
+    if (cpu->halted)
+    {
+        cpu->halted = false;
+        cpu->pc.word = (uint16_t)(cpu->pc.word + 1u);
+        pins->ctrl &= ~(uint32_t)Z80_HALT;
+    }
+}
+
+/**
+ * @brief Decide whether an interrupt starts here, at an instruction boundary.
+ *
+ * NMI wins over INT and ignores IFF1 - that is what makes it non-maskable. It
+ * copies IFF1 into IFF2 on the way so RETN can put it back.
+ *
+ * Nothing is accepted while @c int_inhibit is set, which is how EI's one
+ * instruction of grace works: EI enables interrupts and sets the inhibit, so
+ * the instruction after it runs first. Without that, EI / RET could be
+ * interrupted between the two and the return address would be lost - which is
+ * the entire reason the delay exists on the real part.
+ *
+ * @return The sequence to run instead of a fetch, or NULL to fetch normally.
+ */
+static const z80_instr *accept_interrupt(z80_t *cpu, z80_pins_t *pins)
+{
+    if (cpu->int_inhibit)
+    {
+        return NULL;
+    }
+
+    if (cpu->nmi_latched)
+    {
+        cpu->nmi_latched = false;
+        cpu->iff2 = cpu->iff1;
+        cpu->iff1 = false;
+        wake_from_halt(cpu, pins);
+        return &instr_nmi;
+    }
+
+    if (cpu->iff1 && (pins->ctrl & Z80_INT))
+    {
+        cpu->iff1 = false;
+        cpu->iff2 = false;
+        wake_from_halt(cpu, pins);
+        return (2u == cpu->im) ? &instr_interrupt_mode2 : &instr_interrupt;
+    }
+
+    return NULL;
+}
+
+/** Begin an interrupt sequence in place of the fetch that would have run. */
+static void begin_interrupt(z80_t *cpu, z80_pins_t *pins, const z80_instr *sequence)
+{
+    cpu->instr = sequence;
+    cpu->cycle = 0;
+    cpu->cycle_limit = sequence->cycle_count;
+    cpu->step = 0;
+    cpu->seq = sequence->cycles[0].seq;
+    if (sequence->cycles[0].enter)
+    {
+        sequence->cycles[0].enter(cpu, pins);
+    }
+}
+
+/**
+ * RESET has to be held for three clocks to take, which is why a glitch on the
+ * pin does not restart the machine. The architectural state goes back to what
+ * the part powers up with; the clock and the edge counter are the host's and
+ * are left alone.
+ */
+static void apply_reset(z80_t *cpu, z80_pins_t *pins)
+{
+    cpu->pc.word = 0;
+    cpu->i = 0;
+    cpu->r = 0;
+    cpu->im = 0;
+    cpu->iff1 = false;
+    cpu->iff2 = false;
+    cpu->halted = false;
+    cpu->nmi_latched = false;
+    cpu->int_inhibit = false;
+    cpu->prefix = 0;
+    cpu->index = 0;
+    cpu->instr = NULL;
+    cpu->cycle = 0;
+    cpu->cycle_limit = 0;
+    cpu->step = 0;
+    cpu->seq = &m1_fetch_seq;
+
+    pins->ctrl &= ~(uint32_t)Z80_OUTPUT_PINS;
+}
+
 static uint32_t advance(z80_t *cpu, z80_pins_t *pins)
 {
     const uint16_t address_before = pins->A;
@@ -2828,6 +3081,43 @@ static uint32_t advance(z80_t *cpu, z80_pins_t *pins)
      * Refresh stops with everything else, which on a machine with DRAM is the
      * host's problem to bound rather than a detail.
      */
+    /*
+     * The asynchronous inputs, behind a single test. Every edge pays for this
+     * check, and almost every edge has none of them asserted, so the work goes
+     * inside the branch rather than in front of it - doing it the other way
+     * cost the core a third of its throughput.
+     */
+    if (pins->ctrl & (Z80_NMI | Z80_RESET))
+    {
+        /* NMI is edge triggered, not level: latch the transition, or a pin
+           held asserted for a millisecond becomes thousands of interrupts. */
+        if (!cpu->nmi_previous && (pins->ctrl & Z80_NMI))
+        {
+            cpu->nmi_latched = true;
+        }
+        cpu->nmi_previous = 0u != (pins->ctrl & Z80_NMI);
+
+        if (pins->ctrl & Z80_RESET)
+        {
+            ++cpu->edges;
+            if (cpu->reset_held < 255u)
+            {
+                ++cpu->reset_held;
+            }
+            if (cpu->reset_held >= 6u) /* three T-states */
+            {
+                apply_reset(cpu, pins);
+            }
+            return (pins->ctrl ^ ctrl_before) & Z80_OUTPUT_PINS;
+        }
+        cpu->reset_held = 0;
+    }
+    else
+    {
+        cpu->nmi_previous = false;
+        cpu->reset_held = 0;
+    }
+
     if (cpu->bus_released)
     {
         ++cpu->edges;
@@ -2858,7 +3148,7 @@ static uint32_t advance(z80_t *cpu, z80_pins_t *pins)
      * so a request is granted between machine cycles rather than between
      * instructions - a host can take the bus in the middle of an LDIR.
      */
-    if (cpu->seq->count >= 2u && executed == (uint8_t)(cpu->seq->count - 2u) && (pins->ctrl & Z80_BUSRQ))
+    if ((pins->ctrl & Z80_BUSRQ) && cpu->seq->count >= 2u && executed == (uint8_t)(cpu->seq->count - 2u))
     {
         cpu->bus_request_latched = true;
     }
@@ -2907,13 +3197,30 @@ static uint32_t advance(z80_t *cpu, z80_pins_t *pins)
             }
             /* A prefix has just set these; anything else has finished with
                them, and the next fetch starts from the ordinary table. */
-            if (cpu->instr != &instr_prefix)
+            const bool was_prefix = (cpu->instr == &instr_prefix);
+            if (!was_prefix)
             {
                 cpu->prefix = 0;
                 cpu->index = 0;
             }
             cpu->instr = NULL;
             cpu->seq = &m1_fetch_seq;
+
+            /*
+             * This is the instruction boundary, and the only place an
+             * interrupt can be accepted. A prefix is not one: DD and its
+             * opcode are a single instruction, and an interrupt taken between
+             * them would resume at a byte that means something else.
+             */
+            if (!was_prefix)
+            {
+                const z80_instr *interrupt = accept_interrupt(cpu, pins);
+                cpu->int_inhibit = false;
+                if (interrupt)
+                {
+                    begin_interrupt(cpu, pins, interrupt);
+                }
+            }
         }
     }
 
@@ -3144,6 +3451,8 @@ typedef struct
     uint8_t prefix;
     uint8_t index;
     uint8_t bus_released;
+    uint8_t nmi_latched;
+    uint8_t int_inhibit;
     uint8_t clk;
     uint16_t bus_addr;
     uint8_t bus_data;
@@ -3196,6 +3505,8 @@ size_t z80_save(const z80_t *cpu, void *buffer, size_t size)
     snapshot.prefix = cpu->prefix;
     snapshot.index = cpu->index;
     snapshot.bus_released = cpu->bus_released ? 1u : 0u;
+    snapshot.nmi_latched = cpu->nmi_latched ? 1u : 0u;
+    snapshot.int_inhibit = cpu->int_inhibit ? 1u : 0u;
     snapshot.clk = cpu->clk;
     snapshot.bus_addr = cpu->bus_addr;
     snapshot.bus_data = cpu->bus_data;
@@ -3245,6 +3556,8 @@ bool z80_load(z80_t *cpu, const void *buffer, size_t size)
     cpu->prefix = snapshot.prefix;
     cpu->index = snapshot.index;
     cpu->bus_released = 0 != snapshot.bus_released;
+    cpu->nmi_latched = 0 != snapshot.nmi_latched;
+    cpu->int_inhibit = 0 != snapshot.int_inhibit;
     cpu->clk = snapshot.clk;
     cpu->edges = snapshot.edges;
     cpu->unimplemented = snapshot.unimplemented;

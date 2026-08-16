@@ -535,6 +535,335 @@ static void test_bus_request_releases_and_resumes(void)
     z80_free(cpu);
 }
 
+/* ---------------------------------------------------------------- */
+/* Interrupts                                                        */
+/* ---------------------------------------------------------------- */
+
+/*
+ * Nothing else checks any of this. FUSE has no way to assert a pin and
+ * SingleStepTests has no interrupt state in its cases, so these tests are the
+ * only thing standing between the interrupt logic and wishful thinking - which
+ * is what issue #57, the hardware rig, exists to fix.
+ */
+
+static uint8_t interrupt_memory[0x10000];
+static int interrupt_level;
+
+static void interrupt_edge(z80_t *cpu, z80_pins_t *pins)
+{
+    interrupt_level ^= 1;
+    (void)z80_tick(cpu, pins, interrupt_level);
+
+    if (pins->ctrl & Z80_MREQ)
+    {
+        if (pins->ctrl & Z80_RD)
+        {
+            pins->D = interrupt_memory[pins->A];
+        }
+        else if (pins->ctrl & Z80_WR)
+        {
+            interrupt_memory[pins->A] = pins->D;
+        }
+    }
+    if ((pins->ctrl & Z80_IORQ) && (pins->ctrl & Z80_M1))
+    {
+        pins->D = 0xFF; /* what an undriven bus gives during an acknowledge */
+    }
+}
+
+/** Run one instruction, or one interrupt sequence, and return its T-states. */
+static int interrupt_step(z80_t *cpu, z80_pins_t *pins)
+{
+    int edges = 1;
+
+    if (0 == (pins->ctrl & Z80_M1))
+    {
+        interrupt_edge(cpu, pins);
+    }
+    for (int i = 0; i < 200; ++i)
+    {
+        const bool was_m1 = 0 != (pins->ctrl & Z80_M1);
+        interrupt_edge(cpu, pins);
+        ++edges;
+        if (!was_m1 && (pins->ctrl & Z80_M1))
+        {
+            return (edges - 1) / 2;
+        }
+    }
+    return -1;
+}
+
+static z80_t *interrupt_boot(const uint8_t *program, size_t size)
+{
+    memset(interrupt_memory, 0, sizeof interrupt_memory);
+    memcpy(interrupt_memory, program, size);
+    interrupt_level = 0;
+
+    z80_t *cpu = z80_new();
+    z80_set(cpu, Z80_REG_SP, 0x8000);
+    return cpu;
+}
+
+/** NMI cannot be masked, vectors to 0066, and costs eleven T-states. */
+static void test_nmi(void)
+{
+    static const uint8_t program[] = {0x00, 0x00, 0x00, 0x00}; /* NOPs */
+
+    z80_t *cpu = interrupt_boot(program, sizeof program);
+    z80_pins_t pins = {0};
+
+    (void)interrupt_step(cpu, &pins); /* one NOP, so PC is 1 */
+
+    /* Asserting the pin does not stop the instruction already running:
+       acceptance happens at a boundary, so that one finishes first. */
+    pins.ctrl |= Z80_NMI;
+    const int in_flight = interrupt_step(cpu, &pins);
+    pins.ctrl &= ~(uint32_t)Z80_NMI;
+    CHECK(4 == in_flight, "the instruction in flight should have finished normally, took %d", in_flight);
+
+    const int tstates = interrupt_step(cpu, &pins);
+
+    z80_state_t state;
+    z80_state(cpu, &state);
+
+    CHECK(11 == tstates, "an NMI should take 11 T-states, took %d", tstates);
+    CHECK(0x0066 == state.pc, "NMI should vector to 0066, went to %04X", state.pc);
+    CHECK(0x7FFE == state.sp, "NMI should have pushed a return address, SP is %04X", state.sp);
+    CHECK(0x02 == interrupt_memory[0x7FFE] && 0x00 == interrupt_memory[0x7FFF],
+          "the return address should be 0002, is %02X%02X", interrupt_memory[0x7FFF], interrupt_memory[0x7FFE]);
+    CHECK(!state.iff1, "NMI should have cleared IFF1");
+
+    z80_free(cpu);
+}
+
+/** NMI is edge triggered: holding the pin must not interrupt repeatedly. */
+static void test_nmi_is_edge_triggered(void)
+{
+    static const uint8_t program[] = {0x00, 0x00, 0x00, 0x00};
+
+    z80_t *cpu = interrupt_boot(program, sizeof program);
+    z80_pins_t pins = {0};
+    interrupt_memory[0x0066] = 0x00; /* the handler is a NOP */
+
+    (void)interrupt_step(cpu, &pins);
+    pins.ctrl |= Z80_NMI; /* and never released */
+
+    int taken = 0;
+    for (int i = 0; i < 6; ++i)
+    {
+        (void)interrupt_step(cpu, &pins);
+        if (0x0067 == z80_get(cpu, Z80_REG_PC) || 0x0066 == z80_get(cpu, Z80_REG_PC))
+        {
+            ++taken;
+        }
+    }
+
+    CHECK(taken <= 2, "a held NMI was taken repeatedly (%d times)", taken);
+    CHECK(0x7FFE == z80_get(cpu, Z80_REG_SP), "a held NMI pushed more than once, SP is %04X", z80_get(cpu, Z80_REG_SP));
+
+    z80_free(cpu);
+}
+
+/** Mode 1 vectors to 0038 and costs thirteen T-states. */
+static void test_interrupt_mode_1(void)
+{
+    static const uint8_t program[] = {0xFB, 0x00, 0x00, 0x00}; /* EI ; NOP... */
+
+    z80_t *cpu = interrupt_boot(program, sizeof program);
+    z80_pins_t pins = {0};
+
+    (void)interrupt_step(cpu, &pins); /* EI */
+    pins.ctrl |= Z80_INT;
+
+    /* the instruction after EI must run first: that is the delay */
+    const int after_ei = interrupt_step(cpu, &pins);
+    CHECK(4 == after_ei, "the instruction after EI should be an ordinary NOP, took %d", after_ei);
+    CHECK(0x0002 == z80_get(cpu, Z80_REG_PC), "an interrupt was taken during EI's grace instruction");
+
+    const int tstates = interrupt_step(cpu, &pins);
+    CHECK(13 == tstates, "mode 1 should take 13 T-states, took %d", tstates);
+    CHECK(0x0038 == z80_get(cpu, Z80_REG_PC), "mode 1 should vector to 0038, went to %04X", z80_get(cpu, Z80_REG_PC));
+    CHECK(0x02 == interrupt_memory[0x7FFE], "the return address should be 0002, low byte is %02X",
+          interrupt_memory[0x7FFE]);
+
+    z80_state_t state;
+    z80_state(cpu, &state);
+    CHECK(!state.iff1 && !state.iff2, "accepting an interrupt must clear both flip-flops");
+
+    z80_free(cpu);
+}
+
+/** With interrupts disabled, INT is ignored however long it is held. */
+static void test_interrupt_is_masked_by_di(void)
+{
+    static const uint8_t program[] = {0xF3, 0x00, 0x00, 0x00}; /* DI ; NOP... */
+
+    z80_t *cpu = interrupt_boot(program, sizeof program);
+    z80_pins_t pins = {0};
+
+    (void)interrupt_step(cpu, &pins); /* DI */
+    pins.ctrl |= Z80_INT;
+
+    for (int i = 0; i < 4; ++i)
+    {
+        const int tstates = interrupt_step(cpu, &pins);
+        CHECK(4 == tstates, "a masked INT disturbed the instruction stream (%d T-states)", tstates);
+    }
+    CHECK(0x8000 == z80_get(cpu, Z80_REG_SP), "a masked INT pushed something, SP is %04X", z80_get(cpu, Z80_REG_SP));
+
+    z80_free(cpu);
+}
+
+/** Mode 2 reads the handler's address from a table I points at: nineteen. */
+static void test_interrupt_mode_2(void)
+{
+    static const uint8_t program[] = {
+        0xED, 0x5E, /* IM 2 */
+        0xFB,       /* EI   */
+        0x00, 0x00  /* NOP  */
+    };
+
+    z80_t *cpu = interrupt_boot(program, sizeof program);
+    z80_pins_t pins = {0};
+
+    /* the device supplies FF, so the entry is at I:FF */
+    z80_set(cpu, Z80_REG_IR, 0x9000);
+    interrupt_memory[0x90FF] = 0x34;
+    interrupt_memory[0x9100] = 0x12;
+
+    (void)interrupt_step(cpu, &pins); /* ED prefix */
+    (void)interrupt_step(cpu, &pins); /* IM 2      */
+    (void)interrupt_step(cpu, &pins); /* EI        */
+    pins.ctrl |= Z80_INT;
+    (void)interrupt_step(cpu, &pins); /* the grace instruction */
+
+    const int tstates = interrupt_step(cpu, &pins);
+
+    CHECK(19 == tstates, "mode 2 should take 19 T-states, took %d", tstates);
+    CHECK(0x1234 == z80_get(cpu, Z80_REG_PC), "mode 2 should have jumped to 1234, went to %04X",
+          z80_get(cpu, Z80_REG_PC));
+
+    z80_free(cpu);
+}
+
+/**
+ * An interrupt wakes a halted CPU, and the address it pushes must be the
+ * instruction *after* the HALT - not the HALT itself, which PC sits on.
+ */
+static void test_interrupt_wakes_halt(void)
+{
+    static const uint8_t program[] = {0xFB, 0x76, 0x00, 0x00}; /* EI ; HALT */
+
+    z80_t *cpu = interrupt_boot(program, sizeof program);
+    z80_pins_t pins = {0};
+
+    (void)interrupt_step(cpu, &pins); /* EI   */
+    (void)interrupt_step(cpu, &pins); /* HALT */
+
+    z80_state_t halted_state;
+    z80_state(cpu, &halted_state);
+    CHECK(halted_state.halted, "the CPU did not halt");
+    CHECK(0x0001 == halted_state.pc, "PC should sit on the HALT at 0001, is %04X", halted_state.pc);
+
+    pins.ctrl |= Z80_INT;
+    (void)interrupt_step(cpu, &pins); /* the halt fetch in flight finishes first */
+    (void)interrupt_step(cpu, &pins); /* then the interrupt is taken */
+
+    z80_state_t state;
+    z80_state(cpu, &state);
+
+    CHECK(!state.halted, "the interrupt did not wake the CPU");
+    CHECK(0 == (pins.ctrl & Z80_HALT), "the HALT pin is still asserted after waking");
+    CHECK(0x0038 == state.pc, "the handler should be at 0038, PC is %04X", state.pc);
+    CHECK(0x02 == interrupt_memory[0x7FFE], "the return address must be past the HALT, low byte is %02X",
+          interrupt_memory[0x7FFE]);
+
+    z80_free(cpu);
+}
+
+/** RESET must be held for three clocks, and then puts the machine back. */
+static void test_reset_pin(void)
+{
+    static const uint8_t program[] = {0x00, 0x00, 0x00, 0x00};
+
+    z80_t *cpu = interrupt_boot(program, sizeof program);
+    z80_pins_t pins = {0};
+
+    (void)interrupt_step(cpu, &pins);
+    (void)interrupt_step(cpu, &pins);
+    z80_set(cpu, Z80_REG_IR, 0x4455);
+    CHECK(0 != z80_get(cpu, Z80_REG_PC), "the CPU never ran");
+
+    /* a glitch shorter than three T-states must not take */
+    pins.ctrl |= Z80_RESET;
+    for (int i = 0; i < 4; ++i)
+    {
+        interrupt_edge(cpu, &pins);
+    }
+    pins.ctrl &= ~(uint32_t)Z80_RESET;
+    CHECK(0x4455 == z80_get(cpu, Z80_REG_IR), "a two-T-state RESET glitch reset the machine");
+
+    /* held properly, it does */
+    pins.ctrl |= Z80_RESET;
+    for (int i = 0; i < 10; ++i)
+    {
+        interrupt_edge(cpu, &pins);
+    }
+    pins.ctrl &= ~(uint32_t)Z80_RESET;
+
+    z80_state_t state;
+    z80_state(cpu, &state);
+    CHECK(0 == state.pc, "RESET should clear PC, it is %04X", state.pc);
+    CHECK(0 == state.i && 0 == state.r, "RESET should clear I and R, they are %02X %02X", state.i, state.r);
+    CHECK(0 == state.im, "RESET should select mode 0, it is %u", state.im);
+    CHECK(!state.iff1 && !state.iff2, "RESET should disable interrupts");
+
+    z80_free(cpu);
+}
+
+/**
+ * LD A,I reports IFF2 in P/V - and reports it clear if an interrupt is
+ * accepted while the instruction is running, even though interrupts were on.
+ * Code that saves the state around a critical section restores the wrong one.
+ */
+static void test_ld_a_i_interrupt_race(void)
+{
+    static const uint8_t program[] = {0xFB,       /* EI      */
+                                      0x00,       /* NOP     */
+                                      0xED, 0x57, /* LD A,I  */
+                                      0x00};
+
+    /* first without an interrupt: P/V must report that they are enabled */
+    z80_t *cpu = interrupt_boot(program, sizeof program);
+    z80_pins_t pins = {0};
+    z80_set(cpu, Z80_REG_IR, 0x2000);
+
+    (void)interrupt_step(cpu, &pins); /* EI  */
+    (void)interrupt_step(cpu, &pins); /* NOP */
+    (void)interrupt_step(cpu, &pins); /* ED  */
+    (void)interrupt_step(cpu, &pins); /* LD A,I */
+
+    CHECK(0 != (z80_get(cpu, Z80_REG_AF) & 0x04u), "P/V should report interrupts enabled");
+    z80_free(cpu);
+
+    /* now with INT held: the flip-flop is cleared out from under P/V */
+    cpu = interrupt_boot(program, sizeof program);
+    memset(&pins, 0, sizeof pins);
+    z80_set(cpu, Z80_REG_IR, 0x2000);
+
+    (void)interrupt_step(cpu, &pins); /* EI  */
+    (void)interrupt_step(cpu, &pins); /* NOP */
+    pins.ctrl |= Z80_INT;
+    (void)interrupt_step(cpu, &pins); /* ED  */
+    (void)interrupt_step(cpu, &pins); /* LD A,I, with the interrupt imminent */
+
+    CHECK(0 == (z80_get(cpu, Z80_REG_AF) & 0x04u), "P/V should have come out clear: the race was not modelled");
+    CHECK(0x20 == (z80_get(cpu, Z80_REG_AF) >> 8), "A should still have taken I, is %02X",
+          (unsigned)(z80_get(cpu, Z80_REG_AF) >> 8));
+
+    z80_free(cpu);
+}
+
 int main(void)
 {
     test_stalled_clock_does_not_advance();
@@ -546,6 +875,14 @@ int main(void)
     test_halt_holds_pc_and_asserts_the_pin();
     test_nothing_is_unimplemented();
     test_bus_request_releases_and_resumes();
+    test_nmi();
+    test_nmi_is_edge_triggered();
+    test_interrupt_mode_1();
+    test_interrupt_is_masked_by_di();
+    test_interrupt_mode_2();
+    test_interrupt_wakes_halt();
+    test_reset_pin();
+    test_ld_a_i_interrupt_race();
     test_load_immediate();
     test_load_register_to_register();
     test_load_from_memory();
