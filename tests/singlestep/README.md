@@ -62,10 +62,11 @@ Not compared:
   and expects PC to sit *on* the `HALT` so the CPU keeps re-fetching it, which
   is also what makes the bus correct. We follow FUSE here.
 
-## Open findings, not yet resolved
+## Resolved by this corpus
 
-- **`ed b0` (`LDIR`) and its family** disagree on the undocumented X and Y
-  flags. Ours derive from bits 3 and 1 of `A + byte`; roughly three quarters of
-  cases disagree, so the rule is wrong somewhere. Not yet investigated — see the
-  method used for `BIT n,(HL)`: test each candidate source against the corpus
-  and let the count decide rather than guessing.
+- **`BIT n,(HL)`** — X and Y come from the high half of WZ, 400/400.
+- **The refresh address** — formed from `R` before its increment, not after.
+- **Repeating block instructions** — while they repeat, X and Y come from the
+  high half of the address they resume at rather than from the byte that moved:
+  400/400 for `LDIR`, against 89 for the `A + byte` rule that applies to the
+  non-repeating forms.

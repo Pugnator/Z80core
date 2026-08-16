@@ -1857,6 +1857,22 @@ static void execute_ld_rp_from_memory(z80_t *cpu, z80_pins_t *pins)
  * copy does not lock the machine out for the duration.
  */
 
+/**
+ * A repeating block instruction takes X and Y from the high half of the
+ * address it is about to resume at - its own, since PC is wound back over the
+ * two prefix bytes to fetch it again.
+ *
+ * That is not a special case bolted on: A-Z80 shows X and Y are never derived
+ * from a result at all, but copied from bits 3 and 5 of whatever byte is on
+ * the internal data bus when the flags latch. During the rewind that byte is
+ * the program counter, not the one that moved.
+ */
+static void block_repeat_undocumented(z80_t *cpu)
+{
+    const uint8_t high = (uint8_t)((uint16_t)(cpu->pc.word - 2u) >> 8);
+    cpu->af.byte.low = (uint8_t)((cpu->af.byte.low & ~(uint8_t)Z80_FLAG_XY) | (high & Z80_FLAG_XY));
+}
+
 static int block_delta(const z80_t *cpu)
 {
     return (cpu->opcode & 0x08u) ? -1 : 1;
@@ -1902,6 +1918,10 @@ static void exit_block_transfer(z80_t *cpu, z80_pins_t *pins)
     {
         end_instruction_here(cpu);
     }
+    else
+    {
+        block_repeat_undocumented(cpu);
+    }
 }
 
 static void exit_block_compare(z80_t *cpu, z80_pins_t *pins)
@@ -1920,6 +1940,10 @@ static void exit_block_compare(z80_t *cpu, z80_pins_t *pins)
     {
         end_instruction_here(cpu);
     }
+    else
+    {
+        block_repeat_undocumented(cpu);
+    }
 }
 
 static void exit_block_in(z80_t *cpu, z80_pins_t *pins)
@@ -1936,6 +1960,10 @@ static void exit_block_in(z80_t *cpu, z80_pins_t *pins)
     if (!block_repeats(cpu) || 0u == cpu->bc.byte.high)
     {
         end_instruction_here(cpu);
+    }
+    else
+    {
+        block_repeat_undocumented(cpu);
     }
 }
 
@@ -1960,6 +1988,10 @@ static void exit_block_out(z80_t *cpu, z80_pins_t *pins)
     if (!block_repeats(cpu) || 0u == cpu->bc.byte.high)
     {
         end_instruction_here(cpu);
+    }
+    else
+    {
+        block_repeat_undocumented(cpu);
     }
 }
 
