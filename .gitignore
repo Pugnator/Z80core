@@ -57,3 +57,6 @@ Debug/
 docs/A-Z80-master/
 docs/Timings.csv
 docs/*.pdf
+
+# Dear ImGui window layout, written by z80mon at runtime
+imgui.ini

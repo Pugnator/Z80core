@@ -28,4 +28,8 @@ AllowShortCaseLabelsOnASingleLine: false
 
 IndentCaseLabels: false
 
+# An extern "C" block wraps a whole public header; indenting everything inside
+# it buys nothing and costs a level of margin on every declaration.
+IndentExternBlock: NoIndent
+
 SortIncludes: Never

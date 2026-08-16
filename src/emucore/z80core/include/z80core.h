@@ -22,6 +22,11 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 #if defined(_WIN32) && defined(Z80CORE_SHARED)
 #if defined(Z80CORE_BUILD)
 #define Z80_API __declspec(dllexport)
@@ -107,3 +112,7 @@ Z80_API uint64_t z80_run(z80_t *cpu, z80_pins_t *pins, uint64_t edges);
 
 /** Total edges advanced since construction or reset. */
 Z80_API uint64_t z80_edges(const z80_t *cpu);
+
+#ifdef __cplusplus
+}
+#endif

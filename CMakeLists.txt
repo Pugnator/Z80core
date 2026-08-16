@@ -69,6 +69,14 @@ enable_testing()
 # the engine and the interface are real, the instruction set is not there yet.
 add_subdirectory(src/emucore/z80core)
 
+# z80mon: an ImGui window onto the core - pins, clock control and a waveform.
+# Off by default because it downloads Dear ImGui at configure time.
+option(BUILD_Z80MON "Build the ImGui monitor for the CPU core" OFF)
+if(BUILD_Z80MON)
+    enable_language(CXX)
+    add_subdirectory(tools/z80mon)
+endif()
+
 # monitor48k.asm is a listing of the real 16K ZX Spectrum ROM, so the assembled
 # image must match monitor48k.rom byte for byte. This is the strongest
 # regression test in the tree: it catches any layout or encoding change.
