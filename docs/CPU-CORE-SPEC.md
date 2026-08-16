@@ -408,9 +408,14 @@ falling.
 | T1 ↑ | `A` ← PC, `M1` asserted | |
 | T1 ↓ | `MREQ`, `RD` asserted | |
 | T2 ↓ | samples `WAIT` | assert `WAIT` here to stretch |
-| T3 ↑ | samples `D`, releases `MREQ`/`RD`/`M1` | opcode must be valid on `D` |
-| T3 ↓ | `A` ← `I:R`, `RFSH` asserted, `R` incremented | |
-| T4 ↓ | `RFSH` released | |
+| T3 ↑ | samples `D`; releases `M1`/`MREQ`/`RD`; `A` ← `I:R`, `RFSH` asserted, `R` incremented | opcode must be valid on `D` |
+| T3 ↓ | `MREQ` asserted again, for the refresh cycle | |
+| T4 ↓ | `MREQ` and `RFSH` released | |
+
+The refresh is a real memory cycle, not merely an address on the bus: `MREQ`
+goes active for it in T4. Anything decoding memory accesses from `MREQ` alone
+will see it, which is exactly what a DRAM is supposed to do and what a careless
+address decoder will trip over.
 
 **Memory read — 3 T-states**
 
@@ -455,10 +460,25 @@ settle. The host places the vector or instruction on `D`.
 real: they are why `INC BC` costs 6 T-states rather than 4, and they must appear
 in the step list at the right position, not be added as a lump at the end.
 
-The Zilog *Z80 CPU User Manual* timing diagrams are the reference for the table
-above, and the conformance suites in section 9 are the arbiter for anything
-they leave ambiguous. Phase 2 verifies each cycle against both before any
-instruction depends on it.
+**Sources.** The Zilog *Z80 CPU User Manual* timing diagrams are the reference,
+and the conformance suites in section 9 are the arbiter for anything they leave
+ambiguous. The tables above were checked against the **A-Z80** timing table
+(`docs/Timings.csv`), a gate-level Z80 reimplementation in Verilog by Goran
+Devic, which records the active signals for every T-state of every instruction
+class. A-Z80 is GPL 2, the same licence as this project.
+
+Reading it requires one interpretation: its rows give the signals active at
+each T-state, which places every transition on the edge *before* the row it
+first appears in. Under that reading it confirmed the memory read, memory
+write and I/O cycles above exactly as written, and corrected the M1 cycle in
+two places — `RFSH` rises with the end of the fetch rather than half a cycle
+later, and the refresh asserts `MREQ`, which this spec previously missed
+altogether.
+
+That interpretation is the remaining soft spot: A-Z80 is authoritative about
+*which T-state*, while the half-cycle placement within it comes from the
+datasheet diagrams. Where the two could disagree, the datasheet wins and the
+suites decide.
 
 ### 5.4 The instruction table
 

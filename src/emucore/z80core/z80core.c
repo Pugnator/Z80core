@@ -64,37 +64,51 @@ static void step_idle(z80_t *cpu, z80_pins_t *pins)
 
 static void step_m1_t3_rise(z80_t *cpu, z80_pins_t *pins)
 {
-    /* the real core latches pins->D here; the skeleton only releases the bus */
+    /* the real core latches pins->D here; the skeleton only moves the bus on */
     cpu->PC = (uint16_t)(cpu->PC + 1u);
     pins->ctrl &= ~(uint32_t)(Z80_M1 | Z80_MREQ | Z80_RD);
-}
 
-static void step_m1_t3_fall(z80_t *cpu, z80_pins_t *pins)
-{
+    /* refresh address out and RFSH asserted together with releasing the fetch */
     cpu->R = (uint8_t)((cpu->R & 0x80u) | ((cpu->R + 1u) & 0x7Fu));
     pins->A = (uint16_t)(((uint16_t)cpu->I << 8) | cpu->R);
     pins->ctrl |= Z80_RFSH;
 }
 
+static void step_m1_t3_fall(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)cpu;
+    /* the refresh is a real memory cycle: MREQ goes active again for it */
+    pins->ctrl |= Z80_MREQ;
+}
+
 static void step_m1_t4_fall(z80_t *cpu, z80_pins_t *pins)
 {
     (void)cpu;
-    pins->ctrl &= ~(uint32_t)Z80_RFSH;
+    pins->ctrl &= ~(uint32_t)(Z80_MREQ | Z80_RFSH);
 }
 
 /**
  * One M1 opcode fetch, edge by edge (spec section 5.3). Phase 0 loops on this
  * list; phase 1 selects a list per instruction from the opcode table.
+ *
+ * The signal-per-T-state pattern is the one the A-Z80 timing table records for
+ * fMFetch (docs/Timings.csv):
+ *
+ *     T1  M1                 T3  RFSH
+ *     T2  M1 MREQ RD         T4  RFSH MREQ
+ *
+ * with each row read as the state at that T-state's rising edge, which places
+ * every transition on the edge before it.
  */
 static const z80_step_fn m1_fetch[] = {
-    step_m1_t1_rise, /* T1 rise: address out, M1 asserted   */
-    step_m1_t1_fall, /* T1 fall: MREQ, RD asserted          */
-    step_idle,       /* T2 rise                             */
-    step_idle,       /* T2 fall: WAIT sampled here          */
-    step_m1_t3_rise, /* T3 rise: opcode latched, bus freed  */
-    step_m1_t3_fall, /* T3 fall: refresh address, RFSH      */
-    step_idle,       /* T4 rise: decode                     */
-    step_m1_t4_fall  /* T4 fall: RFSH released              */
+    step_m1_t1_rise, /* T1 rise: address out, M1 asserted            */
+    step_m1_t1_fall, /* T1 fall: MREQ, RD asserted                   */
+    step_idle,       /* T2 rise                                      */
+    step_idle,       /* T2 fall: WAIT sampled here                   */
+    step_m1_t3_rise, /* T3 rise: opcode latched, fetch ends, refresh */
+    step_m1_t3_fall, /* T3 fall: MREQ for the refresh cycle          */
+    step_idle,       /* T4 rise: decode                              */
+    step_m1_t4_fall  /* T4 fall: MREQ and RFSH released              */
 };
 
 #define M1_FETCH_EDGES ((uint8_t)(sizeof m1_fetch / sizeof m1_fetch[0]))
