@@ -11,7 +11,7 @@ everything it does goes through `z80core.h`.
 ```sh
 cmake --preset tools
 cmake --build --preset tools
-./build/tools/z80mon
+./build/tools/bin/z80mon
 ```
 
 Dear ImGui is fetched at configure time and pinned to a release tag, so the

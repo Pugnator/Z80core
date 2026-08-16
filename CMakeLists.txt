@@ -4,6 +4,18 @@ project(z80core LANGUAGES C)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_EXTENSIONS ON)
 
+# Everything you can run or load lands in one place, bin/ under the build
+# directory, rather than mirroring the source tree three levels deep. Static
+# and import libraries go to lib/, so bin/ holds only artefacts, not
+# intermediates.
+#
+# Single-config generators only. A multi-config generator appends the
+# configuration name to each of these, which is its business rather than ours -
+# this project builds with Ninja and Make.
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+
 find_package(BISON REQUIRED)
 find_package(FLEX REQUIRED)
 

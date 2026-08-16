@@ -27,8 +27,9 @@ cmake --build --preset default
 ctest --preset default
 ```
 
-Binaries land in `build/default`: `zasm.exe` at the top,
-`src/emucore/z80core/` for the core's test and benchmark.
+Everything runnable lands in `build/default/bin` — `zasm`, the core's tests and
+benchmark, and the conformance harnesses. Static and import libraries go to
+`build/default/lib`.
 
 To include the ImGui monitor — this one fetches Dear ImGui, so it needs the
 network once:
@@ -36,7 +37,7 @@ network once:
 ```sh
 cmake --preset tools
 cmake --build --preset tools
-./build/tools/z80mon
+./build/tools/bin/z80mon
 ```
 
 `--preset debug` builds the same targets with symbols.

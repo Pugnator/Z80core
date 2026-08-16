@@ -25,7 +25,7 @@ cd build/default && ctest -R zex
 Or directly, which is what you want while fixing something:
 
 ```
-build/default/src/emucore/z80core/z80core_zex_test tests/zex/zexdoc.com
+build/default/bin/z80core_zex_test tests/zex/zexdoc.com
 ```
 
 An optional second argument caps the run in millions of clock edges, which is
