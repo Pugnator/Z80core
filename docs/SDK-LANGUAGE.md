@@ -26,7 +26,9 @@ device script, and `macro/preprocessor.lua` — a sketch of the first one from
 years ago that never grew past `#define`.
 
 The README's old note, *"Lua to Forth translator"*, sits between two of these,
-which is a sign the distinction was never quite drawn. It is drawn now.
+which is a sign the distinction was never quite drawn. It is drawn now — and
+Lua appears in section 4 as a target language in its own right, where the same
+three-way confusion has to be untangled again.
 
 ---
 
@@ -114,6 +116,76 @@ addressing, one real accumulator, 8-bit ALU against 16-bit `int`. Getting from
 "it compiles" to "the output is not embarrassing" is most of the work, and it is
 the part a subset does not shrink. And SDCC has already done it.
 
+### A Lua subset
+
+Three different proposals get called "Lua on the Z80", and only the third is
+worth anything. They are worth separating, because the first two are what the
+idea sounds like and the third is what it should be.
+
+**Porting the interpreter** is not a close call. Lua 5.4's number model alone
+settles it: every value is a 64-bit integer *or* a double, so `a + b` is either
+eight `ADC`s or a software float routine. Above that sit an interned string
+table, a garbage collector, and tables carrying both an array and a hash part.
+eLua — the project whose entire purpose is Lua on microcontrollers — puts its
+floor near 256 KB of flash and 64 KB of RAM, on 32-bit parts with hardware
+multiply. That is four times this machine's whole address space, spent before
+the program exists.
+
+**Translating VM opcodes into Z80 instructions** is feasible, and is the trap. A
+Lua opcode is not a machine operation, it is a call into a runtime: `OP_ADD A B
+C` means load two tagged values, branch on their tags, integer-add or float-add
+or coerce, and failing all of that look up an `__add` metamethod and possibly
+perform a full call. There is no Z80 sequence for that — there is a `CALL
+rt_add`. So the output is a ribbon of calls into a runtime that still has to be
+written in full: every cost above is kept, and one is added, because a four-byte
+bytecode instruction becomes ten-odd bytes of call setup. On a 64 K machine that
+trades away code density — the one thing the bytecode was good at — and buys
+nearly nothing, since the time was never in the dispatch loop but inside the
+helpers, and those did not change. The speedup in a real Lua JIT comes entirely
+from type specialisation: proving that this particular add is always two
+integers, then emitting an actual `ADD HL,DE`. That machinery is larger than
+everything in this repository put together.
+
+**Compiling a statically-typed subset ahead of time** is the real candidate, and
+it is the C-subset proposal wearing better syntax. Restrict to 16-bit integers,
+fixed-shape tables, no metatables, no closures over mutable upvalues, no
+collector, strings as byte arrays. Then
+
+```lua
+local function checksum(addr, len)
+  local sum = 0
+  for i = 0, len - 1 do
+    sum = sum + peek(addr + i)
+  end
+  return sum & 0xFFFF
+end
+```
+
+compiles to respectable Z80: slots at `IX+d`, the count in `B` driving `DJNZ`,
+the accumulator in `HL`.
+
+**Compile the AST, not `luac` output.** The temptation is the same instinct as
+section 3 — let `luac` do the lexing, parsing, scope resolution and constant
+folding, and start from something already register-based and three-address, far
+closer to a machine than JVM- or CPython-style stack bytecode. It does not pay
+off, twice over:
+
+- `luac` allocates registers for a machine that has 255 of them. This one has
+  seven, eight bits wide. That work is discarded whatever happens.
+- `luac` erases exactly what a typed subset needs. The compiler lives or dies on
+  knowing that `sum` is an integer; `local sum = 0` says so and a compiled frame
+  slot does not, because Lua reuses slots freely for different types within one
+  function. Starting from bytecode means recovering by analysis what was thrown
+  away one step earlier.
+
+In its favour: Lua's grammar is about a page of EBNF, with no declarator syntax,
+no preprocessor and no typedef ambiguity. **As a front end it is markedly
+cheaper than C**, which is a real argument given that front-end work is most of
+what a subset compiler is. Against it: C's semantics already sit near the
+machine, so a C subset mostly *omits* things, while a Lua subset has to
+*contradict* them — and "why can't I use a table as a table" is a worse
+conversation to have with a user than "why is there no `double`".
+
 ### A Pascal subset
 
 Rarely considered and arguably the best engineering fit: designed for
@@ -131,37 +203,96 @@ machine rather than a tool for building on it.
 
 ---
 
-## 5. What I would do
+## 5. Pallene, SDCC and zasm: the route with no compiler in it
+
+Worth its own section, because it is the only path on this page that reaches a
+working high-level toolchain without anybody writing a code generator.
+
+**Pallene** is a statically-typed sister language to Lua from Roberto
+Ierusalimschy's own group — the people who wrote Lua. Lua's syntax plus type
+annotations, designed from the start to be compiled ahead of time rather than
+interpreted. It is very nearly the subset described above, already designed and
+defended by the people best placed to do it, which is worth reading before
+anyone here writes a parser. It emits **C**.
+
+**SDCC** compiles C to Z80. **zasm** assembles Z80 byte-exactly, with 1270
+encodings verified against a real ROM.
+
+So the chain exists on paper:
+
+```
+program.pln → Pallene → C → SDCC → assembly → zasm → binary
+```
+
+and the only missing arrow is the last one: `zasm` accepting SDCC's assembly
+syntax and directives, which section 2 already put at days of work rather than
+months. Nothing else in the chain has to be built at all.
+
+**What is honestly wrong with it.** Pallene is not a standalone language. Its
+typed sections compile to plain C operations, but anything dynamic — tables,
+strings, `any` — calls into the Lua runtime, `lua_State` and all. That runtime
+is precisely what section 4 ruled out for this machine. The chain therefore runs
+only for the fully-typed part of Pallene, and the moment a program reaches for a
+real table it wants a hundred kilobytes that do not exist here.
+
+That may still be enough: Pallene restricted to scalars, arrays and functions is
+a usable systems language, and the restriction is checkable at compile time
+rather than discovered at run time. But it is a subset of a subset, and it
+should be measured rather than believed.
+
+**The experiment that settles it** is an afternoon's work: take a small
+fully-typed Pallene program, read the C it emits, and count how much of it
+touches `lua_State`. If the typed paths are clean C, the route is real. If the
+runtime is threaded through everything, it is not, and the C subset in section 4
+is back to being the honest answer.
+
+Do the same measurement for plain SDCC output while you are there. `zasm`
+compatibility is the shared prerequisite for both, and it is worth having on its
+own merits whichever way the Pallene question falls.
+
+---
+
+## 6. What I would do
 
 **Start with the macro layer, then Forth.** Reasons, in order:
 
-1. **The macro layer is the best value in the project.** Conditionals, repeat
-   blocks, local labels, structures and named constants remove most of the pain
-   of writing assembly, cost a fraction of a compiler, and improve every
-   program written from now on including the ones in `tests/`. `zasm` is
-   already a library, so this can live in front of it or inside it. Issue #6
-   has been asking for it since 2018.
+1. **The macro layer is the best value in the project**, and Lua is already the
+   obvious way to build it. Conditionals, repeat blocks, local labels,
+   structures and named constants remove most of the pain of writing assembly,
+   cost a fraction of a compiler, and improve every program written from now on
+   including the ones in `tests/`. Note what this is: *full* Lua, on the host,
+   at build time, emitting assembly text — tables, string formatting, loops that
+   unroll code, computed jump tables — with nothing but the generated assembly
+   ever reaching the Z80. None of section 4's difficulties apply, because no
+   part of Lua runs on the target. Lua is already in the toolchain, `zasm` is
+   already a library, and `macro/preprocessor.lua` is a stalled sketch of
+   exactly this. Issue #6 has been asking for it since 2018.
 2. **Forth suits what this project is becoming.** The core is edge-precise, the
    monitor already shows registers and memory, and Proteus puts the machine on
    a schematic. A Forth running on that, interactively, is a coherent product —
    and it needs no new front-end technology.
-3. **A C subset is the biggest job with the least differentiation**, because
-   SDCC exists and is good. If C matters more than ownership, the cheaper path
-   is `zasm` compatibility with SDCC's assembly output, and that is worth
-   measuring before writing a parser.
+3. **Measure the Pallene and SDCC routes before writing any parser.** Section 5
+   is an afternoon that could remove months of work, or rule the idea out
+   cheaply. Either outcome is worth more than the afternoon costs, and `zasm`
+   compatibility with SDCC's assembly is worth having regardless of the answer.
+4. **A C or Lua subset is the biggest job with the least differentiation**,
+   because SDCC exists and is good. Between the two, Lua has the cheaper front
+   end and C has the smaller gap between what people expect and what the machine
+   can do. If the target language must be familiar to newcomers, that gap
+   matters more than the parser does.
 
-If the goal is the *pleasure of building a compiler*, invert 2 and 3 — that is a
-perfectly good reason, and the C subset is the more interesting compiler to
+If the goal is the *pleasure of building a compiler*, promote 4 above 2 — that is
+a perfectly good reason, and a typed subset is the more interesting compiler to
 write. The point of this document is that the choice should be made on that
 basis rather than by accident.
 
 ---
 
-## 6. Questions that would settle it
+## 7. Questions that would settle it
 
 1. **Who is the SDK for?** Someone writing programs on a PC for a Z80 board, or
-   someone poking at a simulated machine interactively? The first says C, the
-   second says Forth.
+   someone poking at a simulated machine interactively? The first says a
+   compiled subset, C or Lua; the second says Forth.
 2. **Is target-side interactivity interesting?** It is the one thing here that
    would be distinctive, given the core and the monitor already exist.
 3. **Ownership or availability?** If a working C compiler is the goal, SDCC
@@ -169,10 +300,15 @@ basis rather than by accident.
 4. **Does anything have to run on the real hardware**, or is the simulated
    machine the target? A Forth ROM implies real constraints; a cross-compiler
    does not.
+5. **If Lua appeals, is it for the syntax or for the toolchain?** They point in
+   opposite directions. Wanting the syntax means the compiled subset in section
+   4, and a long argument with users about what was removed. Wanting Lua because
+   it is already here means the macro layer in section 6, which is far cheaper
+   and available now — and which is not really the same wish.
 
 ---
 
-## 7. If Forth is chosen, the first slice
+## 8. If Forth is chosen, the first slice
 
 Small enough to be worth naming, so the idea has a concrete first step:
 
