@@ -19,6 +19,8 @@
 
 #include <windows.h>
 
+#include "resources.h"
+
 #include <GL/gl.h>
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -168,6 +170,9 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int)
     windowClass.hInstance = instance;
     windowClass.hCursor = LoadCursor(nullptr, IDC_ARROW);
     windowClass.lpszClassName = L"Z80MonitorWindow";
+    /* the same icon zasm carries, from z80mon.rc */
+    windowClass.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(AppIcon));
+    windowClass.hIconSm = windowClass.hIcon;
     RegisterClassExW(&windowClass);
 
     HWND window = CreateWindowW(windowClass.lpszClassName, L"z80mon - Z80 core monitor", WS_OVERLAPPEDWINDOW,

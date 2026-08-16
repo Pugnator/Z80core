@@ -60,8 +60,19 @@ class Monitor
     void drawPins();
     void drawWaveform();
     void drawMemory();
+    void drawDisassembly();
+    void drawEditor();
 
+    /**
+     * Replace memory from a file. The CPU is left exactly as it was: swapping
+     * the program out from under a running machine is what real hardware does
+     * when you reprogram a ROM, and starting over is what Reset is for.
+     */
     void loadBinary(const std::string &path);
+    /** Assemble the editor's text with zasm and load the result. */
+    void assemble();
+    void loadSource(const std::string &path);
+    void saveSource(const std::string &path);
 
     /* --- state --- */
 
@@ -94,4 +105,15 @@ class Monitor
 
     std::string status_ = "ready";
     int memoryViewBase_ = 0;
+
+    /* disassembly view */
+    int disasmBase_ = 0;
+    int disasmLines_ = 20;
+    bool disasmFollowsCpu_ = true;
+
+    /* assembler editor */
+    std::vector<char> source_;
+    std::string sourcePath_;
+    std::string assemblerOutput_;
+    bool assembleFailed_ = false;
 };

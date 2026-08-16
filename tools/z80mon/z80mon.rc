@@ -1,0 +1,4 @@
+#include "resources.h"
+
+/* the same icon zasm carries */
+AppIcon ICON "logo.ico"

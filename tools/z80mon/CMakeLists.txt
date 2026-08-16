@@ -32,9 +32,28 @@ add_library(imgui STATIC
 target_include_directories(imgui PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
 target_link_libraries(imgui PUBLIC opengl32 gdi32 dwmapi imm32)
 
-add_executable(z80mon WIN32 main.cpp monitor.cpp)
+# The disassembly view uses zasm's disassembler rather than a second one that
+# could drift from it. dassembler.c reaches for a few of the assembler's
+# globals (disasm_host.c supplies them) and its headers include the generated
+# grammar.h, so this waits on zasm having been generated.
+add_library(z80disasm STATIC
+            ${CMAKE_SOURCE_DIR}/src/asmdasm/dassembler.c
+            ${CMAKE_SOURCE_DIR}/src/asmdasm/z80tab.c
+            disasm_host.c)
 
-target_link_libraries(z80mon PRIVATE imgui z80core)
+target_include_directories(z80disasm PUBLIC
+                           ${CMAKE_SOURCE_DIR}/include/asmdasm
+                           ${CMAKE_SOURCE_DIR}/include
+                           ${CMAKE_BINARY_DIR})
+
+add_dependencies(z80disasm zasm)
+
+add_executable(z80mon WIN32 main.cpp monitor.cpp z80mon.rc)
+
+# so the .rc finds resources.h and logo.ico
+target_include_directories(z80mon PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/include)
+
+target_link_libraries(z80mon PRIVATE imgui z80core z80disasm comdlg32)
 
 set_target_properties(z80mon PROPERTIES CXX_STANDARD 17
                                         CXX_STANDARD_REQUIRED ON

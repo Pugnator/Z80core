@@ -11,11 +11,18 @@
 
 #include "monitor.hpp"
 
+#include "disasm_host.h"
 #include "imgui.h"
+
+#include <windows.h>
+
+#include <commdlg.h>
 
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
+#include <sstream>
 
 namespace
 {
@@ -37,14 +44,22 @@ struct PinInfo
 };
 
 /**
- * Place a panel the first time it is seen. Without this every window opens at
- * the same default spot, stacked on top of the others. Positions are only a
- * starting point: the panels are dockable and remember where they are put.
+ * Place a panel the first time it is seen, as a fraction of the window.
+ *
+ * Without this every panel opens at the same default spot, stacked on the
+ * others. Fractions rather than pixels because the window is not always the
+ * size it was asked for - display scaling sees to that - and a layout in
+ * pixels leaves panels hanging off the edge. Only a starting point: the
+ * panels are dockable and remember where they are put.
  */
 void placePanel(float x, float y, float width, float height)
 {
-    ImGui::SetNextWindowPos(ImVec2(x, y), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(width, height), ImGuiCond_FirstUseEver);
+    const ImGuiViewport *viewport = ImGui::GetMainViewport();
+    const ImVec2 origin = viewport->WorkPos;
+    const ImVec2 area = viewport->WorkSize;
+
+    ImGui::SetNextWindowPos(ImVec2(origin.x + area.x * x, origin.y + area.y * y), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(area.x * width, area.y * height), ImGuiCond_FirstUseEver);
 }
 
 /** Outputs, in the order they are worth reading. */
@@ -108,15 +123,136 @@ void busBits(const char *label, uint32_t value, int width, bool changed)
     }
 }
 
+std::wstring widen(const std::string &text)
+{
+    if (text.empty())
+    {
+        return std::wstring();
+    }
+    const int needed = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), (int)text.size(), nullptr, 0);
+    std::wstring wide((size_t)needed, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, text.c_str(), (int)text.size(), wide.data(), needed);
+    return wide;
+}
+
+std::string narrow(const std::wstring &text)
+{
+    if (text.empty())
+    {
+        return std::string();
+    }
+    const int needed = WideCharToMultiByte(CP_UTF8, 0, text.c_str(), (int)text.size(), nullptr, 0, nullptr, nullptr);
+    std::string narrowed((size_t)needed, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, text.c_str(), (int)text.size(), narrowed.data(), needed, nullptr, nullptr);
+    return narrowed;
+}
+
+/** The common file dialog. Returns an empty string when the user cancels. */
+std::string chooseFile(const wchar_t *filter, const wchar_t *title, bool saving)
+{
+    wchar_t path[MAX_PATH] = L"";
+
+    OPENFILENAMEW dialog = {};
+    dialog.lStructSize = sizeof dialog;
+    dialog.hwndOwner = GetActiveWindow();
+    dialog.lpstrFilter = filter;
+    dialog.lpstrFile = path;
+    dialog.nMaxFile = MAX_PATH;
+    dialog.lpstrTitle = title;
+    dialog.Flags = OFN_EXPLORER | OFN_NOCHANGEDIR | (saving ? OFN_OVERWRITEPROMPT : OFN_FILEMUSTEXIST);
+
+    const BOOL chosen = saving ? GetSaveFileNameW(&dialog) : GetOpenFileNameW(&dialog);
+    return chosen ? narrow(path) : std::string();
+}
+
+/** The directory holding this executable, where zasm sits beside it. */
+std::string executableDirectory()
+{
+    wchar_t path[MAX_PATH] = L"";
+    GetModuleFileNameW(nullptr, path, MAX_PATH);
+    std::wstring full(path);
+    const size_t slash = full.find_last_of(L"\\/");
+    return slash == std::wstring::npos ? std::string() : narrow(full.substr(0, slash));
+}
+
+/**
+ * Run a command and collect everything it prints.
+ *
+ * CreateProcess rather than _popen: this is a windowed program, and _popen
+ * flashes a console every time the user presses Assemble.
+ */
+bool runCapturing(const std::wstring &commandLine, std::string &output, DWORD &exitCode)
+{
+    SECURITY_ATTRIBUTES inheritable = {};
+    inheritable.nLength = sizeof inheritable;
+    inheritable.bInheritHandle = TRUE;
+
+    HANDLE readEnd = nullptr;
+    HANDLE writeEnd = nullptr;
+    if (!CreatePipe(&readEnd, &writeEnd, &inheritable, 0))
+    {
+        output = "could not create a pipe";
+        return false;
+    }
+    SetHandleInformation(readEnd, HANDLE_FLAG_INHERIT, 0);
+
+    STARTUPINFOW startup = {};
+    startup.cb = sizeof startup;
+    startup.dwFlags = STARTF_USESTDHANDLES;
+    startup.hStdOutput = writeEnd;
+    startup.hStdError = writeEnd;
+
+    PROCESS_INFORMATION process = {};
+    std::wstring mutableCommand = commandLine;
+
+    const BOOL started = CreateProcessW(nullptr, mutableCommand.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW,
+                                        nullptr, nullptr, &startup, &process);
+    CloseHandle(writeEnd);
+    if (!started)
+    {
+        CloseHandle(readEnd);
+        output = "could not start zasm";
+        return false;
+    }
+
+    char buffer[512];
+    DWORD read = 0;
+    while (ReadFile(readEnd, buffer, sizeof buffer, &read, nullptr) && read > 0)
+    {
+        output.append(buffer, read);
+    }
+    CloseHandle(readEnd);
+
+    WaitForSingleObject(process.hProcess, INFINITE);
+    GetExitCodeProcess(process.hProcess, &exitCode);
+    CloseHandle(process.hProcess);
+    CloseHandle(process.hThread);
+    return true;
+}
+
+const char *kStarterProgram = "; z80mon scratch program\n"
+                              "; Assemble replaces memory without disturbing the CPU.\n"
+                              "\n"
+                              "    .org 0\n"
+                              "start:\n"
+                              "    LD A, 0x55\n"
+                              "    LD HL, 0x8000\n"
+                              "    LD [HL], A\n"
+                              "    INC HL\n"
+                              "    JR start\n"
+                              "    .end\n";
+
 } // namespace
 
-Monitor::Monitor() : memory_(kMemorySize, 0x00), trace_(kTraceLength)
+Monitor::Monitor() : memory_(kMemorySize, 0x00), trace_(kTraceLength), source_(64 * 1024, '\0')
 {
     cpu_ = z80_new();
 
     /* Something to watch by default: NOPs everywhere, so the core fetches
        forever and every M1 cycle is visible on the waveform. */
     std::fill(memory_.begin(), memory_.end(), 0x00);
+
+    std::snprintf(source_.data(), source_.size(), "%s", kStarterProgram);
 }
 
 Monitor::~Monitor()
@@ -246,15 +382,102 @@ void Monitor::loadBinary(const std::string &path)
     const size_t read = fread(memory_.data(), 1, memory_.size(), file);
     fclose(file);
 
-    char message[256];
-    snprintf(message, sizeof message, "loaded %zu bytes from %s", read, path.c_str());
+    /* Memory changes, the CPU does not. Reset is the button for starting
+       over, and it stays the only thing that does. */
+    char message[320];
+    snprintf(message, sizeof message, "loaded %zu bytes, CPU untouched at edge %llu", read,
+             (unsigned long long)z80_edges(cpu_));
     status_ = message;
-    reset();
+}
+
+void Monitor::loadSource(const std::string &path)
+{
+    std::ifstream file(path, std::ios::binary);
+    if (!file)
+    {
+        status_ = "cannot open " + path;
+        return;
+    }
+    std::ostringstream contents;
+    contents << file.rdbuf();
+    const std::string text = contents.str();
+
+    std::fill(source_.begin(), source_.end(), '\0');
+    std::memcpy(source_.data(), text.c_str(), std::min(text.size(), source_.size() - 1));
+    sourcePath_ = path;
+    status_ = "opened " + path;
+}
+
+void Monitor::saveSource(const std::string &path)
+{
+    std::ofstream file(path, std::ios::binary);
+    if (!file)
+    {
+        status_ = "cannot write " + path;
+        return;
+    }
+    file << source_.data();
+    sourcePath_ = path;
+    status_ = "saved " + path;
+}
+
+void Monitor::assemble()
+{
+    const std::string directory = executableDirectory();
+    const std::string assembler = directory + "\\zasm.exe";
+
+    wchar_t temporary[MAX_PATH] = L"";
+    GetTempPathW(MAX_PATH, temporary);
+    const std::string base = narrow(temporary) + "z80mon_scratch";
+    const std::string sourceFile = base + ".asm";
+    const std::string binaryFile = base + ".bin";
+
+    {
+        std::ofstream file(sourceFile, std::ios::binary);
+        if (!file)
+        {
+            assemblerOutput_ = "cannot write " + sourceFile;
+            assembleFailed_ = true;
+            return;
+        }
+        file << source_.data();
+    }
+    DeleteFileW(widen(binaryFile).c_str());
+
+    const std::wstring command =
+        L"\"" + widen(assembler) + L"\" -s \"" + widen(sourceFile) + L"\" -o \"" + widen(binaryFile) + L"\"";
+
+    DWORD exitCode = 1;
+    assemblerOutput_.clear();
+    if (!runCapturing(command, assemblerOutput_, exitCode))
+    {
+        assemblerOutput_ += "\nlooked for zasm at " + assembler;
+        assembleFailed_ = true;
+        return;
+    }
+
+    if (exitCode != 0)
+    {
+        assembleFailed_ = true;
+        if (assemblerOutput_.empty())
+        {
+            assemblerOutput_ = "zasm failed with no output";
+        }
+        status_ = "assembly failed";
+        return;
+    }
+
+    assembleFailed_ = false;
+    loadBinary(binaryFile);
+    if (assemblerOutput_.empty())
+    {
+        assemblerOutput_ = "assembled cleanly";
+    }
 }
 
 void Monitor::drawControls()
 {
-    placePanel(12.0f, 30.0f, 340.0f, 430.0f);
+    placePanel(0.00f, 0.00f, 0.29f, 0.60f);
     ImGui::Begin("Clock");
 
     if (ImGui::Button(running_ ? "Stop" : "Run", ImVec2(70, 0)))
@@ -312,7 +535,7 @@ void Monitor::drawControls()
     const uint64_t edges = z80_edges(cpu_);
     ImGui::Text("edges     %llu", (unsigned long long)edges);
     ImGui::Text("T-states  %llu", (unsigned long long)(edges / 2));
-    ImGui::Text("measured  %.1f kHz clock (%.2f M edges/s)", measuredEdgeRate_ / 2000.0, measuredEdgeRate_ / 1000000.0);
+    ImGui::Text("measured  %.2f kHz clock, %.1f k edges/s", measuredEdgeRate_ / 2000.0, measuredEdgeRate_ / 1000.0);
 
     ImGui::Separator();
     ImGui::TextDisabled("%s", status_.c_str());
@@ -322,7 +545,7 @@ void Monitor::drawControls()
 
 void Monitor::drawPins()
 {
-    placePanel(12.0f, 470.0f, 340.0f, 375.0f);
+    placePanel(0.00f, 0.60f, 0.29f, 0.40f);
     ImGui::Begin("Pins");
 
     busBits("A", pins_.A, 16, (changed_ & Z80_CHANGED_A) != 0);
@@ -355,14 +578,15 @@ void Monitor::drawPins()
 
 void Monitor::drawWaveform()
 {
-    placePanel(364.0f, 30.0f, 900.0f, 300.0f);
+    placePanel(0.29f, 0.00f, 0.71f, 0.30f);
     ImGui::Begin("Waveform");
 
     static const PinInfo traces[] = {{"M1", Z80_M1}, {"MREQ", Z80_MREQ}, {"RD", Z80_RD},
                                      {"WR", Z80_WR}, {"IORQ", Z80_IORQ}, {"RFSH", Z80_RFSH}};
     const int traceRows = (int)(sizeof traces / sizeof traces[0]) + 1; /* +1 for CLK */
 
-    ImGui::TextDisabled("most recent %d edges, oldest on the left", (int)traceCount_);
+    const int captured = (int)traceCount_;
+    ImGui::TextDisabled("most recent %d edges of %d captured, oldest on the left", std::min(captured, 256), captured);
 
     const float rowHeight = 22.0f;
     const float labelWidth = 46.0f;
@@ -413,27 +637,19 @@ void Monitor::drawWaveform()
 
 void Monitor::drawMemory()
 {
-    placePanel(364.0f, 340.0f, 900.0f, 505.0f);
+    placePanel(0.29f, 0.30f, 0.71f, 0.28f);
     ImGui::Begin("Memory");
 
-    if (ImGui::Button("Load .bin"))
+    if (ImGui::Button("Load .bin..."))
     {
-        ImGui::OpenPopup("load");
-    }
-    ImGui::SameLine();
-    ImGui::TextDisabled("assembled by zasm, loaded at 0000");
-
-    if (ImGui::BeginPopup("load"))
-    {
-        static char path[512] = "";
-        ImGui::SetNextItemWidth(420.0f);
-        if (ImGui::InputText("path", path, sizeof path, ImGuiInputTextFlags_EnterReturnsTrue))
+        const std::string path = chooseFile(L"Binary images\0*.bin\0All files\0*.*\0\0", L"Load a binary image", false);
+        if (!path.empty())
         {
             loadBinary(path);
-            ImGui::CloseCurrentPopup();
         }
-        ImGui::EndPopup();
     }
+    ImGui::SameLine();
+    ImGui::TextDisabled("loaded at 0000; the CPU keeps running");
 
     ImGui::SetNextItemWidth(120.0f);
     ImGui::InputInt("base", &memoryViewBase_, 16, 256, ImGuiInputTextFlags_CharsHexadecimal);
@@ -464,6 +680,128 @@ void Monitor::drawMemory()
     ImGui::End();
 }
 
+void Monitor::drawDisassembly()
+{
+    placePanel(0.29f, 0.58f, 0.33f, 0.42f);
+    ImGui::Begin("Disassembly");
+
+    ImGui::Checkbox("Follow the CPU", &disasmFollowsCpu_);
+    ImGui::SetItemTooltip("keep the view on whatever address the CPU is putting on the bus");
+
+    if (disasmFollowsCpu_)
+    {
+        /* Bias backwards a little so the current address is not glued to the
+           top edge, and clamp so the window never runs off the end. */
+        const int centred = (int)pins_.A - 8;
+        disasmBase_ = std::clamp(centred, 0, (int)kMemorySize - 1);
+    }
+    else
+    {
+        ImGui::SetNextItemWidth(120.0f);
+        ImGui::InputInt("from", &disasmBase_, 1, 16, ImGuiInputTextFlags_CharsHexadecimal);
+        disasmBase_ = std::clamp(disasmBase_, 0, (int)kMemorySize - 1);
+    }
+
+    ImGui::Separator();
+    ImGui::BeginChild("listing", ImVec2(0, 0), ImGuiChildFlags_Borders);
+
+    uint16_t address = (uint16_t)disasmBase_;
+    for (int line = 0; line < disasmLines_; ++line)
+    {
+        char text[128];
+        const size_t used = z80mon_disasm(memory_.data(), memory_.size(), address, text, sizeof text);
+        const bool here = address == pins_.A;
+
+        /* the bytes this instruction occupies, so the listing reads like one */
+        char bytes[16] = "";
+        for (size_t i = 0; i < used && i < 4; ++i)
+        {
+            char pair[4];
+            snprintf(pair, sizeof pair, "%02X ", memory_[(uint16_t)(address + i)]);
+            strncat(bytes, pair, sizeof bytes - strlen(bytes) - 1);
+        }
+
+        if (here)
+        {
+            ImGui::TextColored(kJustChanged, "%04X  %-12s %s", address, bytes, text);
+        }
+        else
+        {
+            ImGui::Text("%04X  %-12s %s", address, bytes, text);
+        }
+
+        if (used == 0)
+        {
+            break;
+        }
+        const uint32_t next = (uint32_t)address + (uint32_t)used;
+        if (next > 0xFFFF)
+        {
+            break;
+        }
+        address = (uint16_t)next;
+    }
+
+    ImGui::EndChild();
+    ImGui::End();
+}
+
+void Monitor::drawEditor()
+{
+    placePanel(0.62f, 0.58f, 0.38f, 0.42f);
+    ImGui::Begin("Assembler");
+
+    if (ImGui::Button("Assemble"))
+    {
+        assemble();
+    }
+    ImGui::SetItemTooltip("build with zasm and replace memory, leaving the CPU where it is");
+    ImGui::SameLine();
+    if (ImGui::Button("Open..."))
+    {
+        const std::string path =
+            chooseFile(L"Assembly source\0*.asm;*.z80;*.s\0All files\0*.*\0\0", L"Open source", false);
+        if (!path.empty())
+        {
+            loadSource(path);
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Save as..."))
+    {
+        const std::string path = chooseFile(L"Assembly source\0*.asm\0All files\0*.*\0\0", L"Save source", true);
+        if (!path.empty())
+        {
+            saveSource(path);
+        }
+    }
+
+    if (!sourcePath_.empty())
+    {
+        ImGui::TextDisabled("%s", sourcePath_.c_str());
+    }
+
+    const float outputHeight = 96.0f;
+    const float editorHeight = ImGui::GetContentRegionAvail().y - outputHeight - ImGui::GetTextLineHeight() * 2.0f;
+    ImGui::InputTextMultiline("##source", source_.data(), source_.size(), ImVec2(-1.0f, std::max(editorHeight, 120.0f)),
+                              ImGuiInputTextFlags_AllowTabInput);
+
+    ImGui::SeparatorText(assembleFailed_ ? "zasm: failed" : "zasm");
+    ImGui::BeginChild("output", ImVec2(0, outputHeight), ImGuiChildFlags_Borders);
+    if (assembleFailed_)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, kAsserted);
+    }
+    ImGui::TextUnformatted(assemblerOutput_.empty() ? "press Assemble" : assemblerOutput_.c_str());
+    if (assembleFailed_)
+    {
+        ImGui::PopStyleColor();
+    }
+    ImGui::EndChild();
+
+    ImGui::End();
+}
+
 void Monitor::frame(float seconds)
 {
     runFreely(seconds);
@@ -481,5 +819,7 @@ void Monitor::frame(float seconds)
     drawControls();
     drawPins();
     drawWaveform();
+    drawDisassembly();
+    drawEditor();
     drawMemory();
 }
