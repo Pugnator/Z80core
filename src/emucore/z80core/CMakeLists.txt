@@ -51,12 +51,33 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_compile_options(z80core_fuse_test PRIVATE -Wall -Wextra -Werror)
 endif()
 
+# Frank Cringle's exerciser. It runs a program rather than a case, which is
+# what makes it worth having alongside the other two - and it takes minutes
+# rather than seconds, which is why it is off unless asked for. See
+# tests/zex/README.md.
+add_executable(z80core_zex_test tests/zex_test.c)
+target_link_libraries(z80core_zex_test PRIVATE z80core)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(z80core_zex_test PRIVATE -Wall -Wextra -Werror)
+endif()
+
+option(Z80CORE_SLOW_TESTS "Register the exerciser suites, which take minutes" OFF)
+
 add_test(NAME cpu_core COMMAND z80core_test)
 add_test(NAME cpu_instructions COMMAND z80core_instruction_test)
 add_test(NAME cpu_conformance_fuse
          COMMAND z80core_fuse_test
                  "${CMAKE_SOURCE_DIR}/tests/fuse/tests.in"
                  "${CMAKE_SOURCE_DIR}/tests/fuse/tests.expected")
+
+if(Z80CORE_SLOW_TESTS)
+    add_test(NAME cpu_conformance_zexdoc
+             COMMAND z80core_zex_test "${CMAKE_SOURCE_DIR}/tests/zex/zexdoc.com")
+    add_test(NAME cpu_conformance_zexall
+             COMMAND z80core_zex_test "${CMAKE_SOURCE_DIR}/tests/zex/zexall.com")
+    set_tests_properties(cpu_conformance_zexdoc cpu_conformance_zexall PROPERTIES TIMEOUT 1800)
+endif()
 
 # A short run, purely to prove the benchmark still works. The number it prints
 # is for humans; nothing fails on being slow.
