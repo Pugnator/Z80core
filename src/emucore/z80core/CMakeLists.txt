@@ -18,12 +18,20 @@ target_link_libraries(z80bench PRIVATE z80core)
 add_executable(z80core_test tests/test_core.c)
 target_link_libraries(z80core_test PRIVATE z80core)
 
+# The engine and the instruction set are tested apart: one covers the clock,
+# the pins and the fetch, the other what the instructions do and how long they
+# take. A failure says which of the two is wrong without reading any output.
+add_executable(z80core_instruction_test tests/test_instructions.c)
+target_link_libraries(z80core_instruction_test PRIVATE z80core)
+
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_compile_options(z80bench PRIVATE -Wall -Wextra -Werror)
     target_compile_options(z80core_test PRIVATE -Wall -Wextra -Werror)
+    target_compile_options(z80core_instruction_test PRIVATE -Wall -Wextra -Werror)
 endif()
 
 add_test(NAME cpu_core COMMAND z80core_test)
+add_test(NAME cpu_instructions COMMAND z80core_instruction_test)
 
 # A short run, purely to prove the benchmark still works. The number it prints
 # is for humans; nothing fails on being slow.
