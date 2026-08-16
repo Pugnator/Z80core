@@ -136,6 +136,18 @@ static int run_one(z80_t *cpu, z80_pins_t *pins)
     return -1;
 }
 
+/**
+ * A prefixed instruction is two M1 cycles, so it crosses the boundary run_one
+ * measures between. Its cost is the pair of them added together, which is what
+ * the manual quotes.
+ */
+static int run_prefixed(z80_t *cpu, z80_pins_t *pins)
+{
+    const int prefix_tstates = run_one(cpu, pins);
+    const int body_tstates = run_one(cpu, pins);
+    return prefix_tstates + body_tstates;
+}
+
 static void run_many(z80_t *cpu, z80_pins_t *pins, int instructions)
 {
     for (int i = 0; i < instructions; ++i)
@@ -717,10 +729,192 @@ static void test_instruction_timing(void)
     }
 }
 
+/* ---------------------------------------------------------------- */
+/* The CB set                                                        */
+/* ---------------------------------------------------------------- */
+
+/**
+ * The CB shifts test their result, so S, Z and parity all move - which is what
+ * separates them from RLCA and friends, whose opcodes do nearly the same work
+ * and leave those three alone.
+ */
+static void test_cb_shifts(void)
+{
+    static const struct
+    {
+        const char *name;
+        uint8_t opcode;
+        uint8_t before;
+        uint8_t expect;
+        uint8_t expect_f;
+    } cases[] = {
+        {"RLC B", 0x00, 0x85, 0x0B, 0x09},
+        {"RRC B", 0x08, 0x01, 0x80, 0x81},
+        {"SLA B", 0x20, 0x80, 0x00, 0x45},
+        {"SRA B keeps the sign", 0x28, 0x80, 0xC0, 0x84},
+        {"SRL B", 0x38, 0x01, 0x00, 0x45},
+        /* SLL is undocumented: shift left, and a 1 comes in at the bottom */
+        {"SLL B", 0x30, 0x00, 0x01, 0x00},
+    };
+
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; ++i)
+    {
+        const uint8_t program[] = {0xCB, cases[i].opcode};
+        z80_t *cpu = boot(program, sizeof program);
+        z80_pins_t pins = {0};
+
+        z80_set(cpu, Z80_REG_AF, 0x0000);
+        z80_set(cpu, Z80_REG_BC, (uint16_t)((uint16_t)cases[i].before << 8));
+
+        const int tstates = run_prefixed(cpu, &pins);
+        const uint8_t got = (uint8_t)(z80_get(cpu, Z80_REG_BC) >> 8);
+
+        CHECK(8 == tstates, "%s should take 8 T-states, took %d", cases[i].name, tstates);
+        CHECK(cases[i].expect == got, "%s: B should be %02X, is %02X", cases[i].name, cases[i].expect, got);
+        CHECK(cases[i].expect_f == reg_f(cpu), "%s: F should be %02X, is %02X", cases[i].name, cases[i].expect_f,
+              reg_f(cpu));
+
+        z80_free(cpu);
+    }
+}
+
+/** BIT reports in Z and in P/V together, and takes X and Y from the operand. */
+static void test_cb_bit(void)
+{
+    static const struct
+    {
+        const char *name;
+        uint8_t opcode;
+        uint8_t before;
+        uint8_t expect_f;
+    } cases[] = {
+        {"BIT 7,B set", 0x78, 0x80, 0x90},
+        {"BIT 7,B clear", 0x78, 0x00, 0x54},
+        {"BIT 3,B set", 0x58, 0x28, 0x38},
+        /* FE has bits 3 and 5 set, so X and Y come through from the operand */
+        {"BIT 0,B clear", 0x40, 0xFE, 0x7C},
+    };
+
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; ++i)
+    {
+        const uint8_t program[] = {0xCB, cases[i].opcode};
+        z80_t *cpu = boot(program, sizeof program);
+        z80_pins_t pins = {0};
+
+        z80_set(cpu, Z80_REG_AF, 0x0000);
+        z80_set(cpu, Z80_REG_BC, (uint16_t)((uint16_t)cases[i].before << 8));
+        (void)run_prefixed(cpu, &pins);
+
+        CHECK(cases[i].expect_f == reg_f(cpu), "%s: F should be %02X, is %02X", cases[i].name, cases[i].expect_f,
+              reg_f(cpu));
+        CHECK(cases[i].before == (z80_get(cpu, Z80_REG_BC) >> 8), "%s must not change the operand", cases[i].name);
+
+        z80_free(cpu);
+    }
+}
+
+static void test_cb_set_and_res(void)
+{
+    static const uint8_t program[] = {
+        0xCB, 0x80, /* RES 0,B */
+        0xCB, 0xF8  /* SET 7,B */
+    };
+
+    z80_t *cpu = boot(program, sizeof program);
+    z80_pins_t pins = {0};
+
+    z80_set(cpu, Z80_REG_AF, 0x00FF); /* every flag set, and none may move */
+    z80_set(cpu, Z80_REG_BC, 0x0700);
+
+    (void)run_prefixed(cpu, &pins);
+    CHECK(0x06 == (z80_get(cpu, Z80_REG_BC) >> 8), "RES 0,B gave %02X", (unsigned)(z80_get(cpu, Z80_REG_BC) >> 8));
+
+    (void)run_prefixed(cpu, &pins);
+    CHECK(0x86 == (z80_get(cpu, Z80_REG_BC) >> 8), "SET 7,B gave %02X", (unsigned)(z80_get(cpu, Z80_REG_BC) >> 8));
+    CHECK(0xFF == reg_f(cpu), "RES and SET must not touch the flags, F is %02X", reg_f(cpu));
+
+    z80_free(cpu);
+}
+
+/**
+ * The memory forms read, modify and write - except BIT, which never writes and
+ * is three T-states shorter for it.
+ */
+static void test_cb_memory(void)
+{
+    static const struct
+    {
+        const char *name;
+        uint8_t opcode;
+        uint8_t before;
+        uint8_t expect;
+        int expect_t;
+    } cases[] = {
+        {"RLC (HL)", 0x06, 0x85, 0x0B, 15},
+        {"SET 0,(HL)", 0xC6, 0x00, 0x01, 15},
+        {"RES 7,(HL)", 0xBE, 0xFF, 0x7F, 15},
+        {"BIT 0,(HL)", 0x46, 0x01, 0x01, 12},
+    };
+
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; ++i)
+    {
+        const uint8_t program[] = {0xCB, cases[i].opcode};
+        z80_t *cpu = boot(program, sizeof program);
+        z80_pins_t pins = {0};
+
+        world.memory[0x4000] = cases[i].before;
+        z80_set(cpu, Z80_REG_HL, 0x4000);
+
+        const int tstates = run_prefixed(cpu, &pins);
+
+        CHECK(cases[i].expect_t == tstates, "%s should take %d T-states, took %d", cases[i].name, cases[i].expect_t,
+              tstates);
+        CHECK(cases[i].expect == world.memory[0x4000], "%s left %02X in memory, should be %02X", cases[i].name,
+              world.memory[0x4000], cases[i].expect);
+
+        z80_free(cpu);
+    }
+}
+
+/** A prefix costs a whole M1 cycle, so R is incremented twice, not once. */
+static void test_prefix_increments_refresh_twice(void)
+{
+    static const uint8_t program[] = {0xCB, 0x00}; /* RLC B */
+
+    z80_t *cpu = boot(program, sizeof program);
+    z80_pins_t pins = {0};
+
+    z80_set(cpu, Z80_REG_IR, 0x0000);
+    (void)run_prefixed(cpu, &pins);
+
+    CHECK(2 == (z80_get(cpu, Z80_REG_IR) & 0xFFu), "R should have reached 2, is %02X",
+          (unsigned)(z80_get(cpu, Z80_REG_IR) & 0xFFu));
+    CHECK(0x0002 == z80_get(cpu, Z80_REG_PC), "PC should be past both bytes, is %04X", z80_get(cpu, Z80_REG_PC));
+
+    z80_free(cpu);
+}
+
+static void test_every_cb_opcode_is_implemented(void)
+{
+    for (unsigned opcode = 0; opcode < 0x100u; ++opcode)
+    {
+        const uint8_t program[] = {0xCB, (uint8_t)opcode};
+        z80_t *cpu = boot(program, sizeof program);
+        z80_pins_t pins = {0};
+
+        z80_set(cpu, Z80_REG_HL, 0x4000);
+        (void)run_prefixed(cpu, &pins);
+
+        CHECK(0 == z80_unimplemented(cpu), "CB %02X is not implemented", opcode);
+
+        z80_free(cpu);
+    }
+}
+
 /** Nothing in the unprefixed set should reach the unimplemented counter. */
 static void test_every_unprefixed_opcode_is_implemented(void)
 {
-    static const uint8_t prefixes[] = {0xCB, 0xDD, 0xED, 0xFD};
+    static const uint8_t prefixes[] = {0xDD, 0xED, 0xFD};
 
     for (unsigned opcode = 0; opcode < 0x100u; ++opcode)
     {
@@ -844,6 +1038,12 @@ int main(void)
     test_io_ports();
     test_iorq_is_distinct_from_mreq();
     test_instruction_timing();
+    test_cb_shifts();
+    test_cb_bit();
+    test_cb_set_and_res();
+    test_cb_memory();
+    test_prefix_increments_refresh_twice();
+    test_every_cb_opcode_is_implemented();
     test_every_unprefixed_opcode_is_implemented();
     test_snapshot_mid_instruction();
 

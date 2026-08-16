@@ -33,7 +33,7 @@
 
 /** Snapshot format, so a stale file is refused rather than misread. */
 #define Z80_SNAPSHOT_MAGIC 0x5A383043u /* "Z80C" */
-#define Z80_SNAPSHOT_VERSION 2u
+#define Z80_SNAPSHOT_VERSION 3u
 
 /** Outputs the core drives; the rest of ctrl belongs to the host. */
 #define Z80_OUTPUT_PINS (Z80_M1 | Z80_MREQ | Z80_IORQ | Z80_RD | Z80_WR | Z80_RFSH | Z80_HALT | Z80_BUSAK)
@@ -84,6 +84,7 @@ struct z80_t
     const struct z80_seq *seq; /**< machine cycle being executed */
     uint8_t step;              /**< cursor into it */
     uint8_t opcode;            /**< what the last fetch latched */
+    uint8_t prefix;            /**< the prefix byte in force, or 0 */
     uint8_t clk;               /**< the level the core last advanced to */
 
     /* the instruction in progress, and the bus cycle it is running */
@@ -619,6 +620,93 @@ static void alu_daa(z80_t *cpu)
     }
 
     cpu->af.byte.high = result;
+    cpu->af.byte.low = flags;
+}
+
+/**
+ * The eight CB shifts and rotates. Unlike the accumulator rotates these test
+ * the result, so S, Z and parity all move.
+ *
+ * Index 6 is SLL, which Zilog never documented: it shifts left and puts a 1 in
+ * at the bottom. It sits in the middle of an otherwise regular block, so
+ * leaving it out would cost more code than putting it in.
+ */
+static uint8_t alu_shift(z80_t *cpu, uint8_t which, uint8_t value)
+{
+    const uint8_t carry_in = (uint8_t)((cpu->af.byte.low & Z80_FLAG_C) ? 1u : 0u);
+    uint8_t result = 0u;
+    bool carry_out = false;
+
+    switch (which & 7u)
+    {
+    case 0: /* RLC */
+        result = (uint8_t)((value << 1) | (value >> 7));
+        carry_out = 0u != (value & 0x80u);
+        break;
+    case 1: /* RRC */
+        result = (uint8_t)((value >> 1) | (value << 7));
+        carry_out = 0u != (value & 0x01u);
+        break;
+    case 2: /* RL */
+        result = (uint8_t)((value << 1) | carry_in);
+        carry_out = 0u != (value & 0x80u);
+        break;
+    case 3: /* RR */
+        result = (uint8_t)((value >> 1) | (carry_in ? 0x80u : 0u));
+        carry_out = 0u != (value & 0x01u);
+        break;
+    case 4: /* SLA */
+        result = (uint8_t)(value << 1);
+        carry_out = 0u != (value & 0x80u);
+        break;
+    case 5: /* SRA - arithmetic, so the sign bit is kept */
+        result = (uint8_t)((value >> 1) | (value & 0x80u));
+        carry_out = 0u != (value & 0x01u);
+        break;
+    case 6: /* SLL */
+        result = (uint8_t)((value << 1) | 1u);
+        carry_out = 0u != (value & 0x80u);
+        break;
+    default: /* SRL */
+        result = (uint8_t)(value >> 1);
+        carry_out = 0u != (value & 0x01u);
+        break;
+    }
+
+    uint8_t flags = flags_sz_xy(result);
+    if (parity_even(result))
+    {
+        flags |= Z80_FLAG_PV;
+    }
+    if (carry_out)
+    {
+        flags |= Z80_FLAG_C;
+    }
+
+    cpu->af.byte.low = flags;
+    return result;
+}
+
+/**
+ * BIT tests one bit and reports it in Z, and in P/V as well - the only place
+ * those two always agree. S follows only when bit 7 is the one tested.
+ *
+ * X and Y come from @p undocumented, which is the operand for the register
+ * forms and the high half of WZ when the operand was memory. The result is not
+ * kept, so there is nothing else for them to copy.
+ */
+static void alu_bit(z80_t *cpu, uint8_t bit, uint8_t value, uint8_t undocumented)
+{
+    const uint8_t masked = (uint8_t)(value & (uint8_t)(1u << (bit & 7u)));
+
+    uint8_t flags = (uint8_t)((cpu->af.byte.low & Z80_FLAG_C) | Z80_FLAG_H);
+    flags |= (uint8_t)(masked & Z80_FLAG_S);
+    if (0u == masked)
+    {
+        flags |= (uint8_t)(Z80_FLAG_Z | Z80_FLAG_PV);
+    }
+    flags |= (uint8_t)(undocumented & Z80_FLAG_XY);
+
     cpu->af.byte.low = flags;
 }
 
@@ -1307,6 +1395,74 @@ static void execute_in_a(z80_t *cpu, z80_pins_t *pins)
     cpu->wz.word = (uint16_t)(cpu->bus_addr + 1u);
 }
 
+/* the CB set: shifts, rotates and single-bit work */
+
+static void execute_cb_reg(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    const uint8_t group = (uint8_t)(cpu->opcode >> 6);
+    const uint8_t bit = (uint8_t)((cpu->opcode >> 3) & 7u);
+    uint8_t *slot = register_slot(cpu, cpu->opcode);
+
+    if (!slot)
+    {
+        return;
+    }
+
+    switch (group)
+    {
+    case 0:
+        *slot = alu_shift(cpu, bit, *slot);
+        break;
+    case 1:
+        alu_bit(cpu, bit, *slot, *slot);
+        break;
+    case 2:
+        *slot = (uint8_t)(*slot & ~(uint8_t)(1u << bit));
+        break;
+    default:
+        *slot = (uint8_t)(*slot | (uint8_t)(1u << bit));
+        break;
+    }
+}
+
+/** The read-modify-write forms change the byte between the two bus cycles. */
+static void exit_cb_bus(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    const uint8_t group = (uint8_t)(cpu->opcode >> 6);
+    const uint8_t bit = (uint8_t)((cpu->opcode >> 3) & 7u);
+
+    switch (group)
+    {
+    case 0:
+        cpu->bus_data = alu_shift(cpu, bit, cpu->bus_data);
+        break;
+    case 2:
+        cpu->bus_data = (uint8_t)(cpu->bus_data & ~(uint8_t)(1u << bit));
+        break;
+    default:
+        cpu->bus_data = (uint8_t)(cpu->bus_data | (uint8_t)(1u << bit));
+        break;
+    }
+}
+
+static void execute_cb_bit_memory(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    alu_bit(cpu, (uint8_t)((cpu->opcode >> 3) & 7u), cpu->bus_data, cpu->wz.byte.high);
+}
+
+/**
+ * A prefix is a whole M1 cycle that decodes nothing: it costs four T-states,
+ * increments R a second time, and tells the next fetch which table to use.
+ */
+static void execute_prefix(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    cpu->prefix = cpu->opcode;
+}
+
 /** An opcode the core does not implement yet: costs its fetch, does nothing. */
 static void execute_unimplemented(z80_t *cpu, z80_pins_t *pins)
 {
@@ -1344,6 +1500,16 @@ static const z80_instr instr_jp_hl = {NO_CYCLES, 0u, execute_jump_hl};
 static const z80_instr instr_di = {NO_CYCLES, 0u, execute_di};
 static const z80_instr instr_ei = {NO_CYCLES, 0u, execute_ei};
 static const z80_instr instr_unimplemented = {NO_CYCLES, 0u, execute_unimplemented};
+static const z80_instr instr_prefix = {NO_CYCLES, 0u, execute_prefix};
+static const z80_instr instr_cb_reg = {NO_CYCLES, 0u, execute_cb_reg};
+
+/* CB with a memory operand: 15 T-states, of which the read is given four */
+static const z80_instr instr_cb_mem = {
+    {{&mem_read_seq, at_hl, exit_cb_bus}, {&idle1_seq, NULL, NULL}, {&mem_write_seq, at_hl, NULL}}, 3u, NULL};
+
+/* BIT reads and tests but never writes back, so it is three T-states shorter */
+static const z80_instr instr_cb_bit_mem = {
+    {{&mem_read_seq, at_hl, NULL}, {&idle1_seq, NULL, NULL}}, 2u, execute_cb_bit_memory};
 
 /* 8-bit loads */
 static const z80_instr instr_ld_reg_immediate = {{{&mem_read_seq, at_pc, NULL}}, 1u, execute_ld_reg_from_bus};
@@ -1481,13 +1647,27 @@ static const z80_instr instr_out_n_a = {
     {{&mem_read_seq, at_pc, exit_to_tmp_low}, {&io_write_seq, enter_io_write, NULL}}, 2u, execute_store_a_memptr};
 
 /**
+ * The CB table is the regular one: bits 7-6 pick the group, and within each
+ * group bits 2-0 pick the operand exactly as they do unprefixed. Only whether
+ * the operand is (HL), and whether the group writes back, changes the timing.
+ */
+static const z80_instr *decode_cb(const z80_t *cpu)
+{
+    if (6u != (cpu->opcode & 7u))
+    {
+        return &instr_cb_reg;
+    }
+    return (1u == (cpu->opcode >> 6)) ? &instr_cb_bit_mem : &instr_cb_mem;
+}
+
+/**
  * @brief Pick what runs after a fetch.
  *
  * The opcode's bit fields do the work, as they do on the real part. The names
  * are the conventional ones: x is bits 7-6, y bits 5-3, z bits 2-0, and y
  * splits again into p (bits 5-4) and q (bit 3).
  */
-static const z80_instr *decode(const z80_t *cpu)
+static const z80_instr *decode_base(const z80_t *cpu)
 {
     const uint8_t opcode = cpu->opcode;
     const uint8_t x = (uint8_t)(opcode >> 6);
@@ -1626,7 +1806,7 @@ static const z80_instr *decode(const z80_t *cpu)
             case 7:
                 return &instr_ei;
             default:
-                return &instr_unimplemented; /* CB prefix, Phase 3 continued */
+                return &instr_prefix; /* CB */
             }
         case 4:
             return &instr_call_cc;
@@ -1646,6 +1826,16 @@ static const z80_instr *decode(const z80_t *cpu)
             return &instr_rst;
         }
     }
+}
+
+/** Which table the byte just fetched should be read against. */
+static const z80_instr *decode(const z80_t *cpu)
+{
+    if (0xCBu == cpu->prefix)
+    {
+        return decode_cb(cpu);
+    }
+    return decode_base(cpu);
 }
 
 /* ---------------------------------------------------------------- */
@@ -1756,6 +1946,11 @@ static uint32_t advance(z80_t *cpu, z80_pins_t *pins)
             if (cpu->instr && cpu->instr->execute)
             {
                 cpu->instr->execute(cpu, pins);
+            }
+            /* A prefix has just set this; anything else has finished with it. */
+            if (cpu->instr != &instr_prefix)
+            {
+                cpu->prefix = 0;
             }
             cpu->instr = NULL;
             cpu->seq = &m1_fetch_seq;
@@ -1944,6 +2139,7 @@ typedef struct
     uint8_t cycle;       /**< which of the instruction's cycles, when not fetching */
     uint8_t cycle_limit; /**< how many it will run; a condition may have lowered it */
     uint8_t opcode;
+    uint8_t prefix;
     uint8_t clk;
     uint16_t bus_addr;
     uint8_t bus_data;
@@ -1993,6 +2189,7 @@ size_t z80_save(const z80_t *cpu, void *buffer, size_t size)
     snapshot.cycle = cpu->cycle;
     snapshot.cycle_limit = cpu->cycle_limit;
     snapshot.opcode = cpu->opcode;
+    snapshot.prefix = cpu->prefix;
     snapshot.clk = cpu->clk;
     snapshot.bus_addr = cpu->bus_addr;
     snapshot.bus_data = cpu->bus_data;
@@ -2039,6 +2236,7 @@ bool z80_load(z80_t *cpu, const void *buffer, size_t size)
     cpu->iff2 = 0 != snapshot.iff2;
     cpu->halted = 0 != snapshot.halted;
     cpu->opcode = snapshot.opcode;
+    cpu->prefix = snapshot.prefix;
     cpu->clk = snapshot.clk;
     cpu->edges = snapshot.edges;
     cpu->unimplemented = snapshot.unimplemented;
