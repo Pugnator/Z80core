@@ -8,6 +8,18 @@ add_library(z80core STATIC z80core.c)
 
 target_include_directories(z80core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# The same core as a shared library, for hosts that load it at runtime instead
+# of linking it: the SingleStepTests harness drives it from Python through
+# ctypes, and it is what an embedder on any platform would load.
+add_library(z80core_shared SHARED z80core.c)
+set_target_properties(z80core_shared PROPERTIES OUTPUT_NAME z80core)
+target_include_directories(z80core_shared PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_compile_definitions(z80core_shared PRIVATE Z80CORE_SHARED Z80CORE_BUILD)
+
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(z80core_shared PRIVATE -Wall -Wextra -Werror)
+endif()
+
 if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_compile_options(z80core PRIVATE -Wall -Wextra -Werror)
 endif()

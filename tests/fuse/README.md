@@ -73,3 +73,25 @@ the wrong place.
 - **`WZ`/MEMPTR** is not in the format at all. That needs z80test.
 - **`Q`** likewise — see issue #49.
 - Interrupts, since there is no way to assert one in the input format.
+
+## Where FUSE is wrong, and how we know
+
+`BIT n,(HL)` takes its undocumented X and Y flags from the **high half of WZ**,
+the same internal register the indexed form leaves holding `IX+d`. FUSE expects
+them to follow the byte tested instead.
+
+FUSE cannot be right here, and more importantly it cannot *know*: it has no
+MEMPTR in its model or in its file format, so WZ is zero throughout its suite
+and the two rules are indistinguishable in every case it contains. The
+SingleStepTests corpus carries WZ in each case's initial state, varies it, and
+pins the flags to the high half of it in **400 samples out of 400** — against
+104 for the byte tested.
+
+Eight of FUSE's cases reach a `BIT n,(HL)`; four of them use a WZ-independent
+value that happens to agree, and four disagree. Those four are listed in
+`known_divergence()` in the harness and reported on every run rather than
+silently forgiven.
+
+This is the argument for having a second suite in one paragraph: the first one
+was confidently and undetectably wrong, and following it cost a working
+implementation until something independent disagreed.

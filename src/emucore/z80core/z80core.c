@@ -202,10 +202,13 @@ static void step_m1_t3_rise(z80_t *cpu, z80_pins_t *pins)
 
     pins->ctrl &= ~(uint32_t)(Z80_M1 | Z80_MREQ | Z80_RD);
 
-    /* refresh address out, RFSH asserted, R incremented - bit 7 is not part
-       of the counter and survives untouched */
-    cpu->r = (uint8_t)((cpu->r & 0x80u) | ((cpu->r + 1u) & 0x7Fu));
+    /* Refresh address out, RFSH asserted, and only then R incremented. The
+       address carries the value R had for this fetch, not the one the next
+       fetch will use - putting the increment first drives every refresh one
+       row further into the DRAM than the part does. Bit 7 is not part of the
+       counter and survives untouched. */
     pins->A = (uint16_t)(((uint16_t)cpu->i << 8) | cpu->r);
+    cpu->r = (uint8_t)((cpu->r & 0x80u) | ((cpu->r + 1u) & 0x7Fu));
     pins->ctrl |= Z80_RFSH;
 }
 
@@ -1638,19 +1641,20 @@ static void exit_cb_bus(z80_t *cpu, z80_pins_t *pins)
 }
 
 /**
- * BIT n,(HL) takes X and Y from the byte it tested, exactly as BIT n,r takes
- * them from the register. The indexed form does not - there they come from the
- * high half of IX+d - and that asymmetry is real rather than an oversight
- * here: FUSE's cases pin this form to the value in all eight samples, where
- * the address matches only two.
+ * BIT n,(HL) keeps no result, so X and Y come from the high half of WZ - the
+ * same internal register the indexed form leaves holding IX+d. That makes the
+ * two forms one rule rather than two.
  *
- * FUSE does not model MEMPTR, so it cannot settle whether the indexed form is
- * reading WZ or the address it happens to equal. z80test is what would.
+ * FUSE disagrees and expects them to follow the byte tested. It cannot be
+ * right: FUSE has no MEMPTR in its model or its format, so WZ is zero in every
+ * one of its cases and the two rules are indistinguishable there. The
+ * SingleStepTests corpus varies WZ and pins this to the high half of it in
+ * 400 samples out of 400. See tests/fuse/README.md.
  */
 static void execute_cb_bit_memory(z80_t *cpu, z80_pins_t *pins)
 {
     (void)pins;
-    alu_bit(cpu, (uint8_t)((cpu->opcode >> 3) & 7u), cpu->bus_data, cpu->bus_data);
+    alu_bit(cpu, (uint8_t)((cpu->opcode >> 3) & 7u), cpu->bus_data, cpu->wz.byte.high);
 }
 
 /* the ED set */

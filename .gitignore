@@ -60,3 +60,6 @@ docs/*.pdf
 
 # Dear ImGui window layout, written by z80mon at runtime
 imgui.ini
+
+# SingleStepTests corpus: ~280 MB, fetched on demand by tests/singlestep/run.py
+tests/singlestep/data/
