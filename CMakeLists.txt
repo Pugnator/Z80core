@@ -16,6 +16,14 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
+# MinGW names a DLL libfoo.dll, which is a Unix habit that nothing on Windows
+# expects: LoadLibrary, ctypes and Proteus all want foo.dll. Only the DLL is
+# renamed - the import library keeps its lib prefix, because that is what the
+# linker searches for when a target asks for -lfoo.
+if(WIN32)
+    set(CMAKE_SHARED_LIBRARY_PREFIX "")
+endif()
+
 find_package(BISON REQUIRED)
 find_package(FLEX REQUIRED)
 

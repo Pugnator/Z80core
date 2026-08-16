@@ -11,6 +11,13 @@ target_include_directories(z80core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 # The same core as a shared library, for hosts that load it at runtime instead
 # of linking it: the SingleStepTests harness drives it from Python through
 # ctypes, and it is what an embedder on any platform would load.
+# Which word size this configure is producing. The core is meant to be built
+# both ways - Proteus and openvsm are 32-bit, everything else here is 64 - and
+# the two come from separate toolchains rather than a flag, so it is worth
+# saying out loud which one is in front of you.
+math(EXPR Z80CORE_BITS "${CMAKE_SIZEOF_VOID_P} * 8")
+message(STATUS "z80core: building ${Z80CORE_BITS}-bit (${CMAKE_C_COMPILER_ID})")
+
 add_library(z80core_shared SHARED z80core.c)
 set_target_properties(z80core_shared PROPERTIES OUTPUT_NAME z80core)
 target_include_directories(z80core_shared PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)

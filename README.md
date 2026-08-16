@@ -42,6 +42,29 @@ cmake --build --preset tools
 
 `--preset debug` builds the same targets with symbols.
 
+### The core in both word sizes
+
+Proteus and `openvsm` are 32-bit; everything else here is 64. The core is meant
+to be usable from both, and on Windows the two come from separate toolchains
+rather than a compiler flag — the 64-bit MinGW gcc has no `-m32`. So it is two
+configures, each run from the matching MSYS2 shell:
+
+```sh
+# from an MSYS2 UCRT64 (or MINGW64) shell
+cmake --preset core64 && cmake --build --preset core64
+
+# from an MSYS2 MINGW32 shell
+cmake --preset core32 && cmake --build --preset core32
+```
+
+Each writes `z80core.dll` to `build/core64/bin` and `build/core32/bin`. The name
+is deliberately the same in both: `require("z80core")` and `LoadLibrary` want
+that file name, so the word size is carried by the directory rather than by
+mangling the name.
+
+Configure prints which one it is — `z80core: building 32-bit` — because nothing
+else about the command line says so.
+
 **Use the presets, or pass `-G Ninja` yourself.** A bare `cmake -B build`
 picks whatever generator CMake defaults to, which on a machine with Visual
 Studio installed is MSVC — and `zasm` does not build with MSVC, because it

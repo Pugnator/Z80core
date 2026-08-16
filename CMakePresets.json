@@ -45,6 +45,26 @@
         "CMAKE_BUILD_TYPE": "Release",
         "BUILD_Z80MON": "ON"
       }
+    },
+    {
+      "name": "core32",
+      "inherits": "base",
+      "displayName": "Core only, 32-bit",
+      "description": "The CPU core as a 32-bit DLL, for Proteus and openvsm. Run from an MSYS2 MINGW32 shell, or point CMAKE_C_COMPILER at an i686 toolchain.",
+      "binaryDir": "${sourceDir}/build/core32",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "core64",
+      "inherits": "base",
+      "displayName": "Core only, 64-bit",
+      "description": "The same core as a 64-bit DLL. Run from an MSYS2 UCRT64 or MINGW64 shell.",
+      "binaryDir": "${sourceDir}/build/core64",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
     }
   ],
   "buildPresets": [
@@ -59,6 +79,20 @@
     {
       "name": "tools",
       "configurePreset": "tools"
+    },
+    {
+      "name": "core32",
+      "configurePreset": "core32",
+      "targets": [
+        "z80core_shared"
+      ]
+    },
+    {
+      "name": "core64",
+      "configurePreset": "core64",
+      "targets": [
+        "z80core_shared"
+      ]
     }
   ],
   "testPresets": [
