@@ -122,4 +122,5 @@ for contributors and third-party code.
 - [ ] Macro assembler/disassembler
 - [ ] Cycle-accurate emulator (in progress: [spec](docs/CPU-CORE-SPEC.md), [phase 0](docs/PHASE0.md))
 - [ ] OpenVSM support (the core reaches Proteus through an openvsm device script)
-- [ ] Lua to Forth translator
+- [ ] A language above assembly — macro layer, then Forth or a C subset
+      ([the argument](docs/SDK-LANGUAGE.md))
