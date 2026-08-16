@@ -80,6 +80,40 @@ typedef struct
 
 typedef struct z80_t z80_t;
 
+/** Register pairs, for the debug interface. */
+typedef enum
+{
+    Z80_REG_AF,
+    Z80_REG_BC,
+    Z80_REG_DE,
+    Z80_REG_HL,
+    Z80_REG_AF_ALT, /**< AF' */
+    Z80_REG_BC_ALT,
+    Z80_REG_DE_ALT,
+    Z80_REG_HL_ALT,
+    Z80_REG_IX,
+    Z80_REG_IY,
+    Z80_REG_SP,
+    Z80_REG_PC,
+    Z80_REG_WZ, /**< the internal pointer, MEMPTR */
+    Z80_REG_IR, /**< I in the high byte, R in the low */
+    Z80_REG_COUNT
+} z80_reg;
+
+/** The whole machine, for a debugger or a register view. */
+typedef struct
+{
+    uint16_t af, bc, de, hl;
+    uint16_t af_alt, bc_alt, de_alt, hl_alt;
+    uint16_t ix, iy, sp, pc, wz;
+    uint8_t i, r;
+    uint8_t im;     /**< interrupt mode, 0..2 */
+    bool iff1;      /**< interrupts enabled */
+    bool iff2;      /**< the copy NMI keeps */
+    bool halted;    /**< executing NOPs at the halt address */
+    uint64_t edges; /**< clock edges since reset */
+} z80_state_t;
+
 Z80_API const char *z80_version(void);
 
 Z80_API z80_t *z80_new(void);
@@ -112,6 +146,41 @@ Z80_API uint64_t z80_run(z80_t *cpu, z80_pins_t *pins, uint64_t edges);
 
 /** Total edges advanced since construction or reset. */
 Z80_API uint64_t z80_edges(const z80_t *cpu);
+
+/**
+ * @brief How many opcodes have been fetched that the core cannot execute yet.
+ *
+ * The instruction set arrives over several phases; until it is complete, an
+ * unimplemented opcode costs its fetch and does nothing else. This counter
+ * exists so that is visible rather than silent.
+ */
+Z80_API uint64_t z80_unimplemented(const z80_t *cpu);
+
+/* --- debug interface: off the hot path, and allowed to be slow --- */
+
+Z80_API uint16_t z80_get(const z80_t *cpu, z80_reg which);
+Z80_API void z80_set(z80_t *cpu, z80_reg which, uint16_t value);
+Z80_API void z80_state(const z80_t *cpu, z80_state_t *out);
+/** Name of a register pair, for a debugger's own labels. */
+Z80_API const char *z80_reg_name(z80_reg which);
+
+/* --- snapshots --- */
+
+/** Bytes z80_save() needs. A snapshot is a fixed size. */
+Z80_API size_t z80_snapshot_size(void);
+
+/**
+ * @brief Capture the machine, mid-instruction included.
+ *
+ * The step cursor and the clock phase are part of it, so a restore continues
+ * from between two edges rather than only between instructions.
+ *
+ * @return Bytes written, or 0 if the buffer is too small.
+ */
+Z80_API size_t z80_save(const z80_t *cpu, void *buffer, size_t size);
+
+/** Restore what z80_save() captured. False if the data is not a snapshot. */
+Z80_API bool z80_load(z80_t *cpu, const void *buffer, size_t size);
 
 #ifdef __cplusplus
 }
