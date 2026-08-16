@@ -12,14 +12,15 @@
  * A host advances it one clock edge at a time and answers its bus requests
  * through the pin structure. See docs/CPU-CORE-SPEC.md.
  *
- * PHASE 0: this is a walking skeleton. The step engine, the pin handling and
- * the API are real; the instruction set is not here yet, and the steps below
- * replay a fixed M1 fetch so the interface can be exercised and measured.
+ * The engine, the pins and this interface are complete. The instruction set is
+ * filling in: what is not implemented yet costs its fetch and is counted by
+ * z80_unimplemented(), so a gap is visible rather than silent.
  */
 
 #pragma once
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus

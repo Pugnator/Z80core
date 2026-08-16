@@ -13,9 +13,10 @@
  * and selects what runs next. Adding an instruction means writing its steps
  * and pointing the decoder at them - the engine itself never grows.
  *
- * PHASE 1: the register file, the fetch and the decode are real. The
- * instruction set is not: NOP and HALT execute, and anything else costs its
- * fetch and increments a counter (z80_unimplemented) so the gap is visible.
+ * PHASE 2: the fetch, the memory read and write cycles and WAIT are real, and
+ * an instruction is a list of machine cycles with an effect at the end. The
+ * instruction set is filling in from there; what is missing costs its fetch
+ * and increments a counter (z80_unimplemented) so the gap is visible.
  */
 
 #include "z80core.h"
@@ -23,7 +24,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define Z80CORE_VERSION "0.2.0-phase1"
+#define Z80CORE_VERSION "0.3.0-phase2"
 
 /** Snapshot format, so a stale file is refused rather than misread. */
 #define Z80_SNAPSHOT_MAGIC 0x5A383043u /* "Z80C" */
@@ -60,10 +61,17 @@ struct z80_t
     bool halted;
 
     /* the engine */
-    const struct z80_seq *seq; /**< sequence being executed */
+    const struct z80_seq *seq; /**< machine cycle being executed */
     uint8_t step;              /**< cursor into it */
     uint8_t opcode;            /**< what the last fetch latched */
     uint8_t clk;               /**< the level the core last advanced to */
+
+    /* the instruction in progress, and the bus cycle it is running */
+    const struct z80_instr *instr;
+    uint8_t cycle;     /**< which of the instruction's cycles */
+    uint16_t bus_addr; /**< address the current read or write uses */
+    uint8_t bus_data;  /**< byte read, or byte to write */
+
     uint64_t edges;
     uint64_t unimplemented;
 };
@@ -74,12 +82,37 @@ struct z80_t
  */
 typedef void (*z80_step_fn)(z80_t *cpu, z80_pins_t *pins);
 
-/** A machine cycle, or a whole instruction, as a list of per-edge steps. */
+/** A machine cycle, as a list of per-edge steps. */
 typedef struct z80_seq
 {
+    /**
+     * Run when the cycle begins and ends. Neither consumes a clock edge: they
+     * are where an instruction says which address a generic read or write
+     * uses, and what to do with the byte afterwards. Doing that as a step
+     * instead would make every such cycle half a T-state too long.
+     */
+    z80_step_fn enter;
+    z80_step_fn exit;
     const z80_step_fn *steps;
     uint8_t count;
+    /**
+     * Index of the step that samples WAIT, or 0xFF for a cycle that cannot be
+     * stretched. On that edge, a host holding WAIT makes the core repeat the
+     * T-state instead of advancing - which is the whole of wait-state support.
+     */
+    uint8_t wait_step;
 } z80_seq;
+
+#define Z80_NO_WAIT 0xFFu
+
+/** What an instruction is: bus cycles after the fetch, then an effect. */
+typedef struct z80_instr
+{
+    const z80_seq *cycles[3];
+    uint8_t cycle_count;
+    /** Runs when the last cycle finishes; where the registers change. */
+    void (*execute)(z80_t *cpu, z80_pins_t *pins);
+} z80_instr;
 
 static const z80_seq m1_fetch_seq;
 
@@ -157,7 +190,62 @@ static const z80_step_fn m1_fetch_steps[] = {
     step_m1_t4_fall  /* T4 fall: MREQ and RFSH released              */
 };
 
-static const z80_seq m1_fetch_seq = {m1_fetch_steps, (uint8_t)(sizeof m1_fetch_steps / sizeof m1_fetch_steps[0])};
+/* WAIT is sampled on the falling edge of T2, which is step 3 */
+static const z80_seq m1_fetch_seq = {NULL, NULL, m1_fetch_steps,
+                                     (uint8_t)(sizeof m1_fetch_steps / sizeof m1_fetch_steps[0]), 3u};
+
+/* ---------------------------------------------------------------- */
+/* Memory cycles                                                     */
+/* ---------------------------------------------------------------- */
+
+static void step_addr_out(z80_t *cpu, z80_pins_t *pins)
+{
+    pins->A = cpu->bus_addr;
+}
+
+static void step_read_assert(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)cpu;
+    pins->ctrl |= Z80_MREQ | Z80_RD;
+}
+
+static void step_read_sample(z80_t *cpu, z80_pins_t *pins)
+{
+    cpu->bus_data = pins->D;
+}
+
+static void step_read_release(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)cpu;
+    pins->ctrl &= ~(uint32_t)(Z80_MREQ | Z80_RD);
+}
+
+static void step_write_assert_mreq(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)cpu;
+    pins->ctrl |= Z80_MREQ;
+}
+
+static void step_write_data_out(z80_t *cpu, z80_pins_t *pins)
+{
+    pins->D = cpu->bus_data;
+}
+
+/**
+ * WR falls half a cycle after the data appears, which is the ordering the
+ * A-Z80 table shows: T2 carries MREQ with the data on the bus, T3 adds WR.
+ */
+static void step_write_assert_wr(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)cpu;
+    pins->ctrl |= Z80_WR;
+}
+
+static void step_write_release(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)cpu;
+    pins->ctrl &= ~(uint32_t)(Z80_MREQ | Z80_WR);
+}
 
 /* ---------------------------------------------------------------- */
 /* Instructions                                                      */
@@ -175,36 +263,204 @@ static void step_halt(z80_t *cpu, z80_pins_t *pins)
 }
 
 static const z80_step_fn halt_steps[] = {step_halt};
-static const z80_seq halt_seq = {halt_steps, 1};
+static const z80_seq halt_seq = {NULL, NULL, halt_steps, 1u, Z80_NO_WAIT};
+
+/**
+ * The eight places the register field of an opcode can name. Index 6 is (HL),
+ * which is memory rather than a register: an instruction naming it does a bus
+ * cycle, which is why those forms cost more T-states.
+ */
+static uint8_t *register_slot(z80_t *cpu, uint8_t index)
+{
+    switch (index & 7u)
+    {
+    case 0:
+        return &cpu->bc.byte.high; /* B */
+    case 1:
+        return &cpu->bc.byte.low; /* C */
+    case 2:
+        return &cpu->de.byte.high; /* D */
+    case 3:
+        return &cpu->de.byte.low; /* E */
+    case 4:
+        return &cpu->hl.byte.high; /* H */
+    case 5:
+        return &cpu->hl.byte.low; /* L */
+    case 7:
+        return &cpu->af.byte.high; /* A */
+    default:
+        return NULL; /* 6 is (HL) */
+    }
+}
+
+/** LD r,r' - both halves of the opcode name a register. */
+static void execute_ld_reg_reg(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    const uint8_t *source = register_slot(cpu, cpu->opcode);
+    uint8_t *destination = register_slot(cpu, (uint8_t)(cpu->opcode >> 3));
+    if (source && destination)
+    {
+        *destination = *source;
+    }
+}
+
+/** LD r,n - the byte the read cycle collected. */
+static void execute_ld_reg_immediate(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    uint8_t *destination = register_slot(cpu, (uint8_t)(cpu->opcode >> 3));
+    if (destination)
+    {
+        *destination = cpu->bus_data;
+    }
+}
+
+/** LD r,(HL) - the read used HL as its address. */
+static void execute_ld_reg_from_hl(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    uint8_t *destination = register_slot(cpu, (uint8_t)(cpu->opcode >> 3));
+    if (destination)
+    {
+        *destination = cpu->bus_data;
+    }
+}
+
+/** JP nn - two reads brought the address in low byte first. */
+static void execute_jump(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    cpu->pc.word = cpu->wz.word;
+}
 
 /** An opcode the core does not implement yet: costs its fetch, does nothing. */
-static void step_unimplemented(z80_t *cpu, z80_pins_t *pins)
+static void execute_unimplemented(z80_t *cpu, z80_pins_t *pins)
 {
     (void)pins;
     ++cpu->unimplemented;
 }
 
-static const z80_step_fn unimplemented_steps[] = {step_unimplemented};
-static const z80_seq unimplemented_seq = {unimplemented_steps, 1};
+/*
+ * Preparing a bus cycle means saying where it goes. These run at the end of
+ * the cycle before, which is when the address is known.
+ */
+
+static void step_prepare_pc_read(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    cpu->bus_addr = cpu->pc.word;
+    cpu->pc.word = (uint16_t)(cpu->pc.word + 1u);
+}
+
+static void step_prepare_hl_access(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    cpu->bus_addr = cpu->hl.word;
+}
+
+static void step_store_low_byte(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    cpu->wz.byte.low = cpu->bus_data;
+}
+
+static void step_store_high_byte(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    cpu->wz.byte.high = cpu->bus_data;
+}
+
+static void step_write_from_register(z80_t *cpu, z80_pins_t *pins)
+{
+    (void)pins;
+    const uint8_t *source = register_slot(cpu, cpu->opcode);
+    cpu->bus_addr = cpu->hl.word;
+    cpu->bus_data = source ? *source : 0u;
+}
+
+/* The canonical cycles of spec 5.3, shared by every instruction that uses
+   them. What differs between instructions is the entry and exit hooks. */
+
+static const z80_step_fn mem_read_steps[] = {
+    step_addr_out,    /* T1 rise: address out       */
+    step_read_assert, /* T1 fall: MREQ, RD asserted */
+    step_nothing,     /* T2 rise                    */
+    step_nothing,     /* T2 fall: WAIT sampled here */
+    step_read_sample, /* T3 rise: the byte is taken */
+    step_read_release /* T3 fall: MREQ, RD released */
+};
+
+static const z80_step_fn mem_write_steps[] = {
+    step_addr_out,          /* T1 rise: address out                    */
+    step_write_assert_mreq, /* T1 fall: MREQ asserted                  */
+    step_write_data_out,    /* T2 rise: data on the bus                */
+    step_write_assert_wr,   /* T2 fall: WR asserted, WAIT sampled here */
+    step_nothing,           /* T3 rise                                 */
+    step_write_release      /* T3 fall: WR, MREQ released              */
+};
+
+static const z80_seq read_immediate_seq = {step_prepare_pc_read, NULL, mem_read_steps, 6u, 3u};
+static const z80_seq read_hl_seq = {step_prepare_hl_access, NULL, mem_read_steps, 6u, 3u};
+static const z80_seq read_low_seq = {step_prepare_pc_read, step_store_low_byte, mem_read_steps, 6u, 3u};
+static const z80_seq read_high_seq = {step_prepare_pc_read, step_store_high_byte, mem_read_steps, 6u, 3u};
+static const z80_seq write_hl_seq = {step_write_from_register, NULL, mem_write_steps, 6u, 3u};
+
+static const z80_instr instr_nop = {{NULL}, 0u, NULL};
+static const z80_instr instr_halt = {{&halt_seq}, 1u, NULL};
+static const z80_instr instr_ld_reg_reg = {{NULL}, 0u, execute_ld_reg_reg};
+static const z80_instr instr_ld_reg_immediate = {{&read_immediate_seq}, 1u, execute_ld_reg_immediate};
+static const z80_instr instr_ld_reg_from_hl = {{&read_hl_seq}, 1u, execute_ld_reg_from_hl};
+static const z80_instr instr_ld_hl_from_reg = {{&write_hl_seq}, 1u, NULL};
+static const z80_instr instr_jump = {{&read_low_seq, &read_high_seq}, 2u, execute_jump};
+static const z80_instr instr_unimplemented = {{NULL}, 0u, execute_unimplemented};
 
 /**
  * @brief Pick what runs after a fetch.
  *
- * Phase 1 knows two instructions. The shape is what matters: one lookup from
- * the latched opcode to a sequence, with the engine unchanged as the table
- * fills in.
+ * The opcode's bit fields do the work, as they do on the real part: bits 6-7
+ * select the group, 3-5 the destination, 0-2 the source.
  */
-static const z80_seq *decode(const z80_t *cpu)
+static const z80_instr *decode(const z80_t *cpu)
 {
-    switch (cpu->opcode)
+    const uint8_t opcode = cpu->opcode;
+
+    if (0x00u == opcode)
     {
-    case 0x00: /* NOP: the fetch was the whole instruction */
-        return NULL;
-    case 0x76: /* HALT */
-        return &halt_seq;
-    default:
-        return &unimplemented_seq;
+        return &instr_nop;
     }
+    if (0x76u == opcode)
+    {
+        return &instr_halt; /* the hole in the LD r,r' block */
+    }
+    if (0xC3u == opcode)
+    {
+        return &instr_jump;
+    }
+
+    /* 01 ddd sss : LD r,r' and the (HL) forms */
+    if (0x40u == (opcode & 0xC0u))
+    {
+        const uint8_t destination = (uint8_t)((opcode >> 3) & 7u);
+        const uint8_t source = (uint8_t)(opcode & 7u);
+        if (6u == source && 6u != destination)
+        {
+            return &instr_ld_reg_from_hl;
+        }
+        if (6u == destination)
+        {
+            return &instr_ld_hl_from_reg;
+        }
+        return &instr_ld_reg_reg;
+    }
+
+    /* 00 ddd 110 : LD r,n */
+    if (0x06u == (opcode & 0xC7u) && 6u != ((opcode >> 3) & 7u))
+    {
+        return &instr_ld_reg_immediate;
+    }
+
+    return &instr_unimplemented;
 }
 
 /* ---------------------------------------------------------------- */
@@ -260,17 +516,61 @@ static uint32_t advance(z80_t *cpu, z80_pins_t *pins)
     const uint8_t data_before = pins->D;
     const uint32_t ctrl_before = pins->ctrl;
 
-    cpu->seq->steps[cpu->step](cpu, pins);
+    const uint8_t executed = cpu->step;
+    cpu->seq->steps[executed](cpu, pins);
     ++cpu->edges;
+
+    /* A host holding WAIT at the sampling edge stretches the cycle: the core
+       repeats the T-state, holding every pin as it stands, and samples again
+       on the next falling edge. Stepping back one edge is exactly that, since
+       a T-state is two edges. */
+    if (executed == cpu->seq->wait_step && (pins->ctrl & Z80_WAIT))
+    {
+        --cpu->step;
+        return (pins->ctrl ^ ctrl_before) & Z80_OUTPUT_PINS;
+    }
+
     ++cpu->step;
 
     if (cpu->step >= cpu->seq->count)
     {
-        /* the sequence is finished: run the decoded instruction if the fetch
-           just ended, otherwise start the next fetch */
-        const z80_seq *next = (cpu->seq == &m1_fetch_seq) ? decode(cpu) : NULL;
-        cpu->seq = next ? next : &m1_fetch_seq;
+        if (cpu->seq->exit)
+        {
+            cpu->seq->exit(cpu, pins);
+        }
+
+        if (cpu->seq == &m1_fetch_seq)
+        {
+            /* the fetch just ended: start the instruction it decoded */
+            cpu->instr = decode(cpu);
+            cpu->cycle = 0;
+        }
+        else
+        {
+            ++cpu->cycle;
+        }
+
+        if (cpu->instr && cpu->cycle < cpu->instr->cycle_count)
+        {
+            cpu->seq = cpu->instr->cycles[cpu->cycle];
+        }
+        else
+        {
+            /* every cycle is done, so the instruction takes effect and the
+               next fetch begins */
+            if (cpu->instr && cpu->instr->execute)
+            {
+                cpu->instr->execute(cpu, pins);
+            }
+            cpu->instr = NULL;
+            cpu->seq = &m1_fetch_seq;
+        }
         cpu->step = 0;
+
+        if (cpu->seq->enter)
+        {
+            cpu->seq->enter(cpu, pins);
+        }
     }
 
     uint32_t changed = (pins->ctrl ^ ctrl_before) & Z80_OUTPUT_PINS;
@@ -452,8 +752,11 @@ typedef struct
 
     uint8_t in_fetch; /**< 1 while the M1 sequence is running */
     uint8_t step;
+    uint8_t cycle; /**< which of the instruction's cycles, when not fetching */
     uint8_t opcode;
     uint8_t clk;
+    uint16_t bus_addr;
+    uint8_t bus_data;
     uint64_t edges;
     uint64_t unimplemented;
 } z80_snapshot;
@@ -496,8 +799,11 @@ size_t z80_save(const z80_t *cpu, void *buffer, size_t size)
     snapshot.halted = cpu->halted ? 1u : 0u;
     snapshot.in_fetch = (cpu->seq == &m1_fetch_seq) ? 1u : 0u;
     snapshot.step = cpu->step;
+    snapshot.cycle = cpu->cycle;
     snapshot.opcode = cpu->opcode;
     snapshot.clk = cpu->clk;
+    snapshot.bus_addr = cpu->bus_addr;
+    snapshot.bus_data = cpu->bus_data;
     snapshot.edges = cpu->edges;
     snapshot.unimplemented = cpu->unimplemented;
 
@@ -544,16 +850,31 @@ bool z80_load(z80_t *cpu, const void *buffer, size_t size)
     cpu->edges = snapshot.edges;
     cpu->unimplemented = snapshot.unimplemented;
 
-    /* Restore where in the machine cycle it was. Anything that is not the
-       fetch is a decoded instruction, which is found from the opcode. */
+    cpu->bus_addr = snapshot.bus_addr;
+    cpu->bus_data = snapshot.bus_data;
+
+    /* Restore where in the instruction it was. The sequence is not stored as a
+       pointer - that would not survive a different build - but rebuilt from
+       the opcode and the cycle index, which describe the same position. */
     if (snapshot.in_fetch)
     {
+        cpu->instr = NULL;
+        cpu->cycle = 0;
         cpu->seq = &m1_fetch_seq;
     }
     else
     {
-        const z80_seq *decoded = decode(cpu);
-        cpu->seq = decoded ? decoded : &m1_fetch_seq;
+        cpu->instr = decode(cpu);
+        cpu->cycle = snapshot.cycle;
+        if (cpu->instr && cpu->cycle < cpu->instr->cycle_count)
+        {
+            cpu->seq = cpu->instr->cycles[cpu->cycle];
+        }
+        else
+        {
+            cpu->instr = NULL;
+            cpu->seq = &m1_fetch_seq;
+        }
     }
     cpu->step = (snapshot.step < cpu->seq->count) ? snapshot.step : 0u;
 

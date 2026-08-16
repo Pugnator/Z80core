@@ -17,6 +17,9 @@
 
 static int failures = 0;
 
+/* the pins the CPU drives, which must not move while WAIT is held */
+#define Z80_OUTPUTS_UNDER_TEST (Z80_M1 | Z80_MREQ | Z80_IORQ | Z80_RD | Z80_WR | Z80_RFSH)
+
 #define CHECK(condition, ...)                                                                                          \
     do                                                                                                                 \
     {                                                                                                                  \
@@ -208,7 +211,8 @@ static void test_halt_holds_pc_and_asserts_the_pin(void)
 /** An opcode with no implementation is counted, not silently ignored. */
 static void test_unimplemented_opcodes_are_counted(void)
 {
-    static const uint8_t program[] = {0x3E, 0x3E, 0x3E, 0x3E};
+    /* ADD A,B - arithmetic has not arrived yet */
+    static const uint8_t program[] = {0x80, 0x80, 0x80, 0x80};
     z80_t *cpu = z80_new();
 
     (void)run_program(cpu, program, sizeof program, 40);
@@ -216,6 +220,161 @@ static void test_unimplemented_opcodes_are_counted(void)
     CHECK(z80_unimplemented(cpu) > 0, "an unimplemented opcode was not counted");
 
     z80_free(cpu);
+}
+
+/** LD A,n: fetch plus a memory read, and the byte lands in A. */
+static void test_load_immediate(void)
+{
+    static const uint8_t program[] = {0x3E, 0x55, 0x06, 0x99}; /* LD A,55 ; LD B,99 */
+    z80_t *cpu = z80_new();
+
+    /* two instructions of 7 T-states: 28 edges */
+    (void)run_program(cpu, program, sizeof program, 28);
+
+    CHECK(0x55 == (z80_get(cpu, Z80_REG_AF) >> 8), "A should be 55, is %02X", z80_get(cpu, Z80_REG_AF) >> 8);
+    CHECK(0x99 == (z80_get(cpu, Z80_REG_BC) >> 8), "B should be 99, is %02X", z80_get(cpu, Z80_REG_BC) >> 8);
+    CHECK(4 == z80_get(cpu, Z80_REG_PC), "PC should be 4, is %04X", z80_get(cpu, Z80_REG_PC));
+    CHECK(0 == z80_unimplemented(cpu), "LD r,n was treated as unimplemented");
+
+    z80_free(cpu);
+}
+
+/** LD r,r' copies between registers and costs only its fetch. */
+static void test_load_register_to_register(void)
+{
+    static const uint8_t program[] = {0x78, 0x00}; /* LD A,B */
+    z80_t *cpu = z80_new();
+
+    z80_set(cpu, Z80_REG_BC, 0x4200); /* B = 0x42 */
+    (void)run_program(cpu, program, sizeof program, 8);
+
+    CHECK(0x42 == (z80_get(cpu, Z80_REG_AF) >> 8), "A should have taken B's 42, is %02X",
+          z80_get(cpu, Z80_REG_AF) >> 8);
+
+    z80_free(cpu);
+}
+
+/** LD A,(HL) reads memory at HL. */
+static void test_load_from_memory(void)
+{
+    static const uint8_t program[] = {0x7E, 0x00, 0x00, 0xAB}; /* LD A,(HL) with HL = 3 */
+    z80_t *cpu = z80_new();
+
+    z80_set(cpu, Z80_REG_HL, 3);
+    (void)run_program(cpu, program, sizeof program, 14);
+
+    CHECK(0xAB == (z80_get(cpu, Z80_REG_AF) >> 8), "A should be AB from memory, is %02X",
+          z80_get(cpu, Z80_REG_AF) >> 8);
+
+    z80_free(cpu);
+}
+
+/** LD (HL),r drives a write cycle the host can see and latch. */
+static void test_store_to_memory(void)
+{
+    static const uint8_t program[] = {0x77, 0x00, 0x00, 0x00}; /* LD (HL),A */
+    uint8_t memory[8];
+    memcpy(memory, program, sizeof program);
+    memset(memory + 4, 0, 4);
+
+    z80_t *cpu = z80_new();
+    z80_pins_t pins = {0};
+
+    z80_set(cpu, Z80_REG_HL, 5);
+    z80_set(cpu, Z80_REG_AF, 0x7F00); /* A = 0x7F */
+
+    bool wrote = false;
+    for (int i = 0; i < 16; ++i)
+    {
+        (void)z80_tick(cpu, &pins, (i + 1) & 1);
+        if ((pins.ctrl & Z80_MREQ) && (pins.ctrl & Z80_RD))
+        {
+            pins.D = memory[pins.A & 7];
+        }
+        if ((pins.ctrl & Z80_MREQ) && (pins.ctrl & Z80_WR))
+        {
+            memory[pins.A & 7] = pins.D;
+            wrote = true;
+        }
+    }
+
+    CHECK(wrote, "LD (HL),A never asserted a write");
+    CHECK(0x7F == memory[5], "memory at 5 should be 7F, is %02X", memory[5]);
+
+    z80_free(cpu);
+}
+
+/** JP nn reads two bytes and continues from there. */
+static void test_jump(void)
+{
+    static const uint8_t program[] = {0xC3, 0x34, 0x12}; /* JP 1234 */
+    z80_t *cpu = z80_new();
+
+    (void)run_program(cpu, program, sizeof program, 24);
+
+    CHECK(0x1234 == z80_get(cpu, Z80_REG_PC), "PC should be 1234, is %04X", z80_get(cpu, Z80_REG_PC));
+
+    z80_free(cpu);
+}
+
+/** WAIT stretches a cycle: the CPU holds its pins and makes no progress. */
+static void test_wait_stretches_a_cycle(void)
+{
+    static const uint8_t program[] = {0x00, 0x00, 0x00, 0x00};
+
+    z80_t *held = z80_new();
+    z80_pins_t pins = {0};
+
+    /* run to the point where WAIT is sampled, then hold it */
+    for (int i = 0; i < 4; ++i)
+    {
+        (void)z80_tick(held, &pins, (i + 1) & 1);
+        if ((pins.ctrl & Z80_MREQ) && (pins.ctrl & Z80_RD))
+        {
+            pins.D = program[pins.A & 3];
+        }
+    }
+
+    pins.ctrl |= Z80_WAIT;
+
+    /* WAIT is honoured where the cycle samples it, so the core runs on until
+       it reaches that edge and stalls there - it does not freeze mid-cycle.
+       Give it a whole machine cycle to get there. */
+    for (int i = 0; i < 16; ++i)
+    {
+        (void)z80_tick(held, &pins, i & 1);
+        if ((pins.ctrl & Z80_MREQ) && (pins.ctrl & Z80_RD))
+        {
+            pins.D = program[pins.A & 3];
+        }
+    }
+
+    const uint16_t address_when_held = pins.A;
+    const uint32_t control_when_held = pins.ctrl;
+    const uint16_t pc_when_held = z80_get(held, Z80_REG_PC);
+
+    for (int i = 0; i < 40; ++i)
+    {
+        (void)z80_tick(held, &pins, i & 1);
+        CHECK(pins.A == address_when_held, "the address moved while WAIT was held");
+        CHECK((pins.ctrl & Z80_OUTPUTS_UNDER_TEST) == (control_when_held & Z80_OUTPUTS_UNDER_TEST),
+              "a control pin moved while WAIT was held");
+    }
+    CHECK(pc_when_held == z80_get(held, Z80_REG_PC), "the program counter moved while WAIT was held");
+
+    /* releasing it lets the machine continue */
+    pins.ctrl &= ~(uint32_t)Z80_WAIT;
+    for (int i = 0; i < 40; ++i)
+    {
+        (void)z80_tick(held, &pins, (i + 1) & 1);
+        if ((pins.ctrl & Z80_MREQ) && (pins.ctrl & Z80_RD))
+        {
+            pins.D = program[pins.A & 3];
+        }
+    }
+    CHECK(z80_get(held, Z80_REG_PC) > 1, "the CPU did not resume after WAIT was released");
+
+    z80_free(held);
 }
 
 /** A snapshot must restore mid-instruction, not merely between them. */
@@ -309,6 +468,12 @@ int main(void)
     test_refresh_counts_fetches();
     test_halt_holds_pc_and_asserts_the_pin();
     test_unimplemented_opcodes_are_counted();
+    test_load_immediate();
+    test_load_register_to_register();
+    test_load_from_memory();
+    test_store_to_memory();
+    test_jump();
+    test_wait_stretches_a_cycle();
     test_snapshot_restores_mid_instruction();
     test_snapshot_rejects_foreign_data();
     test_registers_round_trip();
