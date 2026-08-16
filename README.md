@@ -88,6 +88,17 @@ zasm -d -s program.bin                       # disassemble to stdout
 | `cpu_core` | the core's clock, changed-pin mask and reset behave (`src/emucore/z80core`) |
 | `cpu_core_benchmark` | the edge benchmark still runs; the rate it prints is for humans, nothing fails on being slow |
 
+###### Using it in your own program
+
+The CPU core, the assembler and the disassembler are libraries as well as
+tools, static or shared, with plain C headers. See
+[docs/EMBEDDING.md](docs/EMBEDDING.md).
+
+```cmake
+add_subdirectory(path/to/Z80core)
+target_link_libraries(your_target PRIVATE z80core zdasm zasmlib)
+```
+
 ###### Continuous integration
 
 Every pull request against `master` is built and tested on Linux and Windows,
