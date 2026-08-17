@@ -86,16 +86,11 @@ int main(int argc, char **argv)
 #if defined(__GNUC__) || defined(__MINGW32__)
     int option_index = 0;
     int test = 0;
-    struct option long_options[] = {{"verbose", no_argument, &verbose, 1},
-                                    {"report", no_argument, &report, 1},
-                                    {"disassemble", no_argument, &dasm, 1},
-                                    {"analyse", no_argument, &analyse, 1},
-                                    {"source", required_argument, 0, 's'},
-                                    {"output", required_argument, 0, 'o'},
-                                    {"format", required_argument, 0, 'x'},
-                                    {"test", no_argument, &test, 1},
-                                    {"help", no_argument, 0, 'h'},
-                                    {NULL, 0, 0, 0}};
+    struct option long_options[] = {{"verbose", no_argument, &verbose, 1},  {"report", no_argument, &report, 1},
+                                    {"disassemble", no_argument, &dasm, 1}, {"analyse", no_argument, &analyse, 1},
+                                    {"source", required_argument, 0, 's'},  {"output", required_argument, 0, 'o'},
+                                    {"format", required_argument, 0, 'x'},  {"test", no_argument, &test, 1},
+                                    {"help", no_argument, 0, 'h'},          {NULL, 0, 0, 0}};
     while ((opt = getopt_long(argc, argv, "x:hs:o:tdvra", long_options, &option_index)) != -1)
 #else
     while ((opt = _getopt(argc, argv, "x:hs:o:tdvra")) != -1)
