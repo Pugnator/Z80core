@@ -13,10 +13,33 @@ assembler accepts, and the assembler has to encode it back to the same bytes.
 # Public License version 2. See LICENSE.md for the full text.
 import argparse
 import os
-import re
 import subprocess
 import sys
 import tempfile
+
+
+def strip_comment(line):
+    """Cut the line at the first ';' that is not inside a quoted string.
+
+    A defm string may legitimately contain a semicolon, so a plain regex would
+    behead it - closing quote and all - and leave the scanner swallowing lines
+    until the next quote in the file.
+    """
+    in_string = False
+    escaped = False
+    for at, ch in enumerate(line):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == "'":
+                in_string = False
+        elif ch == "'":
+            in_string = True
+        elif ch == ";":
+            return line[:at].rstrip()
+    return line.rstrip()
 
 
 def main():
@@ -38,7 +61,7 @@ def main():
         return 1
 
     # keep the instructions, drop the address comments the listing carries
-    lines = [re.sub(r";.*$", "", line).rstrip() for line in disasm.stdout.splitlines()]
+    lines = [strip_comment(line) for line in disasm.stdout.splitlines()]
     source = "\n".join([f".org {args.origin}"] + [line for line in lines if line.strip()])
     with open(listing, "w") as fh:
         fh.write(source + "\n")

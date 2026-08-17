@@ -63,19 +63,54 @@ static void free_labels(disasm_label **labels)
 }
 
 /**
- * Render a byte inside a single-quoted string the way the lexer reads one
- * back: it accepts backslash escapes, so those two characters are all that
- * need one. Everything else here is printable by construction, since the
- * analysis only calls a run a string if it is.
+ * Render a byte inside a single-quoted string the way the assembler reads one
+ * back. The quote and the backslash need escaping for the lexer; tab, newline
+ * and carriage return get their named escapes so a directive never spans
+ * physical lines - a raw newline inside quotes survives the scanner but not
+ * text-mode pipes, universal-newline reads or anything else that edits line
+ * endings. The double quote must be escaped too: the lexer rewrites the
+ * delimiters to double quotes, and deft() then skips every bare one it sees,
+ * so an unescaped '"' in the middle would silently vanish from the output.
+ *
+ * @return How many characters were printed, so the caller can keep a
+ *         directive inside the lexer's token limit.
  */
-static void print_string_byte(uint8_t byte)
+static unsigned print_string_byte(uint8_t byte)
 {
-    if ('\'' == byte || '\\' == byte)
+    switch (byte)
     {
-        putchar('\\');
+    case '\'':
+        fputs("\\'", stdout);
+        return 2u;
+    case '"':
+        fputs("\\\"", stdout);
+        return 2u;
+    case '\\':
+        fputs("\\\\", stdout);
+        return 2u;
+    case '\t':
+        fputs("\\t", stdout);
+        return 2u;
+    case '\n':
+        fputs("\\n", stdout);
+        return 2u;
+    case '\r':
+        fputs("\\r", stdout);
+        return 2u;
+    default:
+        putchar((int)byte);
+        return 1u;
     }
-    putchar((int)byte);
 }
+
+/**
+ * The most escaped characters one defm puts between its quotes. The scanner
+ * copies the whole token - both quotes included - into a MAX_TOKEN_SIZE
+ * buffer and reports anything longer rather than truncating it, so a string
+ * region longer than this is emitted as several directives. 48 leaves margin
+ * under the real limit and keeps the lines readable.
+ */
+#define STRING_CHUNK 48u
 
 /**
  * A string region, as source.
@@ -95,18 +130,26 @@ static void print_string_region(const uint8_t *image, const zdasm_region *region
         --length;
     }
 
-    printf("\tdefm '");
-    for (uint16_t i = 0; i < length; ++i)
+    uint16_t i = 0;
+    do
     {
-        print_string_byte(image[region->start + i]);
-    }
-    putchar('\'');
+        const uint16_t line_start = (uint16_t)(region->start + i);
+        unsigned used = 0;
 
-    if (terminated)
-    {
-        printf(", %#.2x", image[region->start + region->length - 1u]);
-    }
-    printf("\t\t\t;%.4Xh\n", region->start);
+        printf("\tdefm '");
+        while (i < length && used < STRING_CHUNK)
+        {
+            used += print_string_byte(image[region->start + i]);
+            ++i;
+        }
+        putchar('\'');
+
+        if (terminated && i == length)
+        {
+            printf(", %#.2x", image[region->start + region->length - 1u]);
+        }
+        printf("\t\t\t;%.4Xh\n", line_start);
+    } while (i < length);
 }
 
 /** A data region, as defb lines of eight bytes. */

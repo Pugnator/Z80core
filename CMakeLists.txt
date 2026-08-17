@@ -177,4 +177,12 @@ add_test(NAME round_trip_monitor48k
              COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/round_trip.py
                      --zasm $<TARGET_FILE:zasm>
                      --binary ${CMAKE_CURRENT_SOURCE_DIR}/tests/monitor48k/monitor48k.rom)
+
+# The analysed listing renders unreachable bytes as defb and defm, so this
+# additionally proves the strings survive quoting, escaping and reassembly.
+add_test(NAME round_trip_monitor48k_analysed
+             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/round_trip.py
+                     --zasm $<TARGET_FILE:zasm>
+                     --binary ${CMAKE_CURRENT_SOURCE_DIR}/tests/monitor48k/monitor48k.rom
+                     --analyse)
 endif()
