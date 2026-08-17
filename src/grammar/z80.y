@@ -36,7 +36,7 @@ int current_line = 1;
 %left '&'
 %left SHL SHR
 %left '-' '+'
-%left '*' '/' '%'
+%left '*' '/' '%' MOD
 %precedence UMINUS
 %precedence '~'
 
@@ -52,7 +52,7 @@ int current_line = 1;
 %token <str> DEFB DEFW STRING QSTRING
 
 %token <var> BIT8 WORD DWORD QWORD DQWORD ASMPC ASMORG TEXT EQU ORG
-%token SHL SHR
+%token SHL SHR MOD
 %%
 
 input:    lines
@@ -127,6 +127,7 @@ expr:     WORD                                 { $$ = $1;}
         | expr '*' expr                        { $$ = $1*$3;}
         | expr '/' expr                        { $$ = divide_expr($1, $3);}
         | expr '%' expr                        { $$ = modulo_expr($1, $3);}
+        | expr MOD expr                        { $$ = modulo_expr($1, $3);}
         | expr '&' expr                        { $$ = $1 & $3;}
         | expr '|' expr                        { $$ = $1 | $3;}
         | expr '^' expr                        { $$ = $1 ^ $3;}

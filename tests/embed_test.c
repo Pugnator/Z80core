@@ -166,6 +166,48 @@ static void test_line_numbers_survive_the_ending_style(void)
     }
 }
 
+/**
+ * '%' is a binary literal when binary digits follow it immediately, and the
+ * modulo operator otherwise; 'mod' means modulo whatever surrounds it. The
+ * one genuinely ambiguous spelling must fail loudly - two adjacent values is
+ * a syntax error - never assemble quietly as either reading (#44).
+ */
+static void test_percent_is_two_things(void)
+{
+    static const struct
+    {
+        const char *name;
+        const char *source;
+        uint8_t expected;
+    } good[] = {
+        {"modulo", ".org 0\n defb 5 % 3\n.end\n", 0x02},
+        {"binary literal", ".org 0\n defb %1011\n.end\n", 0x0B},
+        {"mod keyword", ".org 0\n defb 5 mod 3\n.end\n", 0x02},
+        {"mod without spaces around operands", ".org 0\n defb 15 mod 4\n.end\n", 0x03},
+    };
+
+    for (size_t i = 0; i < sizeof good / sizeof good[0]; ++i)
+    {
+        diag_log log = {0};
+        zasm_image image = {0};
+
+        const bool ok = zasm_assemble(good[i].source, ZASM_FORMAT_BIN, &image, collect, &log);
+
+        CHECK(ok, "%s failed to assemble: %s", good[i].name, log.first);
+        CHECK(1 == image.size, "%s produced %zu bytes, expected 1", good[i].name, image.size);
+        CHECK(image.bytes && good[i].expected == image.bytes[0], "%s produced %#04x, expected %#04x", good[i].name,
+              image.bytes ? image.bytes[0] : 0u, good[i].expected);
+
+        zasm_image_free(&image);
+    }
+
+    diag_log log = {0};
+    zasm_image image = {0};
+    const bool ok = zasm_assemble(".org 0\n defb 5 %11\n.end\n", ZASM_FORMAT_BIN, &image, collect, &log);
+    CHECK(!ok, "'5 %%11' assembled; it must be rejected, not guessed at");
+    zasm_image_free(&image);
+}
+
 /** State is global, so a second call must not inherit the first one's labels. */
 static void test_repeated_assembly_is_independent(void)
 {
@@ -257,6 +299,7 @@ int main(void)
     test_errors_arrive_through_the_callback();
     test_line_endings();
     test_line_numbers_survive_the_ending_style();
+    test_percent_is_two_things();
     test_repeated_assembly_is_independent();
     test_round_trip_through_both_libraries();
     test_undecodable_bytes_still_advance();

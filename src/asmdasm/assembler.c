@@ -564,7 +564,7 @@ static const char *const reserved_words[] = {
     "indr", "ini", "inir", "jp",   "jr",   "ld",   "ldd", "lddr", "ldi",  "ldir", "neg", "nop", "or",   "otdr",
     "otir", "out", "outd", "outi", "pop",  "push", "res", "ret",  "reti", "retn", "rl",  "rla", "rlc",  "rld",
     "rlca", "rr",  "rra",  "rrc",  "rrd",  "rrca", "rst", "sbc",  "scf",  "set",  "sla", "sll", "sra",  "srl",
-    "sub",  "xor", "defb", "defw", "defm", "db",   "dw",  "org",  "equ",  NULL};
+    "sub",  "xor", "defb", "defw", "defm", "db",   "dw",  "org",  "equ",  "mod",  NULL};
 
 static bool is_reserved_word(const char *name)
 {

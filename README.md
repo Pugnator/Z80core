@@ -89,10 +89,11 @@ zasm -d -s program.bin                       # disassemble to stdout
   so `abch` is a label and `0abch` is a number), `o377`, `0b1011`, `%1011`.
 - `%` is a binary literal when binary digits follow it immediately and the
   modulo operator otherwise: `defb %1011` is a literal, `defb 5 % 3` is
-  modulo, and `defb 5 %11` is *not* modulo. Prefer `0b1011` and spaces
-  around `%`.
+  modulo, and `defb 5 %11` is a syntax error rather than either guess.
+  When in doubt use the unambiguous spellings: `0b1011` for the literal,
+  `mod` for the operator (`defb 5 mod 3`).
 - Operators, lowest precedence first: `|`, `^`, `&`, `<<` `>>`, `+` `-`,
-  `*` `/` `%`, then unary `-` and `~`. Parentheses are reserved for
+  `*` `/` `%` `mod`, then unary `-` and `~`. Parentheses are reserved for
   addressing modes and cannot group expressions.
 - Comments run to end of line and start with `;`, `//` or `#`.
 - Labels end with `:` (anywhere on the line) or start at column 0. Register,
@@ -143,8 +144,6 @@ for contributors and third-party code.
 
 ###### TODO
 
-- [ ] Macro assembler/disassembler
 - [ ] Cycle-accurate emulator (in progress: [spec](docs/CPU-CORE-SPEC.md), [phase 0](docs/PHASE0.md))
-- [ ] OpenVSM support (the core reaches Proteus through an openvsm device script)
 - [ ] A language above assembly — macro layer, then Forth or a C subset
       ([the argument](docs/SDK-LANGUAGE.md))

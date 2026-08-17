@@ -267,6 +267,9 @@ bin               0b[01]+|%[01]+
 "Z"|"S"|"M"|"N"|"NZ"|"NC"|"P"|"PO"|"PE"                      { SAVE_CTX; return FLAG;}
 "<<"                {return SHL;}
 ">>"                {return SHR;}
+ /* the unambiguous spelling of modulo: '%' is also the binary literal
+    prefix, and which one it means depends on what follows it (#44) */
+"mod"               {return MOD;}
 "+"|"-"|"/"|"*"|"&"|"|"|"^"|"~"|"\""|"["|"("|"]"|")"|","|"%"      {return asmtext[0];}
 
 "$"                 {return ASMPC;}
