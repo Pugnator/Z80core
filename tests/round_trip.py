@@ -24,13 +24,15 @@ def main():
     ap.add_argument("--zasm", required=True, help="path to the zasm executable")
     ap.add_argument("--binary", required=True, help="binary image to round-trip")
     ap.add_argument("--origin", default="0", help="origin the image is assembled at")
+    ap.add_argument("--analyse", action="store_true", help="disassemble with code/data separation")
     args = ap.parse_args()
 
     workdir = tempfile.mkdtemp(prefix="zasm_roundtrip_")
     listing = os.path.join(workdir, "disasm.asm")
     rebuilt = os.path.join(workdir, "rebuilt.bin")
 
-    disasm = subprocess.run([args.zasm, "-d", "-s", args.binary], capture_output=True, text=True, timeout=120)
+    command = [args.zasm, "-d"] + (["-a"] if args.analyse else []) + ["-s", args.binary]
+    disasm = subprocess.run(command, capture_output=True, text=True, timeout=120)
     if disasm.returncode != 0:
         print(f"disassembly failed ({disasm.returncode}):\n{disasm.stdout}{disasm.stderr}")
         return 1

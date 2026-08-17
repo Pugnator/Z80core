@@ -198,7 +198,17 @@ static void flush(region_builder *builder)
 /** Append a region, merging it into the previous one when they agree. */
 static void append(region_builder *builder, uint16_t start, uint16_t length, zdasm_region_kind kind)
 {
-    if (builder->have_last && builder->last.kind == kind && builder->last.start + builder->last.length == start)
+    /*
+     * Strings never merge with each other. Two runs are adjacent only because
+     * the first one ended, and what ended it was a byte with bit 7 set - so
+     * merging them would bury that terminator in the middle of a region whose
+     * interior is supposed to be printable, and it would come back out as a
+     * raw high byte inside quotes.
+     */
+    const bool mergeable = (ZDASM_STRING != kind);
+
+    if (mergeable && builder->have_last && builder->last.kind == kind &&
+        builder->last.start + builder->last.length == start)
     {
         builder->last.length = (uint16_t)(builder->last.length + length);
         return;

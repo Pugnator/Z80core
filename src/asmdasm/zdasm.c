@@ -209,6 +209,16 @@ uint8_t zdasm_decode(const uint8_t *code, size_t size, uint16_t pc, zdasm_insn *
     out->known = true;
     out->continues = control_continues(opcode);
 
+    /* RST carries its target in the opcode rather than in an operand, so the
+       operand-driven branch detection above never sees it. Left out, every RST
+       vector looks unreachable - and RST 10 is how a Spectrum prints a
+       character, so that is most of the ROM's entry points missed. */
+    if (1u == out->length && 0xC7u == (opcode & 0xC7u))
+    {
+        out->branches = true;
+        out->target = (uint16_t)(opcode & 0x38u);
+    }
+
     if (prefixed_index)
     {
         snprintf(out->text, sizeof out->text, entry->mnemo, index_displacement);

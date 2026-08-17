@@ -224,8 +224,11 @@ static void test_regions_tile_the_buffer(void)
         CHECK(regions[i].length > 0, "region %zu is empty", i);
         if (i > 0)
         {
-            CHECK(regions[i].kind != regions[i - 1].kind, "regions %zu and %zu have the same kind and should be one",
-                  i - 1, i);
+            /* Adjacent regions of one kind should have been merged - except
+               strings, which are adjacent precisely because the first one was
+               terminated, and merging them would hide the terminator. */
+            CHECK(regions[i].kind != regions[i - 1].kind || ZDASM_STRING == regions[i].kind,
+                  "regions %zu and %zu have the same kind and should be one", i - 1, i);
         }
         expected_start += regions[i].length;
     }

@@ -62,7 +62,72 @@ static void free_labels(disasm_label **labels)
     *labels = NULL;
 }
 
-bool disassembly_listing(char *source)
+/**
+ * Render a byte inside a single-quoted string the way the lexer reads one
+ * back: it accepts backslash escapes, so those two characters are all that
+ * need one. Everything else here is printable by construction, since the
+ * analysis only calls a run a string if it is.
+ */
+static void print_string_byte(uint8_t byte)
+{
+    if ('\'' == byte || '\\' == byte)
+    {
+        putchar('\\');
+    }
+    putchar((int)byte);
+}
+
+/**
+ * A string region, as source.
+ *
+ * The last byte gets a term of its own when bit 7 is set. Marking the end of a
+ * string that way is the usual Z80 convention and the Spectrum ROM's, and such
+ * a byte is not text - so it cannot sit inside the quotes and come back out as
+ * the same byte. defm takes a list, so it rides along in the same directive
+ * rather than needing a defb after it.
+ */
+static void print_string_region(const uint8_t *image, const zdasm_region *region)
+{
+    uint16_t length = region->length;
+    const bool terminated = length > 0u && 0u != (image[region->start + length - 1u] & 0x80u);
+    if (terminated)
+    {
+        --length;
+    }
+
+    printf("\tdefm '");
+    for (uint16_t i = 0; i < length; ++i)
+    {
+        print_string_byte(image[region->start + i]);
+    }
+    putchar('\'');
+
+    if (terminated)
+    {
+        printf(", %#.2x", image[region->start + region->length - 1u]);
+    }
+    printf("\t\t\t;%.4Xh\n", region->start);
+}
+
+/** A data region, as defb lines of eight bytes. */
+static void print_data_region(const uint8_t *image, const zdasm_region *region)
+{
+    for (uint16_t i = 0; i < region->length; i += 8u)
+    {
+        const uint16_t here = (uint16_t)(region->start + i);
+        const uint16_t left = (uint16_t)(region->length - i);
+        const uint16_t run = (left < 8u) ? left : 8u;
+
+        printf("\tdefb ");
+        for (uint16_t j = 0; j < run; ++j)
+        {
+            printf("%s%#.2x", j ? ", " : "", image[here + j]);
+        }
+        printf("\t\t\t;%.4Xh\n", here);
+    }
+}
+
+bool disassembly_listing(char *source, bool analyse)
 {
     /* binary input: text mode mangles CRLF pairs and stops at 0x1A */
     FILE *in = fopen(source, "rb");
@@ -112,6 +177,31 @@ bool disassembly_listing(char *source)
 
     printf("; %s, %ld bytes\n", source, size);
 
+    /*
+     * Which stretches get decoded as instructions. Without analysis, all of
+     * them - the linear sweep this has always done. With it, only what control
+     * flow can reach from the start of the image.
+     */
+    zdasm_region *regions = NULL;
+    size_t region_count = 0;
+
+    if (analyse)
+    {
+        const uint16_t entry = 0;
+        region_count = zdasm_analyse(image, (size_t)size, &entry, 1u, NULL, 0);
+        if (region_count > 0)
+        {
+            regions = malloc(region_count * sizeof *regions);
+            if (!regions)
+            {
+                puts("Memory allocation failed");
+                free(image);
+                return false;
+            }
+            region_count = zdasm_analyse(image, (size_t)size, &entry, 1u, regions, region_count);
+        }
+    }
+
     /* pass 1: where does anything branch to */
     disasm_label *labels = NULL;
     for (uint32_t pc = 0; pc < (uint32_t)size;)
@@ -130,8 +220,33 @@ bool disassembly_listing(char *source)
     }
 
     /* pass 2: print, labelling the lines pass 1 marked */
+    size_t region = 0;
     for (uint32_t pc = 0; pc < (uint32_t)size;)
     {
+        while (regions && region < region_count && pc >= (uint32_t)regions[region].start + regions[region].length)
+        {
+            ++region;
+        }
+
+        if (regions && region < region_count && ZDASM_CODE != regions[region].kind &&
+            pc == (uint32_t)regions[region].start)
+        {
+            if (has_label(labels, (uint16_t)pc))
+            {
+                printf("L%.4X:\n", (unsigned)pc);
+            }
+            if (ZDASM_STRING == regions[region].kind)
+            {
+                print_string_region(image, &regions[region]);
+            }
+            else
+            {
+                print_data_region(image, &regions[region]);
+            }
+            pc += regions[region].length;
+            continue;
+        }
+
         zdasm_insn insn;
         const uint8_t used = zdasm_decode(image, (size_t)size, (uint16_t)pc, &insn);
         if (!used)
@@ -146,6 +261,7 @@ bool disassembly_listing(char *source)
         pc += used;
     }
 
+    free(regions);
     free_labels(&labels);
     free(image);
     return true;

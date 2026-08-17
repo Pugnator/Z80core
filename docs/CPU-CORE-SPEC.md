@@ -788,13 +788,13 @@ green" are different claims.
 
 | Phase | State |
 | --- | --- |
-| 0 | **Blocked.** Needs Proteus and the VSM SDK, which are not here. Issue #56, and the questions it must answer are below. |
+| 0 | **Out of scope here.** The VSM device lives in its own repository, so the Proteus questions are answered there. Section 11.2's fallbacks travel with them. |
 | 1 | **Done.** |
 | 2 | **Done.** `BUSRQ`/`BUSAK` finally landed with the other asynchronous inputs; I/O cycles arrived with `IN` and `OUT` in Phase 3. |
 | 3 | **Done and certified.** Every encoding — the base page and the CB, DD, ED, FD, DDCB and FDCB tables. FUSE passes 1335 cases including bus events per T-state, ZEXDOC passes all 67 blocks, and SingleStepTests agrees. |
 | 4 | **Done.** The undocumented opcodes, `WZ`, `Q`, `XF`/`YF` and the block-instruction flags. ZEXALL passes all 67 blocks, and SingleStepTests compares `WZ` and `Q` on every opcode. |
 | 5 | **Written, not certified.** `INT` in all three modes, `NMI`, the `EI` delay, `HALT` wake and `RESET` timing. See below — this is the weak spot. |
-| 6 | **Not started.** The `openvsm` device script. |
+| 6 | **Moved out.** `z80_device.lua` and everything machine-specific belongs beside the VSM model, not here. This repo's part of it is done: a 32-bit DLL from the `core32` preset, and docs/EMBEDDING.md. |
 | 7 | **Not started.** Packaging. |
 
 Two things were pulled forward from Phase 4 rather than deferred, because each

@@ -21,6 +21,15 @@
  * @brief Print a disassembly of @p source to stdout.
  * @return false if the file could not be read.
  */
-bool disassembly_listing(char *source);
+/**
+ * @brief Print a disassembly listing of a binary image.
+ *
+ * @param analyse When true, separate code from data first and render what
+ *                nothing reaches as `defm` and `defb` rather than as
+ *                instructions. Off by default because a linear listing is what
+ *                a reader usually wants of a known-code image, and because it
+ *                changes what the output reassembles from.
+ */
+bool disassembly_listing(char *source, bool analyse);
 
 #endif

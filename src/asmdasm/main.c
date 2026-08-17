@@ -80,6 +80,7 @@ int main(int argc, char **argv)
     char *target = NULL;
     char *output_fmt = "bin";
     int dasm = 0;
+    int analyse = 0;
     int report = 0;
 
 #if defined(__GNUC__) || defined(__MINGW32__)
@@ -88,15 +89,16 @@ int main(int argc, char **argv)
     struct option long_options[] = {{"verbose", no_argument, &verbose, 1},
                                     {"report", no_argument, &report, 1},
                                     {"disassemble", no_argument, &dasm, 1},
+                                    {"analyse", no_argument, &analyse, 1},
                                     {"source", required_argument, 0, 's'},
                                     {"output", required_argument, 0, 'o'},
                                     {"format", required_argument, 0, 'x'},
                                     {"test", no_argument, &test, 1},
                                     {"help", no_argument, 0, 'h'},
                                     {NULL, 0, 0, 0}};
-    while ((opt = getopt_long(argc, argv, "x:hs:o:tdvr", long_options, &option_index)) != -1)
+    while ((opt = getopt_long(argc, argv, "x:hs:o:tdvra", long_options, &option_index)) != -1)
 #else
-    while ((opt = _getopt(argc, argv, "x:hs:o:tdvr")) != -1)
+    while ((opt = _getopt(argc, argv, "x:hs:o:tdvra")) != -1)
 #endif
     {
         switch (opt)
@@ -124,6 +126,9 @@ int main(int argc, char **argv)
             break;
         case 'd':
             dasm = 1;
+            break;
+        case 'a':
+            analyse = 1;
             break;
         case 's':
             source = optarg;
@@ -163,7 +168,7 @@ int main(int argc, char **argv)
 
     if (dasm)
     {
-        return disassembly_listing(source) ? EXIT_SUCCESS : EXIT_FAILURE;
+        return disassembly_listing(source, 0 != analyse) ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
     if (!target)
