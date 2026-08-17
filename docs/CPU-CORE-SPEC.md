@@ -784,30 +784,57 @@ is green.
 ### Where this actually stands
 
 Kept honest deliberately, because "the code is written" and "the phase is
-green" are different claims and the table above only grants the second one for
-the second reason.
+green" are different claims.
 
 | Phase | State |
 | --- | --- |
-| 0 | **Blocked on hardware we do not have here.** Needs Proteus and the VSM SDK; the questions it must answer are below. |
+| 0 | **Blocked.** Needs Proteus and the VSM SDK, which are not here. Issue #56, and the questions it must answer are below. |
 | 1 | **Done.** |
-| 2 | **Done bar `BUSRQ`/`BUSAK`**, which has no natural home until Phase 5 wires up the other asynchronous inputs. I/O cycles arrived with `IN` and `OUT` in Phase 3. |
-| 3 | **Written, not certified.** Every encoding is implemented — 1280 of them across the base page and the CB, DD, ED, FD, DDCB and FDCB tables — and covered by results, flags and T-state counts in `test_instructions.c`. Neither FUSE nor ZEXDOC is in the repository, so the exit criteria are unmet. |
-| 4 | Not started. `Q` is the known gap: `SCF` and `CCF` take `XF`/`YF` from `A` alone, where the real part ORs in the last flag-setting instruction's output. |
-| 5–7 | Not started. |
+| 2 | **Done.** `BUSRQ`/`BUSAK` finally landed with the other asynchronous inputs; I/O cycles arrived with `IN` and `OUT` in Phase 3. |
+| 3 | **Done and certified.** Every encoding — the base page and the CB, DD, ED, FD, DDCB and FDCB tables. FUSE passes 1335 cases including bus events per T-state, ZEXDOC passes all 67 blocks, and SingleStepTests agrees. |
+| 4 | **Done.** The undocumented opcodes, `WZ`, `Q`, `XF`/`YF` and the block-instruction flags. ZEXALL passes all 67 blocks, and SingleStepTests compares `WZ` and `Q` on every opcode. |
+| 5 | **Written, not certified.** `INT` in all three modes, `NMI`, the `EI` delay, `HALT` wake and `RESET` timing. See below — this is the weak spot. |
+| 6 | **Not started.** The `openvsm` device script. |
+| 7 | **Not started.** Packaging. |
 
 Two things were pulled forward from Phase 4 rather than deferred, because each
 sits inside an otherwise regular block where excluding it costs more code than
-including it, and deferring it would have meant testing the same instructions
-twice: **`SLL`**, at index 6 of the eight CB shifts, and the **register copy in
-`DDCB`**, whose low three bits still name a register. The undocumented `XF`/`YF`
-bits are implemented throughout for the same reason.
+including it: **`SLL`**, at index 6 of the eight CB shifts, and the **register
+copy in `DDCB`**. The undocumented `XF`/`YF` bits were implemented throughout
+from the start for the same reason.
 
-**Getting a conformance suite in is the next job, and it comes before Phase 4.**
-Our own tests say the core does what we think it should; they cannot say what we
-have not thought of. FUSE is the one to take first — it is small, it is a plain
-text format, and alone among the suites it checks bus activity per T-state,
-which is the property this core exists for.
+### The one part nothing independent has checked
+
+**Phase 5 rests entirely on tests written by the same person who wrote it.**
+
+FUSE cannot assert a pin. SingleStepTests has no interrupt state in its cases.
+ZEXALL runs a program that never takes an interrupt. So the acknowledge cycle,
+the `EI` delay, `NMI` edge latching and `RESET` hold are checked by eight tests
+in `test_core.c` and by nothing else at all.
+
+That is exactly the position Phase 3 was in before FUSE arrived — and FUSE
+immediately found two bugs those tests had asserted confidently and wrongly.
+There is no reason to think Phase 5 is different, only that nothing has looked.
+
+Issue #57 is the answer: single-step a real Z80 from an STM32 and compare, which
+is the only thing that can assert a pin at a chosen edge. It is now the highest
+value work left on the core.
+
+### On trusting one suite
+
+Three times this project changed behaviour on one suite's authority and was
+wrong, and each time a second suite caught it:
+
+- **`BIT n,(HL)`** — FUSE has no MEMPTR, so every case it holds has `WZ` at zero
+  and the wrong rule is indistinguishable from the right one. It cost a working
+  implementation until SingleStepTests disagreed, 400 samples to 400.
+- **`SCF`/`CCF`** — the same failure with `Q`, settled 800 to 800.
+- **The refresh address** — formed from `R` after its increment instead of
+  before. FUSE reports its own bookkeeping addresses for refresh cycles and
+  could never have seen it.
+
+The rule that came out of it: do not change the core on one suite's say-so. Test
+the candidate rules against a corpus and let the count decide.
 
 ### Why Phase 0 exists, and what it must answer
 
