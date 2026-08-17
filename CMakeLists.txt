@@ -42,7 +42,7 @@ add_flex_bison_dependency(z80_lexer z80_parser)
 # say it explicitly and get the same library either way.
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
-add_library(zdasm src/asmdasm/zdasm.c src/asmdasm/z80tab.c)
+add_library(zdasm src/asmdasm/zdasm.c src/asmdasm/z80tab.c src/asmdasm/zdasm_analyse.c)
 target_include_directories(zdasm PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include/asmdasm)
 set_target_properties(zdasm PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
@@ -162,7 +162,18 @@ if(Python3_FOUND)
                      --table ${CMAKE_CURRENT_SOURCE_DIR}/src/asmdasm/z80tab.c)
 
     # disassemble the 16K ROM and assemble the listing back to the same bytes
-    add_test(NAME round_trip_monitor48k
+    add_executable(zdasm_analyse_test tests/test_analyse.c)
+target_link_libraries(zdasm_analyse_test PRIVATE zdasm)
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(zdasm_analyse_test PRIVATE -Wall -Wextra -Werror)
+endif()
+
+# The ROM cases matter as much as the hand-written ones: a rule that works on
+# six bytes and not on a real program has not been tested.
+add_test(NAME zdasm_analyse
+         COMMAND zdasm_analyse_test "${CMAKE_SOURCE_DIR}/tests/monitor48k/monitor48k.rom")
+
+add_test(NAME round_trip_monitor48k
              COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/round_trip.py
                      --zasm $<TARGET_FILE:zasm>
                      --binary ${CMAKE_CURRENT_SOURCE_DIR}/tests/monitor48k/monitor48k.rom)

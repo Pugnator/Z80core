@@ -22,6 +22,41 @@
 #include <string.h>
 
 /** LD (IX+d),n and LD (IY+d),n carry a displacement *and* an immediate. */
+/**
+ * Can control reach the instruction after this one?
+ *
+ * Only an unconditional jump or return says no. Everything else continues,
+ * calls and every conditional form included - a conditional that is not taken
+ * falls through, and a call is expected back. HALT continues too: it resumes
+ * at the following instruction once an interrupt has been and gone.
+ *
+ * This is what a linear walk cannot work out for itself, and what reachability
+ * analysis needs above all else.
+ */
+static bool control_continues(uint32_t opcode)
+{
+    switch (opcode)
+    {
+    case 0xC3:   /* JP nn      */
+    case 0x18:   /* JR e       */
+    case 0xC9:   /* RET        */
+    case 0xE9:   /* JP (HL)    */
+    case 0xDDE9: /* JP (IX)    */
+    case 0xFDE9: /* JP (IY)    */
+    case 0xED45: /* RETN       */
+    case 0xED4D: /* RETI       */
+    case 0xED55:
+    case 0xED5D:
+    case 0xED65:
+    case 0xED6D:
+    case 0xED75:
+    case 0xED7D: /* the undocumented RETN encodings */
+        return false;
+    default:
+        return true;
+    }
+}
+
 static bool is_double_argumented(uint32_t opcode)
 {
     return 0xDD36 == opcode || 0xFD36 == opcode;
@@ -86,6 +121,7 @@ static uint8_t emit_defb(zdasm_insn *out, uint16_t pc, uint8_t byte)
     out->known = false;
     out->branches = false;
     out->target = 0;
+    out->continues = false;
     snprintf(out->text, sizeof out->text, "defb %#.2x", byte);
     return 1;
 }
@@ -171,6 +207,7 @@ uint8_t zdasm_decode(const uint8_t *code, size_t size, uint16_t pc, zdasm_insn *
     out->address = pc;
     out->length = (uint8_t)(length + operand_count);
     out->known = true;
+    out->continues = control_continues(opcode);
 
     if (prefixed_index)
     {
