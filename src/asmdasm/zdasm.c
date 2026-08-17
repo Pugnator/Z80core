@@ -9,9 +9,11 @@
  * Public License version 2. See LICENSE.md for the full text.
  *
  * This is the whole disassembler. It depends on the opcode table and the C
- * library and nothing else - no globals, no allocation, no output - so it can
- * be linked into anything. dassembler.c adds the listing, the label table and
- * the two passes that the zasm command line wants on top of it.
+ * library and nothing else - no allocation, no output, and no state that
+ * outlives a call except the decode index below, which is derived from the
+ * opcode table, built once and never changed after - so it can be linked into
+ * anything. dassembler.c adds the listing, the label table and the two passes
+ * that the zasm command line wants on top of it.
  */
 
 #include "zdasm.h"
@@ -101,16 +103,123 @@ static bool is_call(uint32_t opcode)
     }
 }
 
-static const opcode_table *find_opcode(uint32_t instruction)
+/*
+ * The decode index: (prefix page, opcode byte) to table row, in constant time.
+ *
+ * The opcode table is sorted by mnemonic, because that is what the assembler's
+ * binary search over the canonical text needs. The disassembler therefore
+ * cannot search it by number, and used to walk all ~1300 rows for every
+ * instruction it decoded - which reachability analysis pays once per byte of
+ * the graph it walks. This is that walk done once, and the same rows viewed
+ * the other way round: the table stays the single description of the
+ * instruction set, and this is derived from it.
+ */
+enum
 {
-    for (int i = 0; opcode_tab[i].mnemo; i++)
+    PAGE_BASE,
+    PAGE_CB,
+    PAGE_ED,
+    PAGE_DD,
+    PAGE_FD,
+    PAGE_DDCB,
+    PAGE_FDCB,
+    PAGE_COUNT
+};
+
+/** The prefix placeholders are not instructions and must never be decoded. */
+#define PLACEHOLDER_MNEMO "****"
+
+/**
+ * Where an opcode belongs in the index: which prefix page, and which byte
+ * within it. Used both to file a row and to look one up, so the two halves
+ * cannot disagree about where something lives.
+ */
+static bool index_slot(uint32_t opcode, unsigned *page, uint8_t *byte)
+{
+    *byte = (uint8_t)(opcode & 0xFFu);
+
+    switch (opcode >> 8)
     {
-        if (instruction == opcode_tab[i].opcode)
+    case 0x0000:
+        *page = PAGE_BASE;
+        return true;
+    case 0x00CB:
+        *page = PAGE_CB;
+        return true;
+    case 0x00ED:
+        *page = PAGE_ED;
+        return true;
+    case 0x00DD:
+        *page = PAGE_DD;
+        return true;
+    case 0x00FD:
+        *page = PAGE_FD;
+        return true;
+    case 0xDDCB:
+        *page = PAGE_DDCB;
+        return true;
+    case 0xFDCB:
+        *page = PAGE_FDCB;
+        return true;
+    default:
+        return false;
+    }
+}
+
+static const opcode_table *decode_index[PAGE_COUNT][256];
+static bool decode_index_ready;
+
+/**
+ * Fill the index from the table.
+ *
+ * Idempotent: every run writes the same pointers into the same slots, which is
+ * what makes the lazy build safe to repeat. A host that decodes from several
+ * threads at once should decode once before starting them - two threads
+ * racing the very first call would each build the same index, and on any
+ * platform where a pointer-sized store is not atomic that race would need a
+ * lock rather than this comment.
+ */
+static void build_decode_index(void)
+{
+    for (int i = 0; opcode_tab[i].mnemo; ++i)
+    {
+        if (0 == strcmp(opcode_tab[i].mnemo, PLACEHOLDER_MNEMO))
         {
-            return &opcode_tab[i];
+            continue;
+        }
+
+        unsigned page = 0;
+        uint8_t byte = 0;
+        if (!index_slot(opcode_tab[i].opcode, &page, &byte))
+        {
+            continue;
+        }
+
+        /* First row wins, which is what walking the table found. No two rows
+           share an opcode today, and check_table.py now rejects any that do. */
+        if (!decode_index[page][byte])
+        {
+            decode_index[page][byte] = &opcode_tab[i];
         }
     }
-    return NULL;
+
+    decode_index_ready = true;
+}
+
+static const opcode_table *find_opcode(uint32_t instruction)
+{
+    if (!decode_index_ready)
+    {
+        build_decode_index();
+    }
+
+    unsigned page = 0;
+    uint8_t byte = 0;
+    if (!index_slot(instruction, &page, &byte))
+    {
+        return NULL;
+    }
+    return decode_index[page][byte];
 }
 
 /** An undecodable byte, rendered so a listing stays complete. */

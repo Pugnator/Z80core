@@ -30,6 +30,11 @@ CONV_RE = re.compile(r"%[#0-9.]*[xXd]")
 # the prefix placeholders are not instructions and share one mnemonic
 PLACEHOLDER = "****"
 
+# The prefix pages the disassembler's decode index has an array for: no prefix,
+# the four one-byte prefixes, and the two index-bit prefixes. An opcode outside
+# these cannot be filed, so the table may not contain one.
+INDEX_PAGES = {0x0000, 0x00CB, 0x00ED, 0x00DD, 0x00FD, 0xDDCB, 0xFDCB}
+
 
 def parse(path):
     src = open(path, encoding="utf8").read()
@@ -84,8 +89,8 @@ def main():
             opcodes = ", ".join(f"{e['opcode']:#x}" for e in group)
             failures.append(f"{mnemo!r} has {len(group)} entries without .duplicate: {opcodes}")
 
-    # 1c. an opcode decodes to exactly one mnemonic, or the disassembler's
-    #     linear search picks whichever entry happens to come first
+    # 1c. an opcode decodes to exactly one mnemonic, or which one you get
+    #     depends on where it sits in the table
     by_opcode = {}
     for entry in entries:
         if entry["mnemo"] == PLACEHOLDER:
@@ -94,6 +99,20 @@ def main():
     for opcode, names in sorted(by_opcode.items()):
         if len(names) > 1:
             failures.append(f"{opcode:#x} decodes to {len(names)} different mnemonics: {sorted(names)}")
+
+    # 1d. every opcode belongs to a prefix page the decode index knows about.
+    #     The index files a row by (page, byte); a row on a page it does not
+    #     recognise is filed nowhere and the instruction silently stops
+    #     decoding, where walking the table would still have found it. Keep in
+    #     step with index_slot() in src/asmdasm/zdasm.c.
+    for entry in entries:
+        if entry["mnemo"] == PLACEHOLDER:
+            continue
+        page = entry["opcode"] >> 8
+        if page not in INDEX_PAGES:
+            failures.append(
+                f"{entry['opcode']:#x} {entry['mnemo']!r}: prefix page {page:#x} is not one the decode index knows"
+            )
 
     # 2. data_size agrees with the format string
     for entry in entries:

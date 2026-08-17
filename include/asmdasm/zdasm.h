@@ -8,9 +8,12 @@
  * This file is part of Z80core, released under the terms of the GNU General
  * Public License version 2. See LICENSE.md for the full text.
  *
- * Decodes Z80 machine code into text. It keeps no state between calls, reads
- * only the buffer it is handed, allocates nothing and prints nothing: what a
- * host does with the result is the host's business.
+ * Decodes Z80 machine code into text. It reads only the buffer it is handed,
+ * allocates nothing and prints nothing: what a host does with the result is
+ * the host's business. Decoding depends on nothing but its arguments - the one
+ * piece of state it keeps is a lookup index derived from the instruction
+ * table, built on first use and constant thereafter, so the same bytes always
+ * decode to the same thing whatever was decoded before.
  *
  * See docs/EMBEDDING.md for how to build this into another project.
  */
