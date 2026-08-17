@@ -173,6 +173,19 @@ endif()
 add_test(NAME zdasm_analyse
          COMMAND zdasm_analyse_test "${CMAKE_SOURCE_DIR}/tests/monitor48k/monitor48k.rom")
 
+# Decode throughput, and a checksum over everything the decoder produced. Run
+# by hand with a large repetition count to compare a change; registered here
+# with a small one so it cannot rot unnoticed, and because the checksum makes
+# it a correctness test as well as a measurement.
+add_executable(zdasm_bench src/asmdasm/bench/zdasm_bench.c)
+target_link_libraries(zdasm_bench PRIVATE zdasm)
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(zdasm_bench PRIVATE -Wall -Wextra -Werror)
+endif()
+
+add_test(NAME zdasm_benchmark
+         COMMAND zdasm_bench "${CMAKE_SOURCE_DIR}/tests/monitor48k/monitor48k.rom" 5)
+
 add_test(NAME round_trip_monitor48k
              COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/round_trip.py
                      --zasm $<TARGET_FILE:zasm>
