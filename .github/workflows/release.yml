@@ -1,0 +1,181 @@
+name: Release
+
+# Pushing a tag shaped like v1.2.3 builds the release artefacts on every
+# platform, runs the tests, and publishes a GitHub release with the archives
+# attached. Nothing here runs on ordinary pushes; CI covers those.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    name: Tag matches the source
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # A release whose binaries report a different version than the tag they
+      # were built from is worse than no release, so this fails fast.
+      - name: Version strings agree with the tag
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          grep -q "ZASM_VERSION \"$ver\"" src/asmdasm/assembler.c || {
+            echo "ZASM_VERSION in src/asmdasm/assembler.c is not \"$ver\""; exit 1; }
+          grep -q "STRFILEVER \"$ver" include/resources.h || {
+            echo "STRFILEVER in include/resources.h does not start with \"$ver\""; exit 1; }
+
+  windows:
+    name: Windows x64
+    needs: check
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            bison
+            flex
+            zip
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-python
+
+      - name: Configure
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      # The binaries link only system DLLs - KERNEL32 and the UCRT - so the
+      # archive needs no bundled runtime.
+      - name: Package
+        run: |
+          stage="zasm-${GITHUB_REF_NAME}-win64"
+          mkdir -p "$stage/include"
+          cp build/bin/zasm.exe build/bin/z80core.dll "$stage/"
+          cp src/emucore/z80core/include/z80core.h include/asmdasm/zasm.h include/asmdasm/zdasm.h "$stage/include/"
+          cp README.md LICENSE.md "$stage/"
+          zip -r "$stage.zip" "$stage"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: win64
+          path: zasm-*-win64.zip
+
+  windows-core32:
+    name: Windows x86 core DLL
+    needs: check
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW32
+          update: true
+          install: >-
+            bison
+            flex
+            zip
+            mingw-w64-i686-gcc
+            mingw-w64-i686-cmake
+            mingw-w64-i686-ninja
+
+      - name: Configure
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      # Only the core: the 32-bit DLL exists for hosts that are themselves
+      # 32-bit - Proteus and openvsm - and they need nothing else from here.
+      - name: Build
+        run: cmake --build build --target z80core_shared
+
+      - name: Package
+        run: |
+          stage="z80core-${GITHUB_REF_NAME}-win32"
+          mkdir -p "$stage"
+          cp build/bin/z80core.dll src/emucore/z80core/include/z80core.h "$stage/"
+          cp LICENSE.md "$stage/"
+          zip -r "$stage.zip" "$stage"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: win32
+          path: z80core-*-win32.zip
+
+  linux:
+    name: Linux x64
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bison flex ninja-build
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Configure
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Package
+        run: |
+          stage="zasm-${GITHUB_REF_NAME}-linux-x64"
+          mkdir -p "$stage/include"
+          cp build/bin/zasm build/bin/libz80core.so "$stage/"
+          cp src/emucore/z80core/include/z80core.h include/asmdasm/zasm.h include/asmdasm/zdasm.h "$stage/include/"
+          cp README.md LICENSE.md "$stage/"
+          tar czf "$stage.tar.gz" "$stage"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64
+          path: zasm-*-linux-x64.tar.gz
+
+  publish:
+    name: Publish the release
+    needs: [windows, windows-core32, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      # Draft, so the notes can be read once before anyone else does. Delete
+      # the flag if that step of ceremony stops earning its click.
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" artifacts/* \
+            --draft \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
