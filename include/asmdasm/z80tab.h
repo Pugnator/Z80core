@@ -27,6 +27,24 @@ typedef struct
     unsigned reljmp : 1;
     /* do not use while assembly */
     unsigned duplicate : 1;
+    /**
+     * Transfers control to a target the decoder can work out: an absolute
+     * jump or call, a relative jump, or a RST, whose target is in the opcode.
+     * Not JP [HL] and its index forms - those branch to wherever the register
+     * happens to point, which no decoder can know.
+     */
+    unsigned branches : 1;
+    /**
+     * Control does not reach the instruction after this one: an unconditional
+     * jump or a return. Named for the exception rather than the rule so that
+     * the default - an instruction that simply carries on - is what a row
+     * says when it says nothing, which is nearly all of them.
+     *
+     * Conditional forms continue: not taken, they fall through. Calls
+     * continue: they are expected back. HALT continues: it resumes once an
+     * interrupt has been and gone.
+     */
+    unsigned stops : 1;
     char *mnemo;
     unsigned flags;
 } opcode_table;

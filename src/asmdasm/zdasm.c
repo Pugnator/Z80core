@@ -24,83 +24,9 @@
 #include <string.h>
 
 /** LD (IX+d),n and LD (IY+d),n carry a displacement *and* an immediate. */
-/**
- * Can control reach the instruction after this one?
- *
- * Only an unconditional jump or return says no. Everything else continues,
- * calls and every conditional form included - a conditional that is not taken
- * falls through, and a call is expected back. HALT continues too: it resumes
- * at the following instruction once an interrupt has been and gone.
- *
- * This is what a linear walk cannot work out for itself, and what reachability
- * analysis needs above all else.
- */
-static bool control_continues(uint32_t opcode)
-{
-    switch (opcode)
-    {
-    case 0xC3:   /* JP nn      */
-    case 0x18:   /* JR e       */
-    case 0xC9:   /* RET        */
-    case 0xE9:   /* JP (HL)    */
-    case 0xDDE9: /* JP (IX)    */
-    case 0xFDE9: /* JP (IY)    */
-    case 0xED45: /* RETN       */
-    case 0xED4D: /* RETI       */
-    case 0xED55:
-    case 0xED5D:
-    case 0xED65:
-    case 0xED6D:
-    case 0xED75:
-    case 0xED7D: /* the undocumented RETN encodings */
-        return false;
-    default:
-        return true;
-    }
-}
-
 static bool is_double_argumented(uint32_t opcode)
 {
     return 0xDD36 == opcode || 0xFD36 == opcode;
-}
-
-/** JP nn and its conditional forms. */
-static bool is_absolute_jump(uint32_t opcode)
-{
-    switch (opcode)
-    {
-    case 0xC3:
-    case 0xC2:
-    case 0xCA:
-    case 0xD2:
-    case 0xDA:
-    case 0xE2:
-    case 0xEA:
-    case 0xF2:
-    case 0xFA:
-        return true;
-    default:
-        return false;
-    }
-}
-
-static bool is_call(uint32_t opcode)
-{
-    switch (opcode)
-    {
-    case 0xCD:
-    case 0xC4:
-    case 0xCC:
-    case 0xD4:
-    case 0xDC:
-    case 0xE4:
-    case 0xEC:
-    case 0xF4:
-    case 0xFC:
-        return true;
-    default:
-        return false;
-    }
 }
 
 /*
@@ -316,16 +242,30 @@ uint8_t zdasm_decode(const uint8_t *code, size_t size, uint16_t pc, zdasm_insn *
     out->address = pc;
     out->length = (uint8_t)(length + operand_count);
     out->known = true;
-    out->continues = control_continues(opcode);
+    out->continues = !entry->stops;
 
-    /* RST carries its target in the opcode rather than in an operand, so the
-       operand-driven branch detection above never sees it. Left out, every RST
-       vector looks unreachable - and RST 10 is how a Spectrum prints a
-       character, so that is most of the ROM's entry points missed. */
-    if (1u == out->length && 0xC7u == (opcode & 0xC7u))
+    /*
+     * Where the target comes from, for the rows that say they have one. Three
+     * sources, told apart by what the row already describes rather than by
+     * which opcode it is: a relative jump adds its displacement to the address
+     * after it, a two-byte operand is the address itself, and anything left is
+     * a RST, which carries its target in the opcode - bits 5..3 times eight.
+     */
+    out->branches = entry->branches;
+    if (entry->branches)
     {
-        out->branches = true;
-        out->target = (uint16_t)(opcode & 0x38u);
+        if (entry->reljmp)
+        {
+            out->target = (uint16_t)(after + (int8_t)operands[0]);
+        }
+        else if (2 == operand_count)
+        {
+            out->target = (uint16_t)(operands[0] | ((uint16_t)operands[1] << 8));
+        }
+        else
+        {
+            out->target = (uint16_t)(opcode & 0x38u);
+        }
     }
 
     if (prefixed_index)
@@ -338,19 +278,13 @@ uint8_t zdasm_decode(const uint8_t *code, size_t size, uint16_t pc, zdasm_insn *
     }
     else if (entry->reljmp)
     {
-        /* the displacement is signed and relative to the next instruction */
-        out->branches = true;
-        out->target = (uint16_t)(after + (int8_t)operands[0]);
+        /* a relative jump prints where it lands, not the displacement it
+           encodes, so the listing reassembles to the same bytes */
         snprintf(out->text, sizeof out->text, entry->mnemo, out->target);
     }
     else if (2 == operand_count)
     {
         const uint16_t value = (uint16_t)(operands[0] | ((uint16_t)operands[1] << 8));
-        if (is_absolute_jump(opcode) || is_call(opcode))
-        {
-            out->branches = true;
-            out->target = value;
-        }
         snprintf(out->text, sizeof out->text, entry->mnemo, value);
     }
     else if (1 == operand_count)

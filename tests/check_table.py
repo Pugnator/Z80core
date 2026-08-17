@@ -9,9 +9,20 @@ The opcode table is searched two different ways and both impose rules on it:
    depends on where the search happens to land (this is how "IM 0" came to
    assemble as the undocumented ED4E).
 
+   The disassembler instead files every row by (prefix page, opcode byte), so
+   an opcode must be unambiguous and must sit on a page the index has an array
+   for; one that does not is filed nowhere and silently stops decoding.
+
 2. The disassembler formats the mnemonic with the operand bytes it read, so
    .data_size has to match the format string: no conversion means no operand,
    %#.2x means one byte, %#.4x means two.
+
+3. The control-flow flags carry what reachability analysis runs on, and both
+   ways of getting them wrong are silent. A row that should be flagged .stops
+   and is not walks the analyser straight through a RET into whatever bytes
+   follow; a missing .branches loses an entry point, and the code behind it is
+   reported as data. So the set of stopping instructions is pinned exactly,
+   in both directions, rather than merely spot-checked.
 
 Run with the path to z80tab.c, or none to use the copy next to this script.
 """
@@ -35,6 +46,27 @@ PLACEHOLDER = "****"
 # these cannot be filed, so the table may not contain one.
 INDEX_PAGES = {0x0000, 0x00CB, 0x00ED, 0x00DD, 0x00FD, 0xDDCB, 0xFDCB}
 
+# Every instruction after which control does not reach the next one, and no
+# others: the unconditional jumps and the returns. Conditional forms fall
+# through when not taken, calls are expected back, and HALT resumes once an
+# interrupt has been and gone, so none of those belong here.
+STOPS = {
+    0xC3,  # JP nn
+    0x18,  # JR e
+    0xC9,  # RET
+    0xE9,  # JP (HL)
+    0xDDE9,  # JP (IX)
+    0xFDE9,  # JP (IY)
+    0xED4D,  # RETI
+    0xED45,  # RETN
+    0xED55,  # and its undocumented encodings
+    0xED5D,
+    0xED65,
+    0xED6D,
+    0xED75,
+    0xED7D,
+}
+
 
 def parse(path):
     src = open(path, encoding="utf8").read()
@@ -46,6 +78,9 @@ def parse(path):
                 "mnemo": mnemo,
                 "data_size": int(m.group(1)) if (m := re.search(r"\.data_size = (\d)", rest)) else 0,
                 "duplicate": ".duplicate" in rest,
+                "reljmp": ".reljmp" in rest,
+                "branches": ".branches" in rest,
+                "stops": ".stops" in rest,
             }
         )
     return entries
@@ -113,6 +148,37 @@ def main():
             failures.append(
                 f"{entry['opcode']:#x} {entry['mnemo']!r}: prefix page {page:#x} is not one the decode index knows"
             )
+
+    # 1e. the control-flow flags say what the instruction set says. These drive
+    #     reachability analysis, and both mistakes are silent: a missing .stops
+    #     walks the analyser through a RET into whatever follows, and a missing
+    #     .branches loses an entry point and calls real code data.
+    for entry in entries:
+        if entry["mnemo"] == PLACEHOLDER:
+            continue
+        opcode, mnemo = entry["opcode"], entry["mnemo"]
+
+        want_stops = opcode in STOPS
+        if entry["stops"] != want_stops:
+            verb = "must" if want_stops else "must not"
+            failures.append(f"{opcode:#x} {mnemo!r}: {verb} be flagged .stops")
+
+        # RST carries its target in the opcode, so it is the one branch with
+        # no operand to take a target from
+        if opcode <= 0xFF and (opcode & 0xC7) == 0xC7 and not entry["branches"]:
+            failures.append(f"{opcode:#x} {mnemo!r}: RST must be flagged .branches")
+
+        if entry["reljmp"] and not entry["branches"]:
+            failures.append(f"{opcode:#x} {mnemo!r}: .reljmp without .branches")
+
+        # a branch the decoder cannot work out a target for would silently get
+        # the RST reading, bits 5..3 of its opcode times eight
+        if entry["branches"] and not entry["reljmp"] and entry["data_size"] != 2:
+            if not (opcode <= 0xFF and (opcode & 0xC7) == 0xC7):
+                failures.append(
+                    f"{opcode:#x} {mnemo!r}: .branches, but neither relative, "
+                    f"nor a 2-byte address, nor a RST - no target to decode"
+                )
 
     # 2. data_size agrees with the format string
     for entry in entries:
