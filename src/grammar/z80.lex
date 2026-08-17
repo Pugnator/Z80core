@@ -149,11 +149,14 @@ bin               0b[01]+|%[01]+
 						SAVE_CTX; return QSTRING;
 					  }
 
-%{/* Comments run to the end of the line */%}
+%{/* Comments run to the end of the line. Written as [^\r\n]* rather than .*
+     because '.' matches a carriage return: on a file with CR-only line
+     endings, .* would swallow every following line, since nothing in the
+     rest of the file ends the match. */%}
 
-";".*                 {}
-"//".*                {}
-"#".*                 {}
+";"[^\r\n]*           {}
+"//"[^\r\n]*          {}
+"#"[^\r\n]*           {}
 
 %{/* Instructions */%}
 
@@ -268,7 +271,17 @@ bin               0b[01]+|%[01]+
 
 "$"                 {return ASMPC;}
 "$$"                {return ASMORG;}
-"\n"                {
+%{/* A line ends at LF, CRLF, LFCR or a bare CR, so a source keeps its meaning
+     whichever system wrote it - and whichever platform this runs on, since
+     the file is read in binary mode and every '\r' reaches the scanner. */%}
+
+\r\n|\n\r|\n|\r     {
+                        /* flex counts only '\n' into yylineno, so a bare
+                           carriage return advances the line by hand */
+                        if ('\r' == asmtext[0] && 1 == asmleng)
+                        {
+                            ++asmlineno;
+                        }
                         /* yylineno has already advanced past this newline: report
                            semantic errors against the line that just ended */
                         current_line = asmlineno - 1;

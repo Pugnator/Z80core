@@ -99,6 +99,73 @@ static void test_errors_arrive_through_the_callback(void)
     zasm_image_free(&image);
 }
 
+/**
+ * Every line-ending style must assemble to the same bytes: LF, CRLF, LFCR and
+ * classic-Mac bare CR. The endings appear mid-source and around a comment, the
+ * comment being the risky spot - a rule that reads to "end of line" has to
+ * know a carriage return ends one too.
+ */
+static void test_line_endings(void)
+{
+    static const struct
+    {
+        const char *name;
+        const char *source;
+    } cases[] = {
+        {"LF", ".org 0\n LD A, 0x55 ; comment\n NOP\n.end\n"},
+        {"CRLF", ".org 0\r\n LD A, 0x55 ; comment\r\n NOP\r\n.end\r\n"},
+        {"LFCR", ".org 0\n\r LD A, 0x55 ; comment\n\r NOP\n\r.end\n\r"},
+        {"CR", ".org 0\r LD A, 0x55 ; comment\r NOP\r.end\r"},
+    };
+    static const uint8_t expected[] = {0x3E, 0x55, 0x00};
+
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; ++i)
+    {
+        diag_log log = {0};
+        zasm_image image = {0};
+
+        const bool ok = zasm_assemble(cases[i].source, ZASM_FORMAT_BIN, &image, collect, &log);
+
+        CHECK(ok, "%s endings failed to assemble: %s", cases[i].name, log.first);
+        CHECK(0 == log.count, "%s endings produced '%s'", cases[i].name, log.first);
+        CHECK(sizeof expected == image.size, "%s endings produced %zu bytes, expected %zu", cases[i].name, image.size,
+              sizeof expected);
+        CHECK(image.bytes && 0 == memcmp(image.bytes, expected, sizeof expected),
+              "%s endings assembled to different bytes", cases[i].name);
+
+        zasm_image_free(&image);
+    }
+}
+
+/** Diagnostics must count lines the same whichever style ends them. */
+static void test_line_numbers_survive_the_ending_style(void)
+{
+    static const struct
+    {
+        const char *name;
+        const char *source;
+    } cases[] = {
+        {"LF", ".org 0\n NOP\n LD A, missing\n.end\n"},
+        {"CRLF", ".org 0\r\n NOP\r\n LD A, missing\r\n.end\r\n"},
+        {"LFCR", ".org 0\n\r NOP\n\r LD A, missing\n\r.end\n\r"},
+        {"CR", ".org 0\r NOP\r LD A, missing\r.end\r"},
+    };
+
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; ++i)
+    {
+        diag_log log = {0};
+        zasm_image image = {0};
+
+        const bool ok = zasm_assemble(cases[i].source, ZASM_FORMAT_BIN, &image, collect, &log);
+
+        CHECK(!ok, "%s endings: an undefined label assembled", cases[i].name);
+        CHECK(3 == log.first_line, "%s endings: diagnostic points at line %d, expected 3", cases[i].name,
+              log.first_line);
+
+        zasm_image_free(&image);
+    }
+}
+
 /** State is global, so a second call must not inherit the first one's labels. */
 static void test_repeated_assembly_is_independent(void)
 {
@@ -188,6 +255,8 @@ int main(void)
 
     test_assembles_to_expected_bytes();
     test_errors_arrive_through_the_callback();
+    test_line_endings();
+    test_line_numbers_survive_the_ending_style();
     test_repeated_assembly_is_independent();
     test_round_trip_through_both_libraries();
     test_undecodable_bytes_still_advance();

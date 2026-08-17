@@ -739,7 +739,11 @@ void hex_print(const void *pv, size_t len)
 */
 int load_file(char *filename, char **buffer)
 {
-    FILE *in = fopen(filename, "r");
+    /* Binary mode: the scanner understands every line-ending style itself, so
+       reading the bytes as they are keeps the behaviour identical across
+       platforms instead of leaning on the C library's text-mode translation,
+       which only ever handled CRLF and only on Windows. */
+    FILE *in = fopen(filename, "rb");
     if (!in)
     {
         puts(TEXT_FAILED_OPEN_FOR_READ);
@@ -763,8 +767,14 @@ int load_file(char *filename, char **buffer)
         fclose(in);
         return 0;
     }
-    size_t rd = fread(*buffer, fsize, 1, in);
-    (void)rd;
+    if (fsize > 0 && 1 != fread(*buffer, fsize, 1, in))
+    {
+        puts(TEXT_FAILED_OPEN_FOR_READ);
+        free(*buffer);
+        *buffer = NULL;
+        fclose(in);
+        return 0;
+    }
     fclose(in);
     strcat(*buffer, "\n");
     return 1;
