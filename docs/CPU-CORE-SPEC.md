@@ -1,6 +1,6 @@
 # Z80 CPU core — specification
 
-Status: **draft for review**. Nothing is implemented yet.
+Status: **implemented through Phase 5**. See [where this actually stands](#where-this-actually-stands) for what is done, what is certified, and what nothing independent has checked.
 
 This describes `z80core`, a self-contained, externally clocked, edge-precise
 Z80 CPU model written in **C**, shipped as a DLL, with Lua for tooling and for
